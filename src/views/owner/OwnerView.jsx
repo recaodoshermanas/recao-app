@@ -1,18 +1,23 @@
 import { useState } from "react";
-import { F, C, crd } from "../../lib/styles";
-import { EvolucionView } from "./EvolucionView";
-import { DatosMesView } from "./DatosMesView";
-import { PLView } from "./PLView";
-import { TesoreriaView } from "./TesoreriaView";
+import { F, C } from "../../lib/styles.js";
+import { EvolucionView } from "./EvolucionView.jsx";
+import { DatosMesView } from "./DatosMesView.jsx";
+import { PLView } from "./PLView.jsx";
+import { TesoreriaView } from "./TesoreriaView.jsx";
 
 export function OwnerView({ facturas, monthlyData, proveedores, config, onReload }) {
   const [tab, setTab] = useState("resumen");
+  const [focusMonth, setFocusMonth] = useState(null);
+
   const tabs = [
     { id: "resumen", label: "Evolución", icon: "◉" },
     { id: "mes", label: "Datos mes", icon: "✎" },
     { id: "resultados", label: "P&L", icon: "▤" },
     { id: "tesoreria", label: "Tesorería", icon: "◈" },
   ];
+
+  const goEditMonth = (mk) => { setFocusMonth(mk); setTab("mes"); };
+
   return (
     <div>
       <div style={{ display: "flex", borderBottom: `2px solid ${C.brd}`, background: C.cream, position: "sticky", top: 52, zIndex: 9 }}>
@@ -23,8 +28,8 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
         ))}
       </div>
       {tab === "resumen" && <EvolucionView facturas={facturas} monthlyData={monthlyData} />}
-      {tab === "mes" && <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} />}
-      {tab === "resultados" && <PLView facturas={facturas} monthlyData={monthlyData} />}
+      {tab === "mes" && <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} initialMonth={focusMonth} />}
+      {tab === "resultados" && <PLView facturas={facturas} monthlyData={monthlyData} onEditMonth={goEditMonth} />}
       {tab === "tesoreria" && <TesoreriaView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} />}
     </div>
   );

@@ -1,9 +1,8 @@
 import { useState, useMemo } from "react";
-import { sb } from "../lib/supabase";
-
-import { F, SF, C, inp, lbl, crd } from "../lib/styles";
-import { uid, fmt, fmt2, mkLabel, pn } from "../lib/utils";
-import { useConfirm } from "../hooks/useConfirm";
+import { F, SF, C, inp, lbl, crd } from "../lib/styles.js";
+import { fmt, fmt2, mkLabel, uid, pn } from "../lib/utils.js";
+import { sb } from "../lib/supabase.js";
+import { useConfirm } from "../hooks/useConfirm.jsx";
 
 export function WorkerView({ facturas, proveedores, onReload }) {
   const [modo, setModo] = useState("lista");
