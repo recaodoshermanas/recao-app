@@ -1,6 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid, Area, AreaChart } from "recharts";
-import { F, SF, C, crd } from "../../lib/styles";
-import { fmt, mkShort, calcMonth } from "../../lib/utils";
+import { F, SF, C, crd } from "../../lib/styles.js";
+import { fmt, mkShort, calcMonth } from "../../lib/utils.js";
 
 export function EvolucionView({ facturas, monthlyData }) {
   const months = Object.keys(monthlyData).sort();
