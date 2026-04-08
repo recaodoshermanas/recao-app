@@ -1,4 +1,4 @@
-import { MONTHS_ES, MONTHS_FULL } from "./constants";
+import { MONTHS_ES, MONTHS_FULL, GASTOS_FIJOS_TPL } from "./constants.js";
 
 export function uid() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
 export function fmt(n) { return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0); }
@@ -6,6 +6,14 @@ export function fmt2(n) { return new Intl.NumberFormat("es-ES", { style: "curren
 export function mkLabel(k) { const [y, m] = k.split("-"); return `${MONTHS_FULL[parseInt(m) - 1]} ${y}`; }
 export function mkShort(k) { const [y, m] = k.split("-"); return `${MONTHS_ES[parseInt(m) - 1]} ${y.slice(2)}`; }
 export function pn(v) { return parseFloat(String(v).replace(",", ".")) || 0; }
+
+const now = new Date();
+export const currentMK = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+export function gastoFijoLabel(k) {
+  const g = GASTOS_FIJOS_TPL.find(x => x.key === k);
+  return g ? g.label : k;
+}
 
 export function calcMonth(facturas, md, mk) {
   if (md?.resumen_legacy) {

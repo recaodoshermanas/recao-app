@@ -1,4 +1,4 @@
-import { F, SF, C } from "../lib/styles";
+import { F, SF, C } from "../lib/styles.js";
 
 export function Sec({ title, sub }) {
   return (

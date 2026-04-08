@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { F, C, crd } from "../lib/styles";
+import { F, C } from "../lib/styles.js";
 
 export function useConfirm() {
   const [state, setState] = useState(null);

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { sb } from "../lib/supabase";
+import { sb } from "../lib/supabase.js";
 
 export function useRecaoData() {
   const [facturas, setFacturas] = useState([]);
