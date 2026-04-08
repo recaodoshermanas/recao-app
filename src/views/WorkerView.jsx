@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { sb } from "../lib/supabase";
+
 import { F, SF, C, inp, lbl, crd } from "../lib/styles";
-import { fmt, fmt2, mkLabel, pn } from "../lib/utils";
+import { uid, fmt, fmt2, mkLabel, pn } from "../lib/utils";
 import { useConfirm } from "../hooks/useConfirm";
 
 export function WorkerView({ facturas, proveedores, onReload }) {

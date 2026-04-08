@@ -7,9 +7,6 @@ export function mkLabel(k) { const [y, m] = k.split("-"); return `${MONTHS_FULL[
 export function mkShort(k) { const [y, m] = k.split("-"); return `${MONTHS_ES[parseInt(m) - 1]} ${y.slice(2)}`; }
 export function pn(v) { return parseFloat(String(v).replace(",", ".")) || 0; }
 
-const now = new Date();
-export const currentMK = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-
 export function calcMonth(facturas, md, mk) {
   if (md?.resumen_legacy) {
     const s = md.resumen_legacy;

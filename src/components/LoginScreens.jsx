@@ -19,11 +19,11 @@ export function RoleSelectScreen({ onSelectWorker, onSelectOwner }) {
 }
 
 export function PasswordScreen({ onSuccess, onBack }) {
-  const [pw, setPw] = useState("");
-  const [err, setErr] = useState(false);
+  const [pwInput, setPwInput] = useState("");
+  const [pwError, setPwError] = useState(false);
   const tryLogin = () => {
-    if (pw === OWNER_PASSWORD) { onSuccess(); }
-    else { setErr(true); setTimeout(() => setErr(false), 600); }
+    if (pwInput === OWNER_PASSWORD) onSuccess();
+    else { setPwError(true); setTimeout(() => setPwError(false), 600); }
   };
   return (
     <div style={{ minHeight: "100vh", background: C.cream, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px" }}>
@@ -31,7 +31,7 @@ export function PasswordScreen({ onSuccess, onBack }) {
       <div style={{ fontFamily: SF, fontSize: "32px", color: C.char, marginBottom: "4px" }}>Recao</div>
       <div style={{ fontFamily: F, fontSize: "11px", color: C.mut, marginBottom: "40px", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}>Acceso dueño</div>
       <div style={{ width: "300px" }}>
-        <input type="password" autoFocus value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => { if (e.key === "Enter") tryLogin(); }} placeholder="Contraseña" style={{ ...inp, marginBottom: "12px", textAlign: "center", letterSpacing: "0.1em", border: err ? `2px solid ${C.red}` : `1.5px solid ${C.brd}`, animation: err ? "shake 0.4s" : "none" }} />
+        <input type="password" autoFocus value={pwInput} onChange={e => setPwInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") tryLogin(); }} placeholder="Contraseña" style={{ ...inp, marginBottom: "12px", textAlign: "center", letterSpacing: "0.1em", border: pwError ? `2px solid ${C.red}` : `1.5px solid ${C.brd}`, animation: pwError ? "shake 0.4s" : "none" }} />
         <style>{`@keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }`}</style>
         <button onClick={tryLogin} style={{ width: "100%", padding: "14px", border: "none", borderRadius: "10px", background: C.char, color: C.gold, fontFamily: SF, fontSize: "15px", cursor: "pointer", marginBottom: "10px" }}>Entrar</button>
         <button onClick={onBack} style={{ width: "100%", padding: "10px", border: "none", background: "none", color: C.mut, fontFamily: F, fontSize: "12px", cursor: "pointer" }}>← Volver</button>

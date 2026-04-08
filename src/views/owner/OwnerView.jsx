@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { F, C } from "../../lib/styles";
+import { F, C, crd } from "../../lib/styles";
 import { EvolucionView } from "./EvolucionView";
 import { DatosMesView } from "./DatosMesView";
 import { PLView } from "./PLView";

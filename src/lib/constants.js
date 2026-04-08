@@ -13,3 +13,5 @@ export const GASTOS_FIJOS_TPL = [
   { key: "ayuntamiento", label: "Gasto Ayuntamiento" },
 ];
 export const OWNER_PASSWORD = "Recao2019_";
+const now = new Date();
+export const currentMK = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
