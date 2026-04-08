@@ -13,4 +13,4 @@ export const GASTOS_FIJOS_TPL = [
   { key: "ayuntamiento", label: "Gasto Ayuntamiento" },
 ];
 export const OWNER_PASSWORD = "Recao2019_";
-export const LOGO_URL = null; // TODO: pegar URL del logo oficial
+export const LOGO_URL = "https://elrecao.com/wp-content/uploads/2025/07/cropped-Recao.png";
