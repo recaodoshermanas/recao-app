@@ -1,14 +1,21 @@
-import { useState } from "react";
 import { F, SF, C } from "./lib/styles.js";
+import { useAuth } from "./hooks/useAuth.js";
 import { useRecaoData } from "./hooks/useRecaoData.js";
-import { RoleSelectScreen, PasswordScreen, Header } from "./components/LoginScreens.jsx";
+import { LoginScreen, Header } from "./components/LoginScreens.jsx";
 import { WorkerView } from "./views/WorkerView.jsx";
 import { OwnerView } from "./views/owner/OwnerView.jsx";
 
 export default function RecaoApp() {
-  const [role, setRole] = useState(null);
-  const [pendingOwner, setPendingOwner] = useState(false);
+  const { user, checking, login, logout } = useAuth();
   const { facturas, monthlyData, proveedores, config, loading, error, reload } = useRecaoData();
+
+  if (checking) return (
+    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", fontFamily: SF, color: C.char, background: C.cream }}>
+      <div style={{ fontSize: "32px", marginBottom: "8px" }}>Recao</div>
+    </div>
+  );
+
+  if (!user) return <LoginScreen onLogin={login} />;
 
   if (loading) return (
     <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", fontFamily: SF, color: C.char, background: C.cream }}>
@@ -24,15 +31,11 @@ export default function RecaoApp() {
     </div>
   );
 
-  if (pendingOwner) return <PasswordScreen onSuccess={() => { setRole("dueno"); setPendingOwner(false); }} onBack={() => setPendingOwner(false)} />;
-
-  if (!role) return <RoleSelectScreen onSelectWorker={() => setRole("trabajadora")} onSelectOwner={() => setPendingOwner(true)} />;
-
   return (
     <div style={{ minHeight: "100vh", background: C.cream }}>
-      <Header roleLabel={role === "trabajadora" ? "Trabajadora" : "Dirección"} onLogout={() => setRole(null)} />
-      {role === "trabajadora" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={reload} />}
-      {role === "dueno" && <OwnerView facturas={facturas} monthlyData={monthlyData} proveedores={proveedores} config={config} onReload={reload} />}
+      <Header user={user} onLogout={logout} />
+      {user.rol === "trabajadora" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={reload} />}
+      {user.rol === "admin" && <OwnerView facturas={facturas} monthlyData={monthlyData} proveedores={proveedores} config={config} onReload={reload} currentUser={user} />}
     </div>
   );
 }

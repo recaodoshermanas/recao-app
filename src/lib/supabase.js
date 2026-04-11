@@ -45,4 +45,13 @@ export const sb = {
     if (!r.ok) throw new Error(`Delete ${table}: ${r.status}`);
     return true;
   },
+  async rpc(fn, params = {}) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    if (!r.ok) throw new Error(`RPC ${fn}: ${r.status} ${await r.text()}`);
+    return r.json();
+  },
 };
