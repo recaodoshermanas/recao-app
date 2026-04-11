@@ -29,9 +29,9 @@ export function useAuth() {
     (async () => {
       if (!user) { setChecking(false); return; }
       try {
-        const rows = await sb.select("usuarios", `id=eq.${user.id}&select=id,activo,rol,nombre,email`);
+        const res = await sb.rpc("get_usuario_by_id", { p_id: user.id });
         if (cancel) return;
-        const u = rows?.[0];
+        const u = Array.isArray(res) ? res[0] : res;
         if (!u || !u.activo) {
           localStorage.removeItem(KEY);
           setUser(null);

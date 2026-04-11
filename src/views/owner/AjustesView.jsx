@@ -106,8 +106,8 @@ export function AjustesView({ currentUser }) {
   const load = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      const rows = await sb.select("usuarios", "select=id,email,nombre,rol,activo&order=created_at.asc");
-      setUsers(rows || []);
+      const rows = await sb.rpc("listar_usuarios");
+      setUsers(Array.isArray(rows) ? rows : []);
     } catch (e) { setErr("Error cargando usuarios"); } finally { setLoading(false); }
   }, []);
 
