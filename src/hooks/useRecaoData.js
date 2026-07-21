@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { sb } from "../lib/supabase.js";
 
-export function useRecaoData() {
+export function useRecaoData(user) {
   const [facturas, setFacturas] = useState([]);
   const [monthlyData, setMonthlyData] = useState({});
   const [proveedores, setProveedores] = useState([]);
@@ -12,6 +12,7 @@ export function useRecaoData() {
   const reload = useCallback(async () => {
     try {
       setError(null);
+      setLoading(true);
       const [facs, mes, provs, cfgs] = await Promise.all([
         sb.select("facturas_proveedores", "select=*&order=fecha.desc"),
         sb.select("datos_mes", "select=*&order=mes.desc"),
@@ -33,6 +34,12 @@ export function useRecaoData() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { reload(); }, [reload]);
+  const uid = user ? user.id : null;
+  useEffect(() => {
+    if (!uid) { setLoading(false); return; }
+    setLoading(true);
+    reload();
+  }, [uid, reload]);
+
   return { facturas, monthlyData, proveedores, config, loading, error, reload };
 }

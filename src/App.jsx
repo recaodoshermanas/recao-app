@@ -7,7 +7,7 @@ import { OwnerView } from "./views/owner/OwnerView.jsx";
 
 export default function RecaoApp() {
   const { user, checking, login, logout } = useAuth();
-  const { facturas, monthlyData, proveedores, config, loading, error, reload } = useRecaoData();
+  const { facturas, monthlyData, proveedores, config, loading, error, reload } = useRecaoData(user);
 
   if (checking) return (
     <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", fontFamily: SF, color: C.char, background: C.cream }}>
