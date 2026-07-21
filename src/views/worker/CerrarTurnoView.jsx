@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { F, SF, C, inp } from "../../lib/styles.js";
+import { F, SF, C, btnDark } from "../../lib/styles.js";
+import { IcoCheck } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
 import { ymd } from "../../lib/turnos.js";
 
@@ -53,29 +54,29 @@ export function CerrarTurnoView({ user }) {
     setSaving(false);
   };
 
-  const TurnoSel = () => (
-    <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-      {["mañana", "tarde"].map(t => (
-        <button key={t} onClick={() => setTurno(t)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1.5px solid ${turno === t ? C.char : C.brd}`, background: turno === t ? C.char : "#fff", color: turno === t ? C.gold : C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer", textTransform: "capitalize" }}>{t}</button>
-      ))}
-    </div>
-  );
-
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
-      <TurnoSel />
+      <div style={{ display: "flex", gap: 8, background: "#F0EBE1", padding: 4, borderRadius: 13, marginBottom: 14 }}>
+        {["mañana", "tarde"].map(t => (
+          <button key={t} onClick={() => setTurno(t)} style={{ flex: 1, textAlign: "center", padding: 9, borderRadius: 10, border: "none", cursor: "pointer", background: turno === t ? C.char : "transparent", color: turno === t ? C.gold : C.mut, fontFamily: F, fontWeight: 600, fontSize: 14, textTransform: "capitalize" }}>{t}</button>
+        ))}
+      </div>
+
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.red, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
 
       {loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 20 }}>Cargando…</div>
         : yaCerrado ? (
           <div>
-            <div style={{ background: "#E1F5EE", color: "#0F6E56", fontFamily: SF, fontSize: 16, borderRadius: 12, padding: 14, marginBottom: 14, textAlign: "center" }}>Turno cerrado ✓</div>
+            <div style={{ background: "#E7F3EC", color: "#1E7A46", fontFamily: SF, fontSize: 16, borderRadius: 14, padding: 14, marginBottom: 14, textAlign: "center" }}>Turno cerrado ✓</div>
             {yaCerrado.map((it, i) => (
-              <div key={i} style={{ background: "#fff", border: `1px solid ${C.brd}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
-                <div style={{ fontFamily: F, fontSize: 14, color: C.char, display: "flex", justifyContent: "space-between" }}>
-                  <span>{it.tarea_texto}</span><span>{it.hecha ? "✓" : "—"}</span>
+              <div key={i} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 13, padding: "11px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ width: 24, height: 24, borderRadius: 7, background: it.hecha ? C.grn : "#FBEAE7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {it.hecha ? <IcoCheck size={15} color="#fff" sw={3} /> : <span style={{ color: "#B23A2C", fontSize: 13, fontWeight: 700 }}>✕</span>}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: F, fontSize: 14, color: C.char }}>{it.tarea_texto}</div>
+                  {!it.hecha && it.justificacion && <div style={{ fontFamily: F, fontSize: 12, color: "#B23A2C", marginTop: 3 }}>{it.justificacion}</div>}
                 </div>
-                {!it.hecha && it.justificacion && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 4 }}>Motivo: {it.justificacion}</div>}
               </div>
             ))}
           </div>
@@ -84,20 +85,20 @@ export function CerrarTurnoView({ user }) {
             {tareas.map(t => {
               const st = estado[t.id] || { hecha: true, justificacion: "" };
               return (
-                <div key={t.id} style={{ background: "#fff", border: `1px solid ${C.brd}`, borderRadius: 10, padding: "12px", marginBottom: 8 }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                    <input type="checkbox" checked={st.hecha} onChange={() => toggle(t.id)} style={{ width: 20, height: 20, accentColor: C.grn, flexShrink: 0 }} />
-                    <span style={{ fontFamily: F, fontSize: 14, color: C.char, textDecoration: st.hecha ? "none" : "none" }}>
-                      {t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}
+                <div key={t.id} style={{ background: "#fff", border: st.hecha ? `1px solid ${C.brdL}` : `1.5px solid ${C.red}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
+                  <div onClick={() => toggle(t.id)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+                    <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, background: st.hecha ? C.grn : "#fff", border: st.hecha ? "none" : `2px solid ${C.brd}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {st.hecha && <IcoCheck size={15} color="#fff" sw={3} />}
                     </span>
-                  </label>
+                    <span style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</span>
+                  </div>
                   {!st.hecha && (
-                    <input value={st.justificacion} onChange={e => setJust(t.id, e.target.value)} placeholder="¿Por qué no se hizo?" style={{ ...inp, marginTop: 10, marginBottom: 0, fontSize: 13, border: `1.5px solid ${C.red}` }} />
+                    <input value={st.justificacion} onChange={e => setJust(t.id, e.target.value)} placeholder="¿Por qué no se hizo?" style={{ width: "100%", boxSizing: "border-box", marginTop: 10, padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />
                   )}
                 </div>
               );
             })}
-            <button onClick={enviar} disabled={saving || tareas.length === 0} style={{ width: "100%", padding: 15, border: "none", borderRadius: 12, background: C.char, color: C.gold, fontFamily: SF, fontSize: 16, cursor: saving ? "default" : "pointer", opacity: saving ? 0.6 : 1, marginTop: 6 }}>{saving ? "Enviando…" : "Cerrar turno"}</button>
+            <button onClick={enviar} disabled={saving || tareas.length === 0} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 6, opacity: saving ? 0.6 : 1 }}>{saving ? "Enviando…" : "Cerrar turno"}</button>
           </div>
         )}
     </div>
