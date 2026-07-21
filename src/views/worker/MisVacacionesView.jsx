@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { F, SF, C, btnDark, chipStyle, CHIP } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
-import { resumenVacaciones } from "../../lib/vacaciones.js";
+import { resumenCalendario } from "../../lib/vacaciones.js";
 
 const ANIO = 2026;
 function diasEntre(a, b) { if (!a || !b) return 0; const d = (new Date(b) - new Date(a)) / 86400000 + 1; return d > 0 ? Math.round(d) : 0; }
@@ -13,6 +13,7 @@ const pill = { background: "rgba(255,255,255,.55)", borderRadius: "999px", paddi
 export function MisVacacionesView({ user }) {
   const [sols, setSols] = useState([]);
   const [total, setTotal] = useState(22);
+  const [vacDias, setVacDias] = useState([]);
   const [abierto, setAbierto] = useState(false);
   const [ini, setIni] = useState(""); const [fin, setFin] = useState(""); const [dias, setDias] = useState("");
   const [msg, setMsg] = useState("");
@@ -23,11 +24,13 @@ export function MisVacacionesView({ user }) {
       setSols(await sb.select("vacaciones_solicitudes", `select=*&usuario_id=eq.${user.id}&order=fecha_inicio.desc`));
       const sal = await sb.select("vacaciones_saldo", `select=dias_totales&usuario_id=eq.${user.id}&anio=eq.${ANIO}`);
       setTotal(sal[0] ? sal[0].dias_totales : 22);
+      const vac = await sb.select("horarios", `select=fecha&usuario_id=eq.${user.id}&turno=eq.Vacaciones&fecha=gte.${ANIO}-01-01&fecha=lte.${ANIO}-12-31`);
+      setVacDias(vac.map(x => x.fecha));
     } catch (e) { /* noop */ }
   }, [user.id]);
   useEffect(() => { load(); }, [load]);
 
-  const r = resumenVacaciones(total, sols, ymd(new Date()));
+  const r = resumenCalendario(total, vacDias, sols, ymd(new Date()));
   const solicitar = async () => {
     const d = parseInt(dias || diasEntre(ini, fin), 10);
     if (!ini || !fin || !d) { flash("Pon las fechas"); return; }
@@ -43,8 +46,8 @@ export function MisVacacionesView({ user }) {
         <div style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: "#0A3B3B", marginTop: 6 }}>días disponibles de {r.total}</div>
         <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
           <span style={pill}>{r.disfrutados} disfrutados</span>
-          <span style={pill}>{r.futuros} a futuro</span>
-          <span style={pill}>{r.solicitados} por confirmar</span>
+          <span style={pill}>{r.planificados} planificados</span>
+          <span style={pill}>{r.pendientes} por confirmar</span>
         </div>
       </div>
 
