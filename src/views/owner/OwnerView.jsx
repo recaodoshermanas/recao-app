@@ -9,6 +9,7 @@ import { AnalyticaView } from "./AnalyticaView.jsx";
 import { UsuariosView } from "./UsuariosView.jsx";
 import { HorariosAdminView } from "./HorariosAdminView.jsx";
 import { VacacionesAdminView } from "./VacacionesAdminView.jsx";
+import { CierresAdminView } from "./CierresAdminView.jsx";
 
 export function OwnerView({ facturas, monthlyData, proveedores, config, onReload, currentUser }) {
   const [tab, setTab] = useState("resumen");
@@ -20,6 +21,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
     { id: "mes", label: "Datos mes", icon: "\u270E" },
     { id: "resultados", label: "P&L", icon: "\u25A4" },
     { id: "tesoreria", label: "Tesoreria", icon: "\u25C8" },
+    { id: "cierres", label: "Cierres", icon: "\u2714" },
     { id: "horarios", label: "Horarios", icon: "\u25F7" },
     { id: "vacaciones", label: "Vacaciones", icon: "\u2600" },
     { id: "usuarios", label: "Usuarios", icon: "\u25C9" },
@@ -42,6 +44,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
       {tab === "mes" && <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} initialMonth={focusMonth} />}
       {tab === "resultados" && <PLView facturas={facturas} monthlyData={monthlyData} onEditMonth={goEditMonth} />}
       {tab === "tesoreria" && <TesoreriaView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} />}
+      {tab === "cierres" && <CierresAdminView />}
       {tab === "horarios" && <HorariosAdminView />}
       {tab === "vacaciones" && <VacacionesAdminView />}
       {tab === "usuarios" && <UsuariosView currentUser={currentUser} />}
