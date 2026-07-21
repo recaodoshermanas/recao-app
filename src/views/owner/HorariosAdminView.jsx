@@ -1,110 +1,159 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { F, SF, C } from "../../lib/styles.js";
+import { F, SF, C, avatar, SHADOW } from "../../lib/styles.js";
 import { IcoLeft, IcoRight } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
 import { TURNOS, TURNO_OPCIONES, ymd } from "../../lib/turnos.js";
 
-const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
-const DIAS = ["L","M","X","J","V","S","D"];
+const DIAS = ["L", "M", "X", "J", "V", "S", "D"];
+const MESES_C = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const ABBR = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Descanso": "D", "Vacaciones": "V" };
+const TRABAJO = ["Mañana", "Tarde", "Apoyo 1", "Apoyo 2"];
 const navBtn = { border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 
+function lunesDe(d) { const x = new Date(d); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); x.setHours(0, 0, 0, 0); return x; }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function fmtDiaLargo(d) { const dd = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][d.getDay()]; return `${dd} ${d.getDate()} ${MESES_C[d.getMonth()]}`; }
+
+function Avatar({ name, size = 26 }) { const a = avatar(name); return <span style={{ width: size, height: size, borderRadius: "999px", background: a.bg, color: a.fg, fontFamily: SF, fontSize: Math.round(size * 0.42), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{a.inicial}</span>; }
+
 export function HorariosAdminView() {
-  const [trabajadoras, setTrabajadoras] = useState([]);
-  const [uid, setUid] = useState("");
-  const [cursor, setCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [trab, setTrab] = useState([]);
+  const nombreDe = useMemo(() => Object.fromEntries(trab.map(t => [t.id, t.nombre])), [trab]);
+  const [vista, setVista] = useState("dia");
+  const [dia, setDia] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const [mapa, setMapa] = useState({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [picker, setPicker] = useState(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await sb.fn("gestion-usuarios", { action: "listar" });
-        const tr = (r.usuarios || []).filter(u => u.rol === "trabajadora" && u.activo);
-        setTrabajadoras(tr);
-        if (tr[0]) setUid(tr[0].id);
-      } catch (e) { /* noop */ }
-    })();
-  }, []);
-
-  const { first, days } = useMemo(() => {
-    const first = new Date(cursor.y, cursor.m, 1);
-    const last = new Date(cursor.y, cursor.m + 1, 0);
-    const days = [];
-    for (let d = 1; d <= last.getDate(); d++) days.push(new Date(cursor.y, cursor.m, d));
-    return { first, days };
-  }, [cursor]);
+  const semana = useMemo(() => { const ini = lunesDe(dia); return Array.from({ length: 7 }, (_, i) => addDays(ini, i)); }, [dia]);
 
   const load = useCallback(async () => {
-    if (!uid) return;
     setLoading(true);
-    const desde = ymd(new Date(cursor.y, cursor.m, 1));
-    const hasta = ymd(new Date(cursor.y, cursor.m + 1, 0));
     try {
-      const rows = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${uid}&fecha=gte.${desde}&fecha=lte.${hasta}`);
-      const m = {}; rows.forEach(r => { m[r.fecha] = r.turno; });
-      setMapa(m);
-    } catch (e) { setMapa({}); }
+      const r = await sb.fn("gestion-usuarios", { action: "listar" });
+      setTrab((r.usuarios || []).filter(u => u.rol === "trabajadora" && u.activo));
+      const ini = lunesDe(dia), fin = addDays(ini, 6);
+      const rows = await sb.select("horarios", `select=usuario_id,fecha,turno&fecha=gte.${ymd(ini)}&fecha=lte.${ymd(fin)}`);
+      const m = {}; rows.forEach(x => { m[`${x.usuario_id}|${x.fecha}`] = x.turno; }); setMapa(m);
+    } catch (e) { /* noop */ }
     setLoading(false);
-  }, [uid, cursor]);
-
+  }, [dia]);
   useEffect(() => { load(); }, [load]);
 
-  const setTurno = async (fecha, turno) => {
+  const setTurno = async (uid, fecha, turno) => {
     setPicker(null);
-    setMapa(prev => ({ ...prev, [fecha]: turno }));
-    try { await sb.upsert("horarios", { usuario_id: uid, fecha, turno }, "usuario_id,fecha"); }
-    catch (e) { load(); }
+    setMapa(prev => ({ ...prev, [`${uid}|${fecha}`]: turno }));
+    try { await sb.upsert("horarios", { usuario_id: uid, fecha, turno }, "usuario_id,fecha"); } catch (e) { load(); }
+  };
+  const quitarTurno = async (uid, fecha) => {
+    setPicker(null);
+    setMapa(prev => { const n = { ...prev }; delete n[`${uid}|${fecha}`]; return n; });
+    try { await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=eq.${fecha}`); } catch (e) { load(); }
   };
 
-  const startOffset = (first.getDay() + 6) % 7;
-  const hoy = ymd(new Date());
+  const hoyStr = ymd(new Date());
+  const esHoy = ymd(dia) === hoyStr;
+  const fechaDia = ymd(dia);
+
+  const porTurno = {}; TURNO_OPCIONES.forEach(t => { porTurno[t] = []; });
+  const sinAsignar = [];
+  trab.forEach(t => { const tu = mapa[`${t.id}|${fechaDia}`]; if (tu && porTurno[tu]) porTurno[tu].push(t); else sinAsignar.push(t); });
 
   return (
-    <div style={{ padding: "16px 14px", maxWidth: 640, margin: "0 auto" }}>
-      <select value={uid} onChange={e => setUid(e.target.value)} style={{ width: "100%", padding: "13px 14px", borderRadius: 14, border: `1.5px solid ${C.brd}`, fontFamily: F, fontSize: 15, background: "#fff", color: C.char, marginBottom: 14, boxSizing: "border-box" }}>
-        {trabajadoras.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-      </select>
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <button onClick={() => setCursor(c => { const m = c.m - 1; return m < 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m }; })} style={navBtn}><IcoLeft size={18} color={C.char} sw={2.2} /></button>
-        <div style={{ fontFamily: SF, fontSize: 19, color: C.char, textTransform: "capitalize" }}>{MESES[cursor.m]} {cursor.y}</div>
-        <button onClick={() => setCursor(c => { const m = c.m + 1; return m > 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m }; })} style={navBtn}><IcoRight size={18} color={C.char} sw={2.2} /></button>
+    <div style={{ padding: "14px", maxWidth: 680, margin: "0 auto" }}>
+      <div style={{ display: "flex", gap: 8, background: "#F0EBE1", padding: 4, borderRadius: 13, marginBottom: 14 }}>
+        {[["dia", "Día"], ["semana", "Semana"]].map(([v, l]) => (
+          <button key={v} onClick={() => setVista(v)} style={{ flex: 1, textAlign: "center", padding: 9, borderRadius: 10, border: "none", cursor: "pointer", background: vista === v ? C.char : "transparent", color: vista === v ? C.gold : C.mut, fontFamily: F, fontWeight: 600, fontSize: 14 }}>{l}</button>
+        ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5 }}>
-        {DIAS.map(d => <div key={d} style={{ textAlign: "center", fontFamily: F, fontSize: 11, fontWeight: 700, color: C.mutL, padding: "2px 0" }}>{d}</div>)}
-        {Array.from({ length: startOffset }).map((_, i) => <div key={"e" + i} />)}
-        {days.map(d => {
-          const f = ymd(d);
-          const turno = mapa[f];
-          const def = turno ? TURNOS[turno] : null;
-          const esHoy = f === hoy;
-          return (
-            <button key={f} onClick={() => setPicker(f)} style={{ aspectRatio: "1", border: esHoy ? `2px solid ${C.char}` : `1px solid ${C.brdL}`, borderRadius: 12, background: def ? def.bg : "#fff", color: def ? def.fg : C.mutL, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 2, fontFamily: F }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600 }}>{d.getDate()}</span>
-              {def && <span style={{ fontSize: 8.5, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{def.label}</span>}
-            </button>
-          );
-        })}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <button onClick={() => setDia(d => addDays(d, vista === "dia" ? -1 : -7))} style={navBtn}><IcoLeft size={18} color={C.char} sw={2.2} /></button>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: SF, fontSize: 18, color: C.char, textTransform: "capitalize" }}>{vista === "dia" ? fmtDiaLargo(dia) : `${semana[0].getDate()} ${MESES_C[semana[0].getMonth()]} – ${semana[6].getDate()} ${MESES_C[semana[6].getMonth()]}`}</div>
+          {!esHoy && <button onClick={() => { const d = new Date(); d.setHours(0, 0, 0, 0); setDia(d); }} style={{ marginTop: 3, background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Ir a hoy</button>}
+        </div>
+        <button onClick={() => setDia(d => addDays(d, vista === "dia" ? 1 : 7))} style={navBtn}><IcoRight size={18} color={C.char} sw={2.2} /></button>
       </div>
 
-      {loading && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, textAlign: "center", marginTop: 10 }}>Cargando…</div>}
+      {loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 24 }}>Cargando…</div>
+        : vista === "dia" ? (
+          <div>
+            {TRABAJO.map(tk => { const def = TURNOS[tk]; const gente = porTurno[tk]; return (
+              <div key={tk} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 14, marginBottom: 10, boxShadow: SHADOW.card }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: gente.length ? 12 : 0 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 5, background: def.bg }} />
+                  <span style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{def.label}</span>
+                  <span style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginLeft: "auto" }}>{def.horas}</span>
+                </div>
+                {gente.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mutL, fontStyle: "italic" }}>Nadie asignado</div>
+                  : <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {gente.map(g => (
+                      <button key={g.id} onClick={() => setPicker({ uid: g.id, fecha: fechaDia })} style={{ display: "flex", alignItems: "center", gap: 8, background: "#FAF7F2", border: `1px solid ${C.brdL}`, borderRadius: 999, padding: "5px 12px 5px 5px", cursor: "pointer" }}>
+                        <Avatar name={g.nombre} size={26} />
+                        <span style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: C.char }}>{g.nombre}</span>
+                      </button>
+                    ))}
+                  </div>}
+              </div>
+            ); })}
+
+            {(porTurno["Descanso"].length + porTurno["Vacaciones"].length + sinAsignar.length) > 0 && (
+              <div style={{ marginTop: 4 }}>
+                {[["Descanso", porTurno["Descanso"]], ["Vacaciones", porTurno["Vacaciones"]], ["Sin asignar", sinAsignar]].map(([lab, gente]) => gente.length === 0 ? null : (
+                  <div key={lab} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                    <span style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: C.mutL, minWidth: 74 }}>{lab}</span>
+                    {gente.map(g => (
+                      <button key={g.id} onClick={() => setPicker({ uid: g.id, fecha: fechaDia })} style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 999, padding: "4px 10px 4px 4px", cursor: "pointer" }}>
+                        <Avatar name={g.nombre} size={22} />
+                        <span style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{g.nombre}</span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 520 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "84px repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
+                <div />
+                {semana.map((d, i) => { const es = ymd(d) === hoyStr; return (
+                  <div key={i} style={{ textAlign: "center", fontFamily: F, fontSize: 11, fontWeight: 700, color: es ? C.char : C.mutL }}>
+                    <div>{DIAS[i]}</div>
+                    <div style={{ fontSize: 12 }}>{d.getDate()}</div>
+                  </div>
+                ); })}
+              </div>
+              {trab.map(t => (
+                <div key={t.id} style={{ display: "grid", gridTemplateColumns: "84px repeat(7, 1fr)", gap: 4, marginBottom: 4, alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <Avatar name={t.nombre} size={24} />
+                    <span style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.char, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.nombre.split(" ")[0]}</span>
+                  </div>
+                  {semana.map((d, i) => { const f = ymd(d); const tu = mapa[`${t.id}|${f}`]; const def = tu ? TURNOS[tu] : null; return (
+                    <button key={i} onClick={() => setPicker({ uid: t.id, fecha: f })} title={def ? def.label : ""} style={{ height: 38, borderRadius: 9, border: `1px solid ${def ? "transparent" : C.brdL}`, background: def ? def.bg : "#fff", color: def ? def.fg : C.mutL, cursor: "pointer", fontFamily: F, fontSize: 11, fontWeight: 700 }}>{def ? ABBR[tu] : ""}</button>
+                  ); })}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
       {picker && (
         <div onClick={() => setPicker(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "20px 20px 0 0", padding: 20, width: "100%", maxWidth: 640 }}>
-            <div style={{ fontFamily: SF, fontSize: 17, color: C.char, marginBottom: 14 }}>{picker}</div>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "20px 20px 0 0", padding: 20, width: "100%", maxWidth: 680 }}>
+            <div style={{ fontFamily: SF, fontSize: 17, color: C.char }}>{nombreDe[picker.uid]}</div>
+            <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 14 }}>{picker.fecha.split("-").reverse().join("/")}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 9 }}>
-              {TURNO_OPCIONES.map(t => {
-                const def = TURNOS[t];
-                return (
-                  <button key={t} onClick={() => setTurno(picker, t)} style={{ padding: "13px", borderRadius: 13, border: `1px solid ${C.brdL}`, background: def.bg, color: def.fg, fontFamily: F, fontSize: 13.5, fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
-                    {def.label}{def.horas ? <div style={{ fontSize: 10.5, fontWeight: 400, marginTop: 2 }}>{def.horas}</div> : null}
-                  </button>
-                );
-              })}
+              {TURNO_OPCIONES.map(t => { const def = TURNOS[t]; return (
+                <button key={t} onClick={() => setTurno(picker.uid, picker.fecha, t)} style={{ padding: 13, borderRadius: 13, border: `1px solid ${C.brdL}`, background: def.bg, color: def.fg, fontFamily: F, fontSize: 13.5, fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                  {def.label}{def.horas ? <div style={{ fontSize: 10.5, fontWeight: 400, marginTop: 2 }}>{def.horas}</div> : null}
+                </button>
+              ); })}
             </div>
+            <button onClick={() => quitarTurno(picker.uid, picker.fecha)} style={{ width: "100%", marginTop: 10, padding: 12, borderRadius: 12, border: `1.5px solid ${C.brd}`, background: "#fff", color: C.mut, fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Quitar turno</button>
           </div>
         </div>
       )}

@@ -5,38 +5,52 @@ import { sb } from "../../lib/supabase.js";
 import { ymd } from "../../lib/turnos.js";
 
 function isoDow(d) { const g = d.getDay(); return g === 0 ? 7 : g; }
+const SUG = { "Mañana": "mañana", "Apoyo 1": "mañana", "Tarde": "tarde", "Apoyo 2": "tarde" };
 
 export function CerrarTurnoView({ user }) {
   const hoy = new Date();
   const fecha = ymd(hoy);
   const dow = isoDow(hoy);
-  const [turno, setTurno] = useState(hoy.getHours() < 15 ? "mañana" : "tarde");
+  const fechaLarga = hoy.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+
+  const [turno, setTurno] = useState(null);
+  const [sugerido, setSugerido] = useState(null);
   const [tareas, setTareas] = useState([]);
   const [estado, setEstado] = useState({});
   const [yaCerrado, setYaCerrado] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await sb.select("horarios", `select=turno&usuario_id=eq.${user.id}&fecha=eq.${fecha}`);
+        if (r[0] && SUG[r[0].turno]) setSugerido(SUG[r[0].turno]);
+      } catch (e) { /* noop */ }
+    })();
+  }, [user.id, fecha]);
+
+  const load = useCallback(async (tn) => {
     setLoading(true); setMsg("");
     try {
-      const ex = await sb.select("cierres_turno", `select=id&usuario_id=eq.${user.id}&fecha=eq.${fecha}&turno=eq.${turno}`);
+      const ex = await sb.select("cierres_turno", `select=id&usuario_id=eq.${user.id}&fecha=eq.${fecha}&turno=eq.${tn}`);
       if (ex[0]) {
         const items = await sb.select("cierre_items", `select=tarea_texto,hecha,justificacion&cierre_id=eq.${ex[0].id}`);
         setYaCerrado(items); setTareas([]); setLoading(false); return;
       }
       setYaCerrado(null);
-      const all = await sb.select("cierre_tareas", `select=id,orden,texto,dia_semana,hora,grupo&turno=eq.${turno}&activa=eq.true&order=orden.asc`);
+      const all = await sb.select("cierre_tareas", `select=id,orden,texto,dia_semana,hora,grupo&turno=eq.${tn}&activa=eq.true&order=orden.asc`);
       const aplican = all.filter(t => t.dia_semana == null || t.dia_semana === dow);
       setTareas(aplican);
       const st = {}; aplican.forEach(t => { st[t.id] = { hecha: true, justificacion: "" }; });
       setEstado(st);
     } catch (e) { setMsg(e.message || "Error"); }
     setLoading(false);
-  }, [user.id, fecha, turno, dow]);
-  useEffect(() => { load(); }, [load]);
+  }, [user.id, fecha, dow]);
 
+  const elegir = (tn) => { setTurno(tn); load(tn); };
+  const volver = () => { setTurno(null); setTareas([]); setYaCerrado(null); setMsg(""); };
   const toggle = (id) => setEstado(s => ({ ...s, [id]: { ...s[id], hecha: !s[id].hecha } }));
   const setJust = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], justificacion: v } }));
 
@@ -49,18 +63,35 @@ export function CerrarTurnoView({ user }) {
       const cid = cierre[0].id;
       const items = tareas.map(t => ({ cierre_id: cid, tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].hecha, justificacion: estado[t.id].hecha ? null : estado[t.id].justificacion.trim() }));
       await sb.insert("cierre_items", items);
-      await load();
+      await load(turno);
     } catch (e) { setMsg(e.message || "Error al enviar"); }
     setSaving(false);
   };
 
-  return (
-    <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
-      <div style={{ display: "flex", gap: 8, background: "#F0EBE1", padding: 4, borderRadius: 13, marginBottom: 14 }}>
-        {["mañana", "tarde"].map(t => (
-          <button key={t} onClick={() => setTurno(t)} style={{ flex: 1, textAlign: "center", padding: 9, borderRadius: 10, border: "none", cursor: "pointer", background: turno === t ? C.char : "transparent", color: turno === t ? C.gold : C.mut, fontFamily: F, fontWeight: 600, fontSize: 14, textTransform: "capitalize" }}>{t}</button>
+  if (!turno) {
+    return (
+      <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
+        <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 6 }}>Hoy</div>
+        <div style={{ fontFamily: SF, fontSize: 22, color: C.char, textTransform: "capitalize", marginBottom: 22 }}>{fechaLarga}</div>
+        <div style={{ fontFamily: F, fontSize: 14, color: C.mut, marginBottom: 14 }}>¿Qué turno estás cerrando?</div>
+        {[["mañana", "Turno de mañana", "07:00 – 15:00", "#cbf7d0", "#06281C", "M"], ["tarde", "Turno de tarde", "15:00 – 23:00", "#f5a68e", "#5a1f10", "T"]].map(([tn, lab, horas, bg, fg, ini]) => (
+          <button key={tn} onClick={() => elegir(tn)} style={{ width: "100%", boxSizing: "border-box", textAlign: "left", background: "#fff", border: `1.5px solid ${sugerido === tn ? C.gold : C.brdL}`, borderRadius: 16, padding: 18, marginBottom: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}>
+            <span style={{ width: 44, height: 44, borderRadius: 13, background: bg, color: fg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: SF, fontSize: 20 }}>{ini}</span>
+            <span style={{ flex: 1 }}>
+              <span style={{ display: "block", fontFamily: SF, fontSize: 18, color: C.char }}>{lab}</span>
+              <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 2 }}>{horas}</span>
+            </span>
+            {sugerido === tn && <span style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: C.goldSub, background: "#FBF0DA", borderRadius: 999, padding: "4px 9px" }}>Tu turno hoy</span>}
+          </button>
         ))}
       </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
+      <button onClick={volver} style={{ background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 10 }}>‹ Cambiar turno</button>
+      <div style={{ fontFamily: SF, fontSize: 18, color: C.char, textTransform: "capitalize", marginBottom: 14 }}>Turno de {turno}</div>
 
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.red, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
 
