@@ -39,6 +39,7 @@ function CoberturaEditor({ sol, trabajadoras, onSave }) {
 
 export function VacacionesAdminView() {
   const [trab, setTrab] = useState([]);
+  const trabReg = useMemo(() => trab.filter(t => !t.eventual), [trab]);
   const nombreDe = useMemo(() => Object.fromEntries(trab.map(t => [t.id, t.nombre])), [trab]);
   const [sols, setSols] = useState([]);
   const [saldos, setSaldos] = useState({});
@@ -57,7 +58,8 @@ export function VacacionesAdminView() {
       const r = await sb.fn("gestion-usuarios", { action: "listar" });
       const tr = (r.usuarios || []).filter(u => u.rol === "trabajadora");
       setTrab(tr);
-      setNUid(prev => prev || (tr[0] ? tr[0].id : ""));
+      const reg = tr.filter(u => !u.eventual);
+      setNUid(prev => prev || (reg[0] ? reg[0].id : ""));
       setSols(await sb.select("vacaciones_solicitudes", "select=*&order=fecha_inicio.desc"));
       const sal = await sb.select("vacaciones_saldo", `select=usuario_id,dias_totales&anio=eq.${ANIO}`);
       const sm = {}; sal.forEach(x => { sm[x.usuario_id] = x.dias_totales; }); setSaldos(sm);
@@ -101,7 +103,7 @@ export function VacacionesAdminView() {
   };
   const coberturaTxt = (s) => s.cobertura_tipo === "interna" ? ` · cubre ${nombreDe[s.cobertura_usuario_id] || "compañera"}` : s.cobertura_tipo === "externa" ? ` · cubre ${s.cobertura_nombre}` : "";
 
-  const resumen = useMemo(() => { const o = {}; for (const t of trab) o[t.id] = resumenCalendario(saldos[t.id] ?? 22, vacDias[t.id] || [], sols.filter(s => s.usuario_id === t.id), hoy); return o; }, [trab, sols, saldos, vacDias, hoy]);
+  const resumen = useMemo(() => { const o = {}; for (const t of trabReg) o[t.id] = resumenCalendario(saldos[t.id] ?? 22, vacDias[t.id] || [], sols.filter(s => s.usuario_id === t.id), hoy); return o; }, [trabReg, sols, saldos, vacDias, hoy]);
 
   return (
     <div style={{ padding: "16px", maxWidth: 640, margin: "0 auto" }}>
@@ -109,7 +111,7 @@ export function VacacionesAdminView() {
 
       <div style={secLbl}>Saldos del equipo · {ANIO}</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
-        {trab.map(t => { const r = resumen[t.id] || { total: 22, restantes: 22, cogidos: 0 }; const editing = editUid === t.id; return (
+        {trabReg.map(t => { const r = resumen[t.id] || { total: 22, restantes: 22, cogidos: 0 }; const editing = editUid === t.id; return (
           <div key={t.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
             <Avatar name={t.nombre} />
             <div style={{ minWidth: 0, flex: 1 }}>
@@ -134,7 +136,7 @@ export function VacacionesAdminView() {
       {!abrir ? <button onClick={() => setAbrir(true)} style={{ ...btnSm, background: "#fff", color: C.char, border: `1.5px solid ${C.brd}`, marginBottom: 18 }}>+ Añadir periodo</button>
         : (
           <div style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 14, marginBottom: 18 }}>
-            <select value={nUid} onChange={e => setNUid(e.target.value)} style={{ ...sel, width: "100%", marginBottom: 8 }}>{trab.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select>
+            <select value={nUid} onChange={e => setNUid(e.target.value)} style={{ ...sel, width: "100%", marginBottom: 8 }}>{trabReg.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select>
             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <input type="date" value={nIni} onChange={e => { setNIni(e.target.value); setNDias(String(diasEntre(e.target.value, nFin) || "")); }} style={{ ...sel, flex: 1 }} />
               <input type="date" value={nFin} onChange={e => { setNFin(e.target.value); setNDias(String(diasEntre(nIni, e.target.value) || "")); }} style={{ ...sel, flex: 1 }} />
@@ -167,7 +169,7 @@ export function VacacionesAdminView() {
               {s.estado !== "rechazado" && <button onClick={() => cambiarEstado(s, "rechazado")} style={{ ...btnSm, background: "#fff", color: "#B23A2C", border: "1.5px solid #EDC9C3" }}>Rechazar</button>}
               {s.estado !== "pendiente" && <button onClick={() => cambiarEstado(s, "pendiente")} style={{ ...btnSm, background: "#fff", color: C.mut, border: `1.5px solid ${C.brd}` }}>Pendiente</button>}
             </div>
-            {s.estado === "aceptado" && <CoberturaEditor sol={s} trabajadoras={trab} onSave={(tipo, valor) => guardarCobertura(s, tipo, valor)} />}
+            {s.estado === "aceptado" && <CoberturaEditor sol={s} trabajadoras={trabReg} onSave={(tipo, valor) => guardarCobertura(s, tipo, valor)} />}
           </div>
         ))}
     </div>

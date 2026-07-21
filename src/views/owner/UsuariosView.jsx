@@ -4,6 +4,7 @@ import { sb } from "../../lib/supabase.js";
 
 const ROLES = [{ id: "trabajadora", label: "Trabajadora" }, { id: "admin", label: "Dirección" }];
 const ROLCHIP = { admin: { bg: "#F0ECF6", fg: "#8B6DAF", label: "Dirección" }, trabajadora: { bg: "#EAF0F8", fg: "#4A7AB5", label: "Trabajadora" } };
+const EVCHIP = { bg: "#F0ECE2", fg: "#8A7A54", label: "Eventual · sin acceso" };
 const btnSm = { padding: "8px 12px", borderRadius: 10, border: `1.5px solid ${C.brd}`, background: "#fff", color: C.char, fontFamily: F, fontSize: 12.5, fontWeight: 600, cursor: "pointer" };
 
 function Avatar({ name, size = 40 }) {
@@ -56,6 +57,14 @@ export function UsuariosView({ currentUser }) {
     try { await sb.fn("gestion-usuarios", { action: "resetear_password", id: u.id, password: p }); flash("Contraseña actualizada"); }
     catch (e) { flash(e.message); }
   };
+  const eliminarEventual = async (u) => {
+    if (!window.confirm(`¿Eliminar a ${u.nombre}? Se borrarán sus turnos asignados.`)) return;
+    try { await sb.fn("gestion-usuarios", { action: "eliminar_eventual", id: u.id }); flash("Eventual eliminado"); await load(); }
+    catch (e) { flash(e.message); }
+  };
+
+  const conCuenta = usuarios.filter(u => !u.eventual);
+  const eventuales = usuarios.filter(u => u.eventual);
 
   return (
     <div style={{ padding: "16px", maxWidth: 640, margin: "0 auto" }}>
@@ -74,15 +83,16 @@ export function UsuariosView({ currentUser }) {
           ))}
         </div>
         <button onClick={crear} disabled={creating} style={{ ...btnDark, fontSize: 15, opacity: creating ? 0.6 : 1 }}>{creating ? "Creando…" : "Crear usuario"}</button>
+        <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 10, textAlign: "center" }}>Las personas eventuales (sin cuenta) se añaden desde Horarios.</div>
       </div>
 
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: C.gold, padding: "8px 12px", borderRadius: 10, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
       {error && <div style={{ fontFamily: F, fontSize: 13, color: C.red, marginBottom: 12 }}>{error}</div>}
 
-      <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, color: C.mutL, textTransform: "uppercase", letterSpacing: "0.08em", margin: "8px 4px 12px" }}>Equipo ({usuarios.length})</div>
+      <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, color: C.mutL, textTransform: "uppercase", letterSpacing: "0.08em", margin: "8px 4px 12px" }}>Equipo ({conCuenta.length})</div>
       {loading ? (
         <div style={{ fontFamily: F, fontSize: 13, color: C.mut, padding: 20, textAlign: "center" }}>Cargando…</div>
-      ) : usuarios.map(u => {
+      ) : conCuenta.map(u => {
         const isSelf = u.id === (currentUser && currentUser.id);
         const rc = ROLCHIP[u.rol] || ROLCHIP.trabajadora;
         return (
@@ -105,6 +115,29 @@ export function UsuariosView({ currentUser }) {
           </div>
         );
       })}
+
+      {eventuales.length > 0 && (
+        <div>
+          <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, color: C.mutL, textTransform: "uppercase", letterSpacing: "0.08em", margin: "18px 4px 12px" }}>Eventuales ({eventuales.length})</div>
+          {eventuales.map(u => (
+            <div key={u.id} style={{ ...crd, opacity: u.activo ? 1 : 0.55 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+                  <Avatar name={u.nombre} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{u.nombre}</div>
+                    <div style={{ fontFamily: F, fontSize: 12, color: C.mutL }}>Sin cuenta</div>
+                  </div>
+                </div>
+                <span style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", padding: "5px 11px", borderRadius: 999, background: EVCHIP.bg, color: EVCHIP.fg, whiteSpace: "nowrap", flexShrink: 0 }}>{EVCHIP.label}</span>
+              </div>
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                <button onClick={() => eliminarEventual(u)} style={{ ...btnSm, color: "#B23A2C", border: "1.5px solid #EDC9C3" }}>Eliminar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
