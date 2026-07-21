@@ -6,18 +6,20 @@ import { PLView } from "./PLView.jsx";
 import { TesoreriaView } from "./TesoreriaView.jsx";
 import { AjustesView } from "./AjustesView.jsx";
 import { AnalyticaView } from "./AnalyticaView.jsx";
+import { UsuariosView } from "./UsuariosView.jsx";
 
 export function OwnerView({ facturas, monthlyData, proveedores, config, onReload, currentUser }) {
   const [tab, setTab] = useState("resumen");
   const [focusMonth, setFocusMonth] = useState(null);
 
   const tabs = [
-    { id: "resumen", label: "Evolución", icon: "◉" },
-    { id: "analitica", label: "Analítica", icon: "◎" },
-    { id: "mes", label: "Datos mes", icon: "✎" },
-    { id: "resultados", label: "P&L", icon: "▤" },
-    { id: "tesoreria", label: "Tesorería", icon: "◈" },
-    { id: "ajustes", label: "Ajustes", icon: "⚙" },
+    { id: "resumen", label: "Evolucion", icon: "\u25C9" },
+    { id: "analitica", label: "Analitica", icon: "\u25CE" },
+    { id: "mes", label: "Datos mes", icon: "\u270E" },
+    { id: "resultados", label: "P&L", icon: "\u25A4" },
+    { id: "tesoreria", label: "Tesoreria", icon: "\u25C8" },
+    { id: "usuarios", label: "Usuarios", icon: "\u25C9" },
+    { id: "ajustes", label: "Ajustes", icon: "\u2699" },
   ];
 
   const goEditMonth = (mk) => { setFocusMonth(mk); setTab("mes"); };
@@ -36,6 +38,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
       {tab === "mes" && <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} initialMonth={focusMonth} />}
       {tab === "resultados" && <PLView facturas={facturas} monthlyData={monthlyData} onEditMonth={goEditMonth} />}
       {tab === "tesoreria" && <TesoreriaView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} />}
+      {tab === "usuarios" && <UsuariosView currentUser={currentUser} />}
       {tab === "ajustes" && <AjustesView currentUser={currentUser} />}
     </div>
   );
