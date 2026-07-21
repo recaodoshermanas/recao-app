@@ -1,64 +1,70 @@
 import { useState, useEffect, useCallback } from "react";
-import { sb } from "../lib/supabase.js";
+import { supabase } from "../lib/supabase.js";
 
-const KEY = "recao_session_v1";
-const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
-function readStored() {
+// Carga la fila de public.usuarios enlazada al usuario de Auth (rol, nombre...).
+async function loadPerfil(authId, token) {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed?.expiresAt || Date.now() > parsed.expiresAt) {
-      localStorage.removeItem(KEY);
-      return null;
-    }
-    return parsed.user || null;
-  } catch {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/usuarios?select=id,email,nombre,rol,activo&auth_id=eq.${authId}`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token || SUPABASE_KEY}` } }
+    );
+    if (!r.ok) return null;
+    const rows = await r.json();
+    const u = rows?.[0];
+    if (!u || !u.activo) return null;
+    return { id: u.id, email: u.email, nombre: u.nombre, rol: u.rol };
+  } catch (_) {
     return null;
   }
 }
 
 export function useAuth() {
-  const [user, setUser] = useState(() => readStored());
+  const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
 
-  // Revalida al arrancar: si el usuario fue desactivado, cierra sesión.
   useEffect(() => {
-    let cancel = false;
+    let active = true;
     (async () => {
-      if (!user) { setChecking(false); return; }
-      try {
-        const res = await sb.rpc("get_usuario_by_id", { p_id: user.id });
-        if (cancel) return;
-        const u = Array.isArray(res) ? res[0] : res;
-        if (!u || !u.activo) {
-          localStorage.removeItem(KEY);
-          setUser(null);
-        } else if (u.rol !== user.rol || u.nombre !== user.nombre || u.email !== user.email) {
-          const refreshed = { id: u.id, email: u.email, nombre: u.nombre, rol: u.rol };
-          localStorage.setItem(KEY, JSON.stringify({ user: refreshed, expiresAt: Date.now() + TTL_MS }));
-          setUser(refreshed);
-        }
-      } catch { /* offline: mantener sesión local */ }
-      if (!cancel) setChecking(false);
+      const { data } = await supabase.auth.getSession();
+      const session = data?.session;
+      if (session?.user) {
+        const perfil = await loadPerfil(session.user.id, session.access_token);
+        if (active) setUser(perfil);
+      }
+      if (active) setChecking(false);
     })();
-    return () => { cancel = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        loadPerfil(session.user.id, session.access_token).then((perfil) => setUser(perfil));
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => { active = false; sub?.subscription?.unsubscribe(); };
   }, []);
 
   const login = useCallback(async (email, password) => {
-    const res = await sb.rpc("login_usuario", { p_email: email.trim().toLowerCase(), p_password: password });
-    const row = Array.isArray(res) ? res[0] : res;
-    if (!row || !row.id) return { ok: false, error: "Email o contraseña incorrectos" };
-    const u = { id: row.id, email: row.email, nombre: row.nombre, rol: row.rol };
-    localStorage.setItem(KEY, JSON.stringify({ user: u, expiresAt: Date.now() + TTL_MS }));
-    setUser(u);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+    if (error || !data?.session) return { ok: false, error: "Email o contrasena incorrectos" };
+    const perfil = await loadPerfil(data.user.id, data.session.access_token);
+    if (!perfil) {
+      await supabase.auth.signOut();
+      return { ok: false, error: "Usuario sin acceso o desactivado" };
+    }
+    setUser(perfil);
     return { ok: true };
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(KEY);
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     setUser(null);
   }, []);
 

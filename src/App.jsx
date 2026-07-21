@@ -2,7 +2,7 @@ import { F, SF, C } from "./lib/styles.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { useRecaoData } from "./hooks/useRecaoData.js";
 import { LoginScreen, Header } from "./components/LoginScreens.jsx";
-import { WorkerView } from "./views/WorkerView.jsx";
+import { WorkerApp } from "./views/worker/WorkerApp.jsx";
 import { OwnerView } from "./views/owner/OwnerView.jsx";
 
 export default function RecaoApp() {
@@ -34,7 +34,7 @@ export default function RecaoApp() {
   return (
     <div style={{ minHeight: "100vh", background: C.cream }}>
       <Header user={user} onLogout={logout} />
-      {user.rol === "trabajadora" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={reload} />}
+      {user.rol === "trabajadora" && <WorkerApp user={user} facturas={facturas} proveedores={proveedores} onReload={reload} />}
       {user.rol === "admin" && <OwnerView facturas={facturas} monthlyData={monthlyData} proveedores={proveedores} config={config} onReload={reload} currentUser={user} />}
     </div>
   );
