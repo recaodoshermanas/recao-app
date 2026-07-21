@@ -1,55 +1,50 @@
 import { useState } from "react";
-import { F, SF, C, inp, FONT_LINK } from "../lib/styles.js";
-import { LOGO_URL } from "../lib/constants.js";
-
-function Brand({ size = 36 }) {
-  if (LOGO_URL) return <img src={LOGO_URL} alt="Recao" style={{ height: size, marginBottom: "4px" }} />;
-  return <div style={{ fontFamily: SF, fontSize: `${size}px`, color: C.char, marginBottom: "4px" }}>Recao</div>;
-}
+import { F, SF, C, inp, btnDark, LOGO, avatar } from "../lib/styles.js";
 
 export function LoginScreen({ onLogin }) {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
-  const [err, setErr] = useState("");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    if (!email || !pass || busy) return;
-    setBusy(true); setErr("");
+    if (busy || !email || !pass) return;
+    setBusy(true); setError("");
     try {
-      const r = await onLogin(email, pass);
-      if (!r.ok) { setErr(r.error || "Error de acceso"); setTimeout(() => setErr(""), 2500); }
-    } catch (e) {
-      setErr("Error de conexión"); setTimeout(() => setErr(""), 2500);
-    } finally { setBusy(false); }
+      const res = await onLogin(email, pass);
+      if (!res || !res.ok) setError((res && res.error) || "No se pudo entrar");
+    } catch (e) { setError("No se pudo entrar"); }
+    setBusy(false);
   };
+  const onKey = (e) => { if (e.key === "Enter") submit(); };
 
-  const shake = !!err;
   return (
-    <div style={{ minHeight: "100vh", background: C.cream, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px" }}>
-      <link href={FONT_LINK} rel="stylesheet" />
-      <Brand size={36} />
-      <div style={{ fontFamily: F, fontSize: "11px", color: C.mut, marginBottom: "40px", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}>Control financiero</div>
-      <div style={{ width: "300px" }}>
-        <input type="email" autoFocus value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => { if (e.key === "Enter") submit(); }} placeholder="Email" autoComplete="username" style={{ ...inp, marginBottom: "10px", border: shake ? `2px solid ${C.red}` : `1.5px solid ${C.brd}` }} />
-        <input type="password" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => { if (e.key === "Enter") submit(); }} placeholder="Contraseña" autoComplete="current-password" style={{ ...inp, marginBottom: "12px", border: shake ? `2px solid ${C.red}` : `1.5px solid ${C.brd}`, animation: shake ? "shake 0.4s" : "none" }} />
-        <style>{`@keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }`}</style>
-        {err && <div style={{ fontFamily: F, fontSize: "12px", color: C.red, marginBottom: "10px", textAlign: "center" }}>{err}</div>}
-        <button onClick={submit} disabled={busy} style={{ width: "100%", padding: "14px", border: "none", borderRadius: "10px", background: C.char, color: C.gold, fontFamily: SF, fontSize: "15px", cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "Entrando..." : "Entrar"}</button>
+    <div style={{ minHeight: "100vh", background: C.cream, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "30px" }}>
+      <div style={{ width: "100%", maxWidth: 340, textAlign: "center" }}>
+        <img src={LOGO} alt="Recao" style={{ height: 48, display: "block", margin: "0 auto" }} />
+        <div style={{ fontFamily: F, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: C.mutL, marginTop: 12 }}>Tienda de barrio · Dos Hermanas</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 40 }}>
+          <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={onKey} type="email" placeholder="tu@email.com" autoCapitalize="none" style={{ ...inp, textAlign: "center" }} />
+          <input value={pass} onChange={e => setPass(e.target.value)} onKeyDown={onKey} type="password" placeholder="Contraseña" style={{ ...inp, textAlign: "center" }} />
+          {error && <div style={{ fontFamily: F, fontSize: 13, color: C.red }}>{error}</div>}
+          <button onClick={submit} disabled={busy} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 6, opacity: busy ? 0.6 : 1 }}>{busy ? "Entrando…" : "Entrar"}</button>
+        </div>
       </div>
     </div>
   );
 }
 
 export function Header({ user, onLogout }) {
-  const roleLabel = user?.rol === "admin" ? "Dirección" : "Trabajadora";
+  const av = avatar(user && user.nombre ? user.nombre : "");
   return (
-    <div style={{ background: C.char, padding: "13px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 20 }}>
-      {LOGO_URL ? <img src={LOGO_URL} alt="Recao" style={{ height: 24, filter: "brightness(0) invert(1) sepia(1) saturate(5) hue-rotate(5deg)" }} /> : <div style={{ fontFamily: SF, fontSize: "18px", color: C.gold }}>Recao</div>}
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        {user?.nombre && <span style={{ fontFamily: F, fontSize: "12px", color: "#ccc" }}>Hola, {user.nombre}</span>}
-        <span style={{ fontFamily: F, fontSize: "11px", color: "#777", textTransform: "uppercase", letterSpacing: "0.08em" }}>{roleLabel}</span>
-        <button onClick={onLogout} style={{ border: `1px solid #555`, borderRadius: "6px", background: "none", color: "#777", fontFamily: F, fontSize: "10px", padding: "4px 10px", cursor: "pointer" }}>Salir</button>
+    <div style={{ background: C.char, position: "sticky", top: 0, zIndex: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 18px", maxWidth: 1100, margin: "0 auto" }}>
+        <img src={LOGO} alt="Recao" style={{ height: 22, display: "block", filter: "brightness(0) invert(1)" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontFamily: F, fontSize: 12, color: "#C9C0B0" }}>{user && user.nombre}</span>
+          <span style={{ width: 30, height: 30, borderRadius: "999px", background: av.bg, color: av.fg, fontFamily: SF, fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>{av.inicial}</span>
+          <button onClick={onLogout} style={{ background: "transparent", border: "none", color: "#8A8070", fontFamily: F, fontSize: 12, cursor: "pointer", padding: "4px 6px" }}>Salir</button>
+        </div>
       </div>
     </div>
   );
