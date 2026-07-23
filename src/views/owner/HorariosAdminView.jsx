@@ -13,6 +13,8 @@ const navBtn = { border: `1.5px solid ${C.brd}`, background: "#fff", borderRadiu
 function lunesDe(d) { const x = new Date(d); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); x.setHours(0, 0, 0, 0); return x; }
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function fmtDiaLargo(d) { const dd = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][d.getDay()]; return `${dd} ${d.getDate()} ${MESES_C[d.getMonth()]}`; }
+// "Laura Travieso" -> "Laura T."  (para distinguir a las dos Lauras)
+function nombreCorto(n) { const p = (n || "").trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[1].charAt(0)}.` : p[0]; }
 
 function Avatar({ name, size = 26 }) { const a = avatar(name); return <span style={{ width: size, height: size, borderRadius: "999px", background: a.bg, color: a.fg, fontFamily: SF, fontSize: Math.round(size * 0.42), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{a.inicial}</span>; }
 
@@ -34,6 +36,7 @@ export function HorariosAdminView() {
   const [loading, setLoading] = useState(true);
   const [picker, setPicker] = useState(null);
   const [addTo, setAddTo] = useState(null);
+  const [evModal, setEvModal] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -73,6 +76,13 @@ export function HorariosAdminView() {
     } catch (e) { flash(e.message || "Error"); }
     setBusy(false);
   };
+  const crearEventual = async () => {
+    const nombre = nuevoNombre.trim(); if (!nombre) return;
+    setBusy(true);
+    try { await sb.fn("gestion-usuarios", { action: "crear_eventual", nombre }); setNuevoNombre(""); setEvModal(false); flash("Persona añadida"); await load(); }
+    catch (e) { flash(e.message || "Error"); }
+    setBusy(false);
+  };
 
   const hoyStr = ymd(new Date());
   const esHoy = ymd(dia) === hoyStr;
@@ -82,8 +92,9 @@ export function HorariosAdminView() {
   const sinAsignar = [];
   trab.forEach(t => { const tu = mapa[`${t.id}|${fechaDia}`]; if (tu && porTurno[tu]) porTurno[tu].push(t); else if (!t.eventual) sinAsignar.push(t); });
 
-  const filasSemana = [...trab.filter(t => !t.eventual), ...trab.filter(t => t.eventual && semana.some(d => mapa[`${t.id}|${ymd(d)}`]))];
-  const eventualesLibres = addTo ? trab.filter(t => t.eventual && mapa[`${t.id}|${addTo.fecha}`] !== addTo.turno) : [];
+  const fijas = trab.filter(t => !t.eventual);
+  const eventuales = trab.filter(t => t.eventual);
+  const eventualesLibres = addTo ? eventuales.filter(t => mapa[`${t.id}|${addTo.fecha}`] !== addTo.turno) : [];
 
   return (
     <div style={{ padding: "14px", maxWidth: 680, margin: "0 auto" }}>
@@ -133,29 +144,47 @@ export function HorariosAdminView() {
             )}
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <div style={{ minWidth: 520 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "84px repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
-                <div />
-                {semana.map((d, i) => { const es = ymd(d) === hoyStr; return (
-                  <div key={i} style={{ textAlign: "center", fontFamily: F, fontSize: 11, fontWeight: 700, color: es ? C.char : C.mutL }}>
-                    <div>{DIAS[i]}</div>
-                    <div style={{ fontSize: 12 }}>{d.getDate()}</div>
-                  </div>
-                ); })}
-              </div>
-              {filasSemana.map(t => (
-                <div key={t.id} style={{ display: "grid", gridTemplateColumns: "84px repeat(7, 1fr)", gap: 4, marginBottom: 4, alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                    <Avatar name={t.nombre} size={24} />
-                    <span style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: t.eventual ? C.mut : C.char, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.nombre.split(" ")[0]}</span>
-                  </div>
-                  {semana.map((d, i) => { const f = ymd(d); const tu = mapa[`${t.id}|${f}`]; const def = tu ? TURNOS[tu] : null; return (
-                    <button key={i} onClick={() => setPicker({ uid: t.id, fecha: f })} title={def ? def.label : ""} style={{ height: 38, borderRadius: 9, border: `1px solid ${def ? "transparent" : C.brdL}`, background: def ? def.bg : "#fff", color: def ? def.fg : C.mutL, cursor: "pointer", fontFamily: F, fontSize: 11, fontWeight: 700 }}>{def ? ABBR[tu] : ""}</button>
+          <div>
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: 560 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "106px repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
+                  <div />
+                  {semana.map((d, i) => { const es = ymd(d) === hoyStr; return (
+                    <div key={i} style={{ textAlign: "center", fontFamily: F, fontSize: 11, fontWeight: 700, color: es ? C.char : C.mutL }}>
+                      <div>{DIAS[i]}</div>
+                      <div style={{ fontSize: 12 }}>{d.getDate()}</div>
+                    </div>
                   ); })}
                 </div>
-              ))}
+                {fijas.map(t => (
+                  <div key={t.id} style={{ display: "grid", gridTemplateColumns: "106px repeat(7, 1fr)", gap: 4, marginBottom: 4, alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                      <Avatar name={t.nombre} size={24} />
+                      <span title={t.nombre} style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.char, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nombreCorto(t.nombre)}</span>
+                    </div>
+                    {semana.map((d, i) => { const f = ymd(d); const tu = mapa[`${t.id}|${f}`]; const def = tu ? TURNOS[tu] : null; return (
+                      <button key={i} onClick={() => setPicker({ uid: t.id, fecha: f })} title={def ? def.label : ""} style={{ height: 38, borderRadius: 9, border: `1px solid ${def ? "transparent" : C.brdL}`, background: def ? def.bg : "#fff", color: def ? def.fg : C.mutL, cursor: "pointer", fontFamily: F, fontSize: 11, fontWeight: 700 }}>{def ? ABBR[tu] : ""}</button>
+                    ); })}
+                  </div>
+                ))}
+
+                {eventuales.length > 0 && (
+                  <div style={{ fontFamily: F, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: C.mutL, margin: "12px 0 6px" }}>Eventuales</div>
+                )}
+                {eventuales.map(t => (
+                  <div key={t.id} style={{ display: "grid", gridTemplateColumns: "106px repeat(7, 1fr)", gap: 4, marginBottom: 4, alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                      <Avatar name={t.nombre} size={24} />
+                      <span title={t.nombre} style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.mut, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nombreCorto(t.nombre)}</span>
+                    </div>
+                    {semana.map((d, i) => { const f = ymd(d); const tu = mapa[`${t.id}|${f}`]; const def = tu ? TURNOS[tu] : null; return (
+                      <button key={i} onClick={() => setPicker({ uid: t.id, fecha: f })} title={def ? def.label : ""} style={{ height: 38, borderRadius: 9, border: def ? "1px solid transparent" : `1px dashed ${C.brdL}`, background: def ? def.bg : "#fff", color: def ? def.fg : C.mutL, cursor: "pointer", fontFamily: F, fontSize: 11, fontWeight: 700 }}>{def ? ABBR[tu] : ""}</button>
+                    ); })}
+                  </div>
+                ))}
+              </div>
             </div>
+            <button onClick={() => { setNuevoNombre(""); setEvModal(true); }} style={{ marginTop: 12, background: "#fff", border: `1.5px dashed ${C.brd}`, borderRadius: 12, padding: "10px 16px", cursor: "pointer", color: C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 600 }}>+ Persona eventual</button>
           </div>
         )}
 
@@ -193,6 +222,19 @@ export function HorariosAdminView() {
             <div style={{ display: "flex", gap: 8 }}>
               <input value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} onKeyDown={e => { if (e.key === "Enter") crearYAsignar(); }} placeholder="Nombre" style={{ ...inp, flex: 1 }} />
               <button onClick={crearYAsignar} disabled={busy || !nuevoNombre.trim()} style={{ ...btnDark, width: "auto", padding: "0 20px", fontSize: 15, opacity: busy || !nuevoNombre.trim() ? 0.6 : 1 }}>Añadir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {evModal && (
+        <div onClick={() => setEvModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "20px 20px 0 0", padding: 20, width: "100%", maxWidth: 680 }}>
+            <div style={{ fontFamily: SF, fontSize: 17, color: C.char }}>Nueva persona eventual</div>
+            <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 16 }}>Sin cuenta ni acceso a la app. Luego le asignas turnos tocando sus celdas.</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} onKeyDown={e => { if (e.key === "Enter") crearEventual(); }} placeholder="Nombre" style={{ ...inp, flex: 1 }} />
+              <button onClick={crearEventual} disabled={busy || !nuevoNombre.trim()} style={{ ...btnDark, width: "auto", padding: "0 20px", fontSize: 15, opacity: busy || !nuevoNombre.trim() ? 0.6 : 1 }}>Crear</button>
             </div>
           </div>
         </div>
