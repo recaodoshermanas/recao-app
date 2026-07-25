@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C, SHADOW, avatar } from "../../lib/styles.js";
 import { IcoCheck } from "../../lib/icons.jsx";
+import { fmt2 } from "../../lib/utils.js";
 import { sb } from "../../lib/supabase.js";
 import { ymd } from "../../lib/turnos.js";
 
@@ -34,7 +35,7 @@ export function CierresAdminView() {
   const loadCierres = useCallback(async () => {
     setLoading(true);
     try {
-      let q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion)&order=fecha.desc,completado_en.desc";
+      let q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc";
       if (fUid) q += `&usuario_id=eq.${fUid}`;
       if (desde) q += `&fecha=gte.${desde}`;
       if (hasta) q += `&fecha=lte.${hasta}`;
@@ -46,11 +47,33 @@ export function CierresAdminView() {
 
   const preset = (dias) => { if (dias === null) { setDesde(""); setHasta(""); } else if (dias === 0) { const h = ymd(new Date()); setDesde(h); setHasta(h); } else { setDesde(addDays(-(dias - 1))); setHasta(ymd(new Date())); } };
   const presetActivo = (dias) => { if (dias === null) return !desde && !hasta; if (dias === 0) return desde === ymd(new Date()) && hasta === ymd(new Date()); return hasta === ymd(new Date()) && desde === addDays(-(dias - 1)); };
-  const fmt = (f) => { const p = f.split("-"); return `${p[2]}/${p[1]}`; };
+  const fmtF = (f) => { const p = f.split("-"); return `${p[2]}/${p[1]}`; };
 
   const chip = (lab, dias) => {
     const on = presetActivo(dias);
     return <button key={lab} onClick={() => preset(dias)} style={{ fontFamily: F, fontSize: 12.5, fontWeight: 600, padding: "7px 13px", borderRadius: 999, cursor: "pointer", border: on ? `1.5px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{lab}</button>;
+  };
+
+  const cajaDe = (c) => (c.caja && c.caja[0]) || null;
+  const totalCaja = (caja) => {
+    if (!caja) return 0;
+    const tk = (caja.tickets || []).reduce((s, t) => s + Number(t.importe), 0);
+    return Number(caja.caja1_efectivo) + Number(caja.caja1_tarjeta) + Number(caja.caja2_efectivo) + Number(caja.caja2_tarjeta) + tk;
+  };
+
+  const lineaCaja = (l, v) => <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 4 }}><span>{l}</span><span style={{ color: C.char, fontWeight: 600 }}>{fmt2(v)}</span></div>;
+  const bloqueCaja = (titulo, ef, ta, tickets) => {
+    const t = tickets.reduce((s, x) => s + Number(x.importe), 0);
+    const sub = Number(ef) + Number(ta) + t;
+    return (
+      <div style={{ marginBottom: 11 }}>
+        <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: C.char, marginBottom: 6 }}>{titulo}</div>
+        {lineaCaja("Efectivo en sobre", ef)}
+        {lineaCaja("Tarjeta", ta)}
+        {tickets.map((x, i) => lineaCaja(`Ticket · ${x.proveedor}`, x.importe))}
+        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 12.5, color: C.char, fontWeight: 700, marginTop: 4, paddingTop: 5, borderTop: `1px dashed ${C.brdL}` }}><span>Subtotal caja</span><span>{fmt2(sub)}</span></div>
+      </div>
+    );
   };
 
   return (
@@ -79,6 +102,10 @@ export function CierresAdminView() {
           const pend = items.length - hechas;
           const open = abierto === c.id;
           const completo = pend === 0;
+          const caja = cajaDe(c);
+          const cajaTot = totalCaja(caja);
+          const tk1 = caja ? (caja.tickets || []).filter(t => t.caja === 1) : [];
+          const tk2 = caja ? (caja.tickets || []).filter(t => t.caja === 2) : [];
           return (
             <div key={c.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 15, marginBottom: 10, boxShadow: SHADOW.card }}>
               <div onClick={() => setAbierto(open ? null : c.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", gap: 10 }}>
@@ -86,13 +113,25 @@ export function CierresAdminView() {
                   <Avatar name={nombreDe[c.usuario_id]} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{nombreDe[c.usuario_id] || "—"}</div>
-                    <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 1, textTransform: "capitalize" }}>{fmt(c.fecha)} · {c.turno}</div>
+                    <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 1, textTransform: "capitalize" }}>{fmtF(c.fecha)} · {c.turno}</div>
+                    {caja && <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: C.goldDark, marginTop: 2 }}>Caja: {fmt2(cajaTot)}</div>}
                   </div>
                 </div>
                 <span style={{ fontFamily: F, fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 999, background: completo ? "#E7F3EC" : "#FBEAE7", color: completo ? "#1E7A46" : "#B23A2C", whiteSpace: "nowrap", flexShrink: 0 }}>{hechas}/{items.length}{completo ? "" : ` · ${pend} sin hacer`}</span>
               </div>
               {open && (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.brdL}` }}>
+                  {caja && (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ ...secLbl, margin: "0 0 8px" }}>Cierre de caja</div>
+                      <div style={{ background: "#FBF8F1", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: 13 }}>
+                        {bloqueCaja("Caja 1", caja.caja1_efectivo, caja.caja1_tarjeta, tk1)}
+                        {bloqueCaja("Caja 2", caja.caja2_efectivo, caja.caja2_tarjeta, tk2)}
+                        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: SF, fontSize: 15, color: C.char, borderTop: `1px solid ${C.brdL}`, paddingTop: 9 }}><span>Total del turno</span><span>{fmt2(cajaTot)}</span></div>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ ...secLbl, margin: "0 0 8px" }}>Tareas</div>
                   {items.map((it, i) => (
                     <div key={i} style={{ display: "flex", gap: 10, padding: "7px 0", alignItems: "flex-start" }}>
                       <span style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 1, background: it.hecha ? C.grn : "#FBEAE7", display: "flex", alignItems: "center", justifyContent: "center" }}>{it.hecha ? <IcoCheck size={13} color="#fff" sw={3} /> : <span style={{ color: "#B23A2C", fontSize: 12, fontWeight: 700 }}>✕</span>}</span>
