@@ -14,10 +14,11 @@ import { VacacionesAdminView } from "./VacacionesAdminView.jsx";
 import { CierresAdminView } from "./CierresAdminView.jsx";
 import { CambiosAdminView } from "./CambiosAdminView.jsx";
 import { HorasExtrasView } from "./HorasExtrasView.jsx";
+import { WorkerView } from "../WorkerView.jsx";
 
 const MUNDOS = {
-  finanzas: { label: "Finanzas", sub: "Evolución · P&L · Tesorería · Datos mes", Ico: IcoBars, iconBg: "#EAF0F8", iconFg: "#4A7AB5", tabs: [
-    { id: "resumen", label: "Evolución" }, { id: "analitica", label: "Analítica" }, { id: "mes", label: "Datos mes" }, { id: "resultados", label: "P&L" }, { id: "tesoreria", label: "Tesorería" },
+  finanzas: { label: "Finanzas", sub: "Evolución · P&L · Tesorería · Datos mes · Facturas", Ico: IcoBars, iconBg: "#EAF0F8", iconFg: "#4A7AB5", tabs: [
+    { id: "resumen", label: "Evolución" }, { id: "analitica", label: "Analítica" }, { id: "mes", label: "Datos mes" }, { id: "resultados", label: "P&L" }, { id: "tesoreria", label: "Tesorería" }, { id: "facturas", label: "Facturas" },
   ] },
   equipo: { label: "Equipo", sub: "Cierres · Horarios · Vacaciones · Cambios · Horas · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
     { id: "cierres", label: "Cierres" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cambios", label: "Cambios" }, { id: "horas", label: "Horas extras" }, { id: "usuarios", label: "Usuarios" },
@@ -110,6 +111,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
       {tab === "mes" && <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} initialMonth={focusMonth} />}
       {tab === "resultados" && <PLView facturas={facturas} monthlyData={monthlyData} onEditMonth={goEditMonth} />}
       {tab === "tesoreria" && <TesoreriaView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} />}
+      {tab === "facturas" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={onReload} user={currentUser} />}
       {tab === "cierres" && <CierresAdminView />}
       {tab === "horarios" && <HorariosAdminView />}
       {tab === "vacaciones" && <VacacionesAdminView />}
