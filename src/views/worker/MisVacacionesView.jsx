@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { F, SF, C, btnDark, chipStyle, CHIP } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
-import { resumenCalendario, rangoFechas, diasQueGastan, agruparRangos } from "../../lib/vacaciones.js";
+import { resumenCalendario, agruparRangos } from "../../lib/vacaciones.js";
+import { VacacionesPicker } from "../../components/VacacionesPicker.jsx";
 
 const ANIO = 2026;
 function fmtF(s) { if (!s) return ""; const p = s.split("-"); return `${p[2]}/${p[1]}`; }
 function ymd(d) { const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0"); return `${y}-${m}-${day}`; }
-const inpMini = { flex: 1, padding: "11px 12px", border: `1.5px solid ${C.brd}`, borderRadius: 12, fontFamily: F, fontSize: 14, color: C.char, background: "#fff", boxSizing: "border-box", outline: "none" };
 const pill = { background: "rgba(255,255,255,.55)", borderRadius: "999px", padding: "4px 10px", fontFamily: F, fontSize: 11, fontWeight: 600, color: "#073B3B" };
 const secLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.mutL, margin: "20px 2px 10px" };
 
@@ -16,8 +16,6 @@ export function MisVacacionesView({ user }) {
   const [vacDias, setVacDias] = useState([]);
   const [descansos, setDescansos] = useState([]);
   const [abierto, setAbierto] = useState(false);
-  const [ini, setIni] = useState(""); const [fin, setFin] = useState(""); const [dias, setDias] = useState("");
-  const [calc, setCalc] = useState(false);
   const [msg, setMsg] = useState("");
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2600); };
@@ -33,30 +31,14 @@ export function MisVacacionesView({ user }) {
   }, [user.id]);
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (!ini || !fin || fin < ini) { setDias(""); return; }
-    let cancel = false; setCalc(true);
-    (async () => {
-      try {
-        const rows = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${user.id}&fecha=gte.${ini}&fecha=lte.${fin}`);
-        const m = {}; rows.forEach(r => { m[r.fecha] = r.turno; });
-        const n = diasQueGastan(rangoFechas(ini, fin), m).length;
-        if (!cancel) setDias(String(n));
-      } catch (e) { if (!cancel) setDias(""); }
-      if (!cancel) setCalc(false);
-    })();
-    return () => { cancel = true; };
-  }, [ini, fin, user.id]);
-
   const hoy = ymd(new Date());
   const r = resumenCalendario(total, vacDias, sols, hoy);
   const bloques = agruparRangos(vacDias, descansos);
 
-  const solicitar = async () => {
-    const d = parseInt(dias, 10);
-    if (!ini || !fin || !d) { flash("Pon las fechas"); return; }
-    try { await sb.insert("vacaciones_solicitudes", { usuario_id: user.id, fecha_inicio: ini, fecha_fin: fin, dias: d, estado: "pendiente" }); setIni(""); setFin(""); setDias(""); setAbierto(false); flash("Solicitud enviada"); await load(); }
-    catch (e) { flash(e.message); }
+  const solicitar = async (fechas) => {
+    if (!fechas.length) return;
+    await sb.insert("vacaciones_solicitudes", { usuario_id: user.id, fecha_inicio: fechas[0], fecha_fin: fechas[fechas.length - 1], dias: fechas.length, fechas, estado: "pendiente" });
+    setAbierto(false); flash("Solicitud enviada"); await load();
   };
   const cancelar = async (s) => { try { await sb.delete("vacaciones_solicitudes", `id=eq.${s.id}`); await load(); } catch (e) { flash(e.message); } };
 
@@ -77,18 +59,8 @@ export function MisVacacionesView({ user }) {
       {!abierto ? (
         <button onClick={() => setAbierto(true)} style={{ ...btnDark, fontSize: 15, padding: 14, marginTop: 14 }}>+ Solicitar vacaciones</button>
       ) : (
-        <div style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 14, marginTop: 14 }}>
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <input type="date" value={ini} onChange={e => setIni(e.target.value)} style={inpMini} />
-            <input type="date" value={fin} onChange={e => setFin(e.target.value)} style={inpMini} />
-          </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>
-              {calc ? "Calculando…" : dias ? <span><b style={{ fontFamily: SF, fontSize: 17, color: C.char }}>{dias}</b> días de vacaciones</span> : "Elige las fechas"}
-            </div>
-            <button onClick={solicitar} disabled={!dias} style={{ ...btnDark, flex: 1, fontSize: 14, padding: 12, opacity: dias ? 1 : 0.5 }}>Enviar</button>
-          </div>
-          <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, marginTop: 8 }}>Solo cuentan los días que te tocaba trabajar; tus descansos no gastan vacaciones.</div>
+        <div style={{ marginTop: 14 }}>
+          <VacacionesPicker usuarioId={user.id} maxDias={Math.max(0, r.restantes)} submitLabel="Enviar" onSubmit={solicitar} onCancel={() => setAbierto(false)} />
         </div>
       )}
 
@@ -99,7 +71,7 @@ export function MisVacacionesView({ user }) {
             <div key={s.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 13, padding: "13px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
                 <div style={{ fontFamily: F, fontSize: 14, fontWeight: 600, color: C.char }}>{fmtF(s.fecha_inicio)} – {fmtF(s.fecha_fin)}</div>
-                <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 2 }}>{s.dias} días</div>
+                <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 2 }}>{s.dias} {s.dias === 1 ? "día" : "días"}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={chipStyle(s.estado)}>{CHIP[s.estado].label}</span>
