@@ -99,7 +99,7 @@ export function CerrarTurnoView({ user }) {
     try {
       const items = tareas.map(t => ({ tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", justificacion: justif(estado[t.id]) }));
       const p_caja = { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
-      const p_facturas = Object.entries(selProv).map(([id, c]) => ({ id: Number(id), caja: c }));
+      const p_facturas = Object.entries(selProv).map(([id, c]) => ({ id, caja: c }));
       await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas });
       setModo("ver");
       await load(turno);
@@ -222,7 +222,7 @@ export function CerrarTurnoView({ user }) {
               const tk2 = facs2.reduce((s, f) => s + Number(f.importe), 0);
               const s1 = Number(c.caja1_efectivo) + Number(c.caja1_tarjeta) + tk1;
               const s2 = Number(c.caja2_efectivo) + Number(c.caja2_tarjeta) + tk2;
-              const linea = (l, v, strong) => <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 13, color: strong ? C.char : C.mut, fontWeight: strong ? 700 : 400, marginBottom: 5 }}><span>{l}</span><span style={{ color: C.char, fontWeight: 600 }}>{fmt2(v)}</span></div>;
+              const linea = (l, v) => <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 5 }}><span>{l}</span><span style={{ color: C.char, fontWeight: 600 }}>{fmt2(v)}</span></div>;
               const bloque = (titulo, ef, ta, facs, sub) => (
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: C.char, marginBottom: 7 }}>{titulo}</div>
