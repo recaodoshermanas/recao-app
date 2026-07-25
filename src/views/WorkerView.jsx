@@ -4,11 +4,15 @@ import { fmt, fmt2, mkLabel, uid, pn } from "../lib/utils.js";
 import { sb } from "../lib/supabase.js";
 import { useConfirm } from "../hooks/useConfirm.jsx";
 
+const TIPOS_PAGO = [["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"]];
+const etiquetaPago = (t) => (t === "tarjeta" ? "Tarjeta" : t === "efectivo" ? "Efectivo" : "");
+
 export function WorkerView({ facturas, proveedores, onReload }) {
   const [modo, setModo] = useState("lista");
   const [editId, setEditId] = useState(null);
   const [proveedor, setProveedor] = useState("");
   const [importe, setImporte] = useState("");
+  const [tipoPago, setTipoPago] = useState("efectivo");
   const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
   const [nota, setNota] = useState("");
   const [saving, setSaving] = useState(false);
@@ -16,7 +20,7 @@ export function WorkerView({ facturas, proveedores, onReload }) {
   const [isNewProv, setIsNewProv] = useState(false);
   const { ask, Dialog } = useConfirm();
 
-  const resetForm = () => { setProveedor(""); setImporte(""); setFecha(new Date().toISOString().split("T")[0]); setNota(""); setEditId(null); setIsNewProv(false); };
+  const resetForm = () => { setProveedor(""); setImporte(""); setTipoPago("efectivo"); setFecha(new Date().toISOString().split("T")[0]); setNota(""); setEditId(null); setIsNewProv(false); };
 
   const allProveedores = useMemo(() => {
     const fromFacs = [...new Set(facturas.map(f => f.proveedor))];
@@ -28,7 +32,7 @@ export function WorkerView({ facturas, proveedores, onReload }) {
     if (!proveedor.trim() || amt <= 0) return;
     setSaving(true);
     try {
-      const payload = { proveedor: proveedor.trim(), importe: amt, fecha, nota: nota.trim() || null };
+      const payload = { proveedor: proveedor.trim(), importe: amt, tipo_pago: tipoPago, fecha, nota: nota.trim() || null };
       if (editId) await sb.update("facturas_proveedores", `id=eq.${editId}`, payload);
       else {
         await sb.insert("facturas_proveedores", payload);
@@ -44,7 +48,7 @@ export function WorkerView({ facturas, proveedores, onReload }) {
     setSaving(false);
   };
 
-  const startEdit = (f) => { setEditId(f.id); setProveedor(f.proveedor); setImporte(String(f.importe)); setFecha(f.fecha); setNota(f.nota || ""); setModo("form"); };
+  const startEdit = (f) => { setEditId(f.id); setProveedor(f.proveedor); setImporte(String(f.importe)); setTipoPago(f.tipo_pago || "efectivo"); setFecha(f.fecha); setNota(f.nota || ""); setModo("form"); };
 
   const handleDelete = async (id) => {
     try { await sb.delete("facturas_proveedores", `id=eq.${id}`); await onReload(); }
@@ -74,7 +78,11 @@ export function WorkerView({ facturas, proveedores, onReload }) {
                   <div key={f.id} style={{ ...crd, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: F, fontSize: "14px", fontWeight: 600, color: C.char, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.proveedor}</div>
-                      <div style={{ fontFamily: F, fontSize: "12px", color: C.mut, marginTop: "2px" }}>{new Date(f.fecha).toLocaleDateString("es-ES")}{f.nota ? ` · ${f.nota}` : ""}</div>
+                      <div style={{ fontFamily: F, fontSize: "12px", color: C.mut, marginTop: "3px", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                        <span>{new Date(f.fecha).toLocaleDateString("es-ES")}</span>
+                        {f.tipo_pago && <span style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: f.tipo_pago === "tarjeta" ? "#E7EEF7" : "#EAF3EC", color: f.tipo_pago === "tarjeta" ? "#3F6EA5" : "#2E7D4F" }}>{etiquetaPago(f.tipo_pago)}</span>}
+                        {f.nota && <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {f.nota}</span>}
+                      </div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "10px" }}>
                       <span style={{ fontFamily: F, fontSize: "15px", fontWeight: 700, color: C.char }}>{fmt2(f.importe)}</span>
@@ -105,6 +113,13 @@ export function WorkerView({ facturas, proveedores, onReload }) {
           )}
           <label style={lbl}>Importe (€)</label>
           <input type="number" inputMode="decimal" value={importe} onChange={e => setImporte(e.target.value)} placeholder="0,00" style={{ ...inp, marginBottom: "16px" }} />
+          <label style={lbl}>Tipo de pago</label>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+            {TIPOS_PAGO.map(([val, label]) => {
+              const on = tipoPago === val;
+              return <button key={val} onClick={() => setTipoPago(val)} style={{ flex: 1, padding: "13px", borderRadius: "10px", cursor: "pointer", fontFamily: F, fontSize: "14px", fontWeight: 700, border: on ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{label}</button>;
+            })}
+          </div>
           <label style={lbl}>Fecha</label>
           <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ ...inp, marginBottom: "16px" }} />
           <label style={lbl}>Nota (opcional)</label>
