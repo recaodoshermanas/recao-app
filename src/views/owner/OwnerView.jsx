@@ -12,13 +12,14 @@ import { UsuariosView } from "./UsuariosView.jsx";
 import { HorariosAdminView } from "./HorariosAdminView.jsx";
 import { VacacionesAdminView } from "./VacacionesAdminView.jsx";
 import { CierresAdminView } from "./CierresAdminView.jsx";
+import { CambiosAdminView } from "./CambiosAdminView.jsx";
 
 const MUNDOS = {
   finanzas: { label: "Finanzas", sub: "Evolución · P&L · Tesorería · Datos mes", Ico: IcoBars, iconBg: "#EAF0F8", iconFg: "#4A7AB5", tabs: [
     { id: "resumen", label: "Evolución" }, { id: "analitica", label: "Analítica" }, { id: "mes", label: "Datos mes" }, { id: "resultados", label: "P&L" }, { id: "tesoreria", label: "Tesorería" },
   ] },
-  equipo: { label: "Equipo", sub: "Cierres · Horarios · Vacaciones · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
-    { id: "cierres", label: "Cierres" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "usuarios", label: "Usuarios" },
+  equipo: { label: "Equipo", sub: "Cierres · Horarios · Vacaciones · Cambios · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
+    { id: "cierres", label: "Cierres" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cambios", label: "Cambios" }, { id: "usuarios", label: "Usuarios" },
   ] },
 };
 
@@ -27,13 +28,19 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
   const [tab, setTab] = useState(null);
   const [focusMonth, setFocusMonth] = useState(null);
   const [avisosVac, setAvisosVac] = useState(0);
+  const [avisosCambios, setAvisosCambios] = useState(0);
 
   useEffect(() => {
-    (async () => { try { const v = await sb.select("vacaciones_solicitudes", "select=id&estado=eq.pendiente"); setAvisosVac(v.length); } catch (e) { /* noop */ } })();
+    (async () => {
+      try { const v = await sb.select("vacaciones_solicitudes", "select=id&estado=eq.pendiente"); setAvisosVac(v.length); } catch (e) { /* noop */ }
+      try { const c = await sb.select("cambios_turno", "select=id&estado=eq.pendiente"); setAvisosCambios(c.length); } catch (e) { /* noop */ }
+    })();
   }, []);
 
   const entrar = (m) => { setMundo(m); setTab(MUNDOS[m].tabs[0].id); };
   const goEditMonth = (mk) => { setFocusMonth(mk); setMundo("finanzas"); setTab("mes"); };
+
+  const avisoBtn = { width: "100%", boxSizing: "border-box", cursor: "pointer", background: C.char, border: "none", borderRadius: 15, padding: "15px 18px", display: "flex", alignItems: "center", gap: 13, textAlign: "left" };
 
   if (!mundo && tab !== "ajustes") {
     const hoy = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
@@ -55,14 +62,23 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
             </button>
           ); })}
         </div>
-        {avisosVac > 0 && (
+        {(avisosVac > 0 || avisosCambios > 0) && (
           <div>
             <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.mutL, margin: "22px 2px 10px" }}>Necesita tu atención</div>
-            <button onClick={() => { setMundo("equipo"); setTab("vacaciones"); }} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", background: C.char, border: "none", borderRadius: 15, padding: "15px 18px", display: "flex", alignItems: "center", gap: 13, textAlign: "left" }}>
-              <span style={{ width: 34, height: 34, borderRadius: "999px", background: C.gold, color: C.goldDark, fontFamily: SF, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{avisosVac}</span>
-              <span style={{ flex: 1, fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.gold }}>solicitud{avisosVac > 1 ? "es" : ""} de vacaciones por revisar</span>
-              <IcoRight size={18} color={C.gold} sw={2.4} />
-            </button>
+            {avisosVac > 0 && (
+              <button onClick={() => { setMundo("equipo"); setTab("vacaciones"); }} style={avisoBtn}>
+                <span style={{ width: 34, height: 34, borderRadius: "999px", background: C.gold, color: C.goldDark, fontFamily: SF, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{avisosVac}</span>
+                <span style={{ flex: 1, fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.gold }}>solicitud{avisosVac > 1 ? "es" : ""} de vacaciones por revisar</span>
+                <IcoRight size={18} color={C.gold} sw={2.4} />
+              </button>
+            )}
+            {avisosCambios > 0 && (
+              <button onClick={() => { setMundo("equipo"); setTab("cambios"); }} style={{ ...avisoBtn, marginTop: avisosVac > 0 ? 10 : 0 }}>
+                <span style={{ width: 34, height: 34, borderRadius: "999px", background: C.gold, color: C.goldDark, fontFamily: SF, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{avisosCambios}</span>
+                <span style={{ flex: 1, fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.gold }}>cambio{avisosCambios > 1 ? "s" : ""} de turno por revisar</span>
+                <IcoRight size={18} color={C.gold} sw={2.4} />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -96,6 +112,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
       {tab === "cierres" && <CierresAdminView />}
       {tab === "horarios" && <HorariosAdminView />}
       {tab === "vacaciones" && <VacacionesAdminView />}
+      {tab === "cambios" && <CambiosAdminView />}
       {tab === "usuarios" && <UsuariosView currentUser={currentUser} />}
       {tab === "ajustes" && <AjustesView currentUser={currentUser} />}
     </div>
