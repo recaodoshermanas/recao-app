@@ -11,3 +11,4 @@ export const IcoReceipt = (p) => <S {...p}><path d="M6 2.5h9l4 4v15H6z" /><path 
 export const IcoUser = (p) => <S {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></S>;
 export const IcoBars = (p) => <S {...p}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></S>;
 export const IcoUsers = (p) => <S {...p}><circle cx="9" cy="8" r="3.2" /><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5" /><circle cx="17.5" cy="9" r="2.6" /><path d="M15.5 15.2c3 .3 5.5 1.8 5.5 4.8" /></S>;
+export const IcoSwap = (p) => <S {...p}><path d="M16 3l4 4-4 4M20 7H8M8 21l-4-4 4-4M4 17h12" /></S>;
