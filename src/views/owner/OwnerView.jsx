@@ -13,13 +13,14 @@ import { HorariosAdminView } from "./HorariosAdminView.jsx";
 import { VacacionesAdminView } from "./VacacionesAdminView.jsx";
 import { CierresAdminView } from "./CierresAdminView.jsx";
 import { CambiosAdminView } from "./CambiosAdminView.jsx";
+import { HorasExtrasView } from "./HorasExtrasView.jsx";
 
 const MUNDOS = {
   finanzas: { label: "Finanzas", sub: "Evolución · P&L · Tesorería · Datos mes", Ico: IcoBars, iconBg: "#EAF0F8", iconFg: "#4A7AB5", tabs: [
     { id: "resumen", label: "Evolución" }, { id: "analitica", label: "Analítica" }, { id: "mes", label: "Datos mes" }, { id: "resultados", label: "P&L" }, { id: "tesoreria", label: "Tesorería" },
   ] },
-  equipo: { label: "Equipo", sub: "Cierres · Horarios · Vacaciones · Cambios · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
-    { id: "cierres", label: "Cierres" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cambios", label: "Cambios" }, { id: "usuarios", label: "Usuarios" },
+  equipo: { label: "Equipo", sub: "Cierres · Horarios · Vacaciones · Cambios · Horas · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
+    { id: "cierres", label: "Cierres" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cambios", label: "Cambios" }, { id: "horas", label: "Horas extras" }, { id: "usuarios", label: "Usuarios" },
   ] },
 };
 
@@ -113,6 +114,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
       {tab === "horarios" && <HorariosAdminView />}
       {tab === "vacaciones" && <VacacionesAdminView />}
       {tab === "cambios" && <CambiosAdminView />}
+      {tab === "horas" && <HorasExtrasView />}
       {tab === "usuarios" && <UsuariosView currentUser={currentUser} />}
       {tab === "ajustes" && <AjustesView currentUser={currentUser} />}
     </div>
