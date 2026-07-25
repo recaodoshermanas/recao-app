@@ -76,8 +76,8 @@ export function VacacionesAdminView() {
   const hoy = ymd(new Date());
   const escribirVacFechas = async (uid, fechas) => { if (fechas && fechas.length) await sb.upsert("horarios", fechas.map(f => ({ usuario_id: uid, fecha: f, turno: "Vacaciones" })), "usuario_id,fecha"); };
   const borrarVacFechas = async (uid, fechas) => { if (fechas && fechas.length) await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=in.(${fechas.join(",")})&turno=eq.Vacaciones`); };
-  // Fallback para solicitudes antiguas sin lista de fechas
   const calcularRango = async (uid, ini, fin) => { const rows = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${uid}&fecha=gte.${ini}&fecha=lte.${fin}`); const m = {}; rows.forEach(r => { m[r.fecha] = r.turno; }); return diasQueGastan(rangoFechas(ini, fin), m); };
+  const borrarRango = async (uid, ini, fin) => { await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=gte.${ini}&fecha=lte.${fin}&turno=eq.Vacaciones`); };
 
   const cambiarEstado = async (s, estado) => {
     try {
@@ -88,10 +88,22 @@ export function VacacionesAdminView() {
         else { const d = await calcularRango(s.usuario_id, s.fecha_inicio, s.fecha_fin); await escribirVacFechas(s.usuario_id, d); if (d.length) patch.dias = d.length; }
       } else if (s.estado === "aceptado") {
         if (fechas) await borrarVacFechas(s.usuario_id, fechas);
-        else await sb.delete("horarios", `usuario_id=eq.${s.usuario_id}&fecha=gte.${s.fecha_inicio}&fecha=lte.${s.fecha_fin}&turno=eq.Vacaciones`);
+        else await borrarRango(s.usuario_id, s.fecha_inicio, s.fecha_fin);
       }
       await sb.update("vacaciones_solicitudes", `id=eq.${s.id}`, patch);
       await load();
+    } catch (e) { flash(e.message); }
+  };
+  const eliminar = async (s) => {
+    if (!window.confirm("¿Eliminar esta solicitud? No se puede deshacer.")) return;
+    try {
+      if (s.estado === "aceptado") {
+        const fechas = Array.isArray(s.fechas) ? s.fechas : null;
+        if (fechas) await borrarVacFechas(s.usuario_id, fechas);
+        else await borrarRango(s.usuario_id, s.fecha_inicio, s.fecha_fin);
+      }
+      await sb.delete("vacaciones_solicitudes", `id=eq.${s.id}`);
+      flash("Solicitud eliminada"); await load();
     } catch (e) { flash(e.message); }
   };
   const crear = async (fechas) => {
@@ -161,6 +173,7 @@ export function VacacionesAdminView() {
 
       <div style={secLbl}>Solicitudes ({sols.length})</div>
       {loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 20 }}>Cargando…</div>
+        : sols.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>No hay solicitudes</div>
         : sols.map(s => (
           <div key={s.id} style={{ background: "#fff", border: s.estado === "pendiente" ? `1.5px solid ${C.gold}` : `1px solid ${C.brdL}`, borderRadius: 16, padding: 15, marginBottom: 10 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -173,10 +186,17 @@ export function VacacionesAdminView() {
               </div>
               <span style={chipStyle(s.estado)}>{CHIP[s.estado].label}</span>
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-              {s.estado !== "aceptado" && <button onClick={() => cambiarEstado(s, "aceptado")} style={{ ...btnSm, background: C.grn, color: "#fff" }}>Aceptar</button>}
-              {s.estado !== "rechazado" && <button onClick={() => cambiarEstado(s, "rechazado")} style={{ ...btnSm, background: "#fff", color: "#B23A2C", border: "1.5px solid #EDC9C3" }}>Rechazar</button>}
-              {s.estado !== "pendiente" && <button onClick={() => cambiarEstado(s, "pendiente")} style={{ ...btnSm, background: "#fff", color: C.mut, border: `1.5px solid ${C.brd}` }}>Pendiente</button>}
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+              {s.estado === "pendiente" && <>
+                <button onClick={() => cambiarEstado(s, "aceptado")} style={{ ...btnSm, background: C.grn, color: "#fff" }}>Aceptar</button>
+                <button onClick={() => cambiarEstado(s, "rechazado")} style={{ ...btnSm, background: "#fff", color: "#B23A2C", border: "1.5px solid #EDC9C3" }}>Rechazar</button>
+              </>}
+              {s.estado === "aceptado" && <>
+                <button onClick={() => cambiarEstado(s, "rechazado")} style={{ ...btnSm, background: "#fff", color: "#B23A2C", border: "1.5px solid #EDC9C3" }}>Rechazar</button>
+                <button onClick={() => cambiarEstado(s, "pendiente")} style={{ ...btnSm, background: "#fff", color: C.mut, border: `1.5px solid ${C.brd}` }}>Poner pendiente</button>
+              </>}
+              {s.estado === "rechazado" && <button onClick={() => cambiarEstado(s, "pendiente")} style={{ ...btnSm, background: "#fff", color: C.char, border: `1.5px solid ${C.brd}` }}>Reabrir</button>}
+              <button onClick={() => eliminar(s)} style={{ ...btnSm, background: "none", color: C.mutL, marginLeft: "auto", padding: "8px 4px" }}>Eliminar</button>
             </div>
             {s.estado === "aceptado" && <CoberturaEditor sol={s} trabajadoras={trabReg} onSave={(tipo, valor) => guardarCobertura(s, tipo, valor)} />}
           </div>
