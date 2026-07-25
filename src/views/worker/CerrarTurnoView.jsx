@@ -6,6 +6,7 @@ import { ymd } from "../../lib/turnos.js";
 
 function isoDow(d) { const g = d.getDay(); return g === 0 ? 7 : g; }
 const SUG = { "Mañana": "mañana", "Apoyo 1": "mañana", "Tarde": "tarde", "Apoyo 2": "tarde" };
+const MOTIVOS = ["Falta de tiempo", "Sin material/stock", "Lo hace el turno siguiente", "No procedía hoy", "Otro"];
 const grpLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: C.mutL, margin: "2px 2px 10px" };
 
 export function CerrarTurnoView({ user }) {
@@ -45,7 +46,7 @@ export function CerrarTurnoView({ user }) {
       const all = await sb.select("cierre_tareas", `select=id,orden,texto,dia_semana,hora,grupo&turno=eq.${tn}&activa=eq.true&order=orden.asc`);
       const aplican = all.filter(t => t.dia_semana == null || t.dia_semana === dow);
       setTareas(aplican);
-      const st = {}; aplican.forEach(t => { st[t.id] = { hecha: true, justificacion: "" }; });
+      const st = {}; aplican.forEach(t => { st[t.id] = { hecha: true, motivo: "", nota: "" }; });
       setEstado(st);
     } catch (e) { setMsg(e.message || "Error"); }
     setLoading(false);
@@ -54,16 +55,19 @@ export function CerrarTurnoView({ user }) {
   const elegir = (tn) => { setTurno(tn); setModo("ver"); load(tn); };
   const volver = () => { setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setMsg(""); };
   const toggle = (id) => setEstado(s => ({ ...s, [id]: { ...s[id], hecha: !s[id].hecha } }));
-  const setJust = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], justificacion: v } }));
+  const setMotivo = (id, m) => setEstado(s => ({ ...s, [id]: { ...s[id], motivo: m } }));
+  const setNota = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], nota: v } }));
+
+  const justif = (s) => s.hecha ? null : (s.motivo === "Otro" ? s.nota.trim() : s.motivo);
 
   const enviar = async () => {
-    const faltan = tareas.filter(t => !estado[t.id].hecha && !estado[t.id].justificacion.trim());
-    if (faltan.length) { setMsg("Justifica las tareas que no has hecho"); return; }
+    const faltan = tareas.filter(t => { const s = estado[t.id]; if (s.hecha) return false; if (!s.motivo) return true; if (s.motivo === "Otro" && !s.nota.trim()) return true; return false; });
+    if (faltan.length) { setMsg("Indica el motivo de las tareas no hechas"); return; }
     setSaving(true); setMsg("");
     try {
       const cierre = await sb.insert("cierres_turno", { usuario_id: user.id, fecha, turno });
       const cid = cierre[0].id;
-      const items = tareas.map(t => ({ cierre_id: cid, tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].hecha, justificacion: estado[t.id].hecha ? null : estado[t.id].justificacion.trim() }));
+      const items = tareas.map(t => ({ cierre_id: cid, tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].hecha, justificacion: justif(estado[t.id]) }));
       await sb.insert("cierre_items", items);
       await load(turno);
     } catch (e) { setMsg(e.message || "Error al enviar"); }
@@ -78,17 +82,28 @@ export function CerrarTurnoView({ user }) {
   );
 
   const tarjetaTarea = (t) => {
-    const st = estado[t.id] || { hecha: true, justificacion: "" };
+    const st = estado[t.id] || { hecha: true, motivo: "", nota: "" };
     return (
       <div key={t.id} style={{ background: "#fff", border: st.hecha ? `1px solid ${C.brdL}` : `1.5px solid ${C.red}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
         <div onClick={() => toggle(t.id)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
-          <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, background: st.hecha ? C.grn : "#fff", border: st.hecha ? "none" : `2px solid ${C.brd}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {st.hecha && <IcoCheck size={15} color="#fff" sw={3} />}
+          <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, background: st.hecha ? C.grn : "#fff", border: st.hecha ? "none" : `2px solid ${C.red}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {st.hecha ? <IcoCheck size={15} color="#fff" sw={3} /> : <span style={{ color: C.red, fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✕</span>}
           </span>
-          <span style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</span>
+          <span style={{ flex: 1, fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</span>
+          <span style={{ fontFamily: F, fontSize: 11, fontWeight: 600, color: st.hecha ? C.grn : C.red }}>{st.hecha ? "Hecha" : "No hecha"}</span>
         </div>
         {!st.hecha && (
-          <input value={st.justificacion} onChange={e => setJust(t.id, e.target.value)} placeholder="¿Por qué no se hizo?" style={{ width: "100%", boxSizing: "border-box", marginTop: 10, padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: "#B23A2C", marginBottom: 8 }}>¿Por qué no se ha hecho?</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {MOTIVOS.map(m => { const on = st.motivo === m; return (
+                <button key={m} onClick={() => setMotivo(t.id, m)} style={{ fontFamily: F, fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 999, cursor: "pointer", border: on ? "1.5px solid " + C.char : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{m}</button>
+              ); })}
+            </div>
+            {st.motivo === "Otro" && (
+              <input value={st.nota} onChange={e => setNota(t.id, e.target.value)} placeholder="Escribe el motivo" style={{ width: "100%", boxSizing: "border-box", marginTop: 10, padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />
+            )}
+          </div>
         )}
       </div>
     );
@@ -151,7 +166,7 @@ export function CerrarTurnoView({ user }) {
           </div>
         ) : (
           <div>
-            <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 14 }}>Desmarca lo que no hayas podido hacer y cierra el turno.</div>
+            <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 14 }}>Todo viene marcado como hecho. Toca la tarea que no hayas podido hacer e indica el motivo.</div>
             {semanales.length > 0 && <div style={grpLbl}>Diarias</div>}
             {diarias.map(tarjetaTarea)}
             {semanales.length > 0 && <div style={{ ...grpLbl, marginTop: 18 }}>Hoy además</div>}
