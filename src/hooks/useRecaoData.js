@@ -9,10 +9,12 @@ export function useRecaoData(user) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Recarga los datos SIN tocar "loading" (para no desmontar la vista y perder
+  // la navegacion al guardar/eliminar). El spinner a pantalla completa solo se
+  // muestra en la carga inicial, gestionada por el efecto de abajo.
   const reload = useCallback(async () => {
     try {
       setError(null);
-      setLoading(true);
       const [facs, mes, provs, cfgs] = await Promise.all([
         sb.select("facturas_proveedores", "select=*&order=fecha.desc"),
         sb.select("datos_mes", "select=*&order=mes.desc"),
@@ -31,14 +33,15 @@ export function useRecaoData(user) {
       console.error(e);
       setError(e.message);
     }
-    setLoading(false);
   }, []);
 
   const uid = user ? user.id : null;
   useEffect(() => {
     if (!uid) { setLoading(false); return; }
+    let active = true;
     setLoading(true);
-    reload();
+    reload().finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [uid, reload]);
 
   return { facturas, monthlyData, proveedores, config, loading, error, reload };
