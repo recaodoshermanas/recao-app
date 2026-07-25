@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { F, SF, C, btnDark } from "../../lib/styles.js";
 import { IcoCheck } from "../../lib/icons.jsx";
+import { fmt2, pn } from "../../lib/utils.js";
 import { sb } from "../../lib/supabase.js";
 import { ymd } from "../../lib/turnos.js";
 
@@ -20,9 +21,14 @@ export function CerrarTurnoView({ user }) {
   const [tareas, setTareas] = useState([]);
   const [estado, setEstado] = useState({});
   const [yaCerrado, setYaCerrado] = useState(null);
+  const [cajaCerrada, setCajaCerrada] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+
+  const [caja, setCaja] = useState({ c1e: "", c1t: "", c2e: "", c2t: "" });
+  const [provList, setProvList] = useState([]);
+  const [selProv, setSelProv] = useState(new Set());
 
   useEffect(() => {
     (async () => {
@@ -39,9 +45,17 @@ export function CerrarTurnoView({ user }) {
       const ex = await sb.select("cierres_turno", `select=id&usuario_id=eq.${user.id}&fecha=eq.${fecha}&turno=eq.${tn}`);
       if (ex[0]) {
         const items = await sb.select("cierre_items", `select=tarea_texto,hecha,justificacion&cierre_id=eq.${ex[0].id}`);
-        setYaCerrado(items); setTareas([]); setLoading(false); return;
+        setYaCerrado(items);
+        try {
+          const cc = await sb.select("cierres_caja", `select=*&cierre_turno_id=eq.${ex[0].id}`);
+          if (cc[0]) {
+            const facs = await sb.select("facturas_proveedores", `select=proveedor,importe&cierre_caja_id=eq.${cc[0].id}`);
+            setCajaCerrada({ row: cc[0], facturas: facs });
+          } else setCajaCerrada(null);
+        } catch (e) { setCajaCerrada(null); }
+        setTareas([]); setLoading(false); return;
       }
-      setYaCerrado(null);
+      setYaCerrado(null); setCajaCerrada(null);
       const all = await sb.select("cierre_tareas", `select=id,orden,texto,dia_semana,hora,grupo&turno=eq.${tn}&activa=eq.true&order=orden.asc`);
       const aplican = all.filter(t => t.dia_semana == null || t.dia_semana === dow);
       setTareas(aplican);
@@ -51,28 +65,44 @@ export function CerrarTurnoView({ user }) {
     setLoading(false);
   }, [user.id, fecha, dow]);
 
+  const cargarProv = useCallback(async () => {
+    try {
+      const p = await sb.select("facturas_proveedores", `select=id,proveedor,importe&tipo_pago=eq.efectivo&fecha=eq.${fecha}&cierre_caja_id=is.null&order=proveedor.asc`);
+      setProvList(p);
+    } catch (e) { setProvList([]); }
+  }, [fecha]);
+
   const elegir = (tn) => { setTurno(tn); setModo("ver"); load(tn); };
-  const volver = () => { setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setMsg(""); };
+  const volver = () => { setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setCajaCerrada(null); setMsg(""); };
   const abrirCierre = () => { setMsg(""); const st = {}; tareas.forEach(t => { st[t.id] = { estado: null, nota: "" }; }); setEstado(st); setModo("cerrar"); };
   const setEst = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], estado: v } }));
   const setNota = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], nota: v } }));
+  const toggleProv = (id) => setSelProv(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const justif = (s) => s.estado === "no" ? s.nota.trim() : null;
   const revisadas = tareas.filter(t => estado[t.id] && estado[t.id].estado).length;
 
-  const enviar = async () => {
+  const irACaja = async () => {
     const sinRevisar = tareas.filter(t => !estado[t.id] || !estado[t.id].estado);
     if (sinRevisar.length) { setMsg(`Te faltan ${sinRevisar.length} ${sinRevisar.length === 1 ? "tarea" : "tareas"} por revisar`); return; }
     const faltaMotivo = tareas.filter(t => { const s = estado[t.id]; return s.estado === "no" && !s.nota.trim(); });
     if (faltaMotivo.length) { setMsg("Indica el motivo de las tareas no hechas"); return; }
+    setMsg("");
+    await cargarProv();
+    setCaja({ c1e: "", c1t: "", c2e: "", c2t: "" });
+    setSelProv(new Set());
+    setModo("caja");
+  };
+
+  const enviar = async () => {
     setSaving(true); setMsg("");
     try {
-      const cierre = await sb.insert("cierres_turno", { usuario_id: user.id, fecha, turno });
-      const cid = cierre[0].id;
-      const items = tareas.map(t => ({ cierre_id: cid, tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", justificacion: justif(estado[t.id]) }));
-      await sb.insert("cierre_items", items);
+      const items = tareas.map(t => ({ tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", justificacion: justif(estado[t.id]) }));
+      const p_caja = { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
+      await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas: [...selProv] });
+      setModo("ver");
       await load(turno);
-    } catch (e) { setMsg(e.message || "Error al enviar"); }
+    } catch (e) { setMsg(e.message || "Error al cerrar"); }
     setSaving(false);
   };
 
@@ -108,6 +138,26 @@ export function CerrarTurnoView({ user }) {
     );
   };
 
+  const cajaInput = (key, label) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.mut, marginBottom: 5 }}>{label}</div>
+      <div style={{ position: "relative" }}>
+        <input value={caja[key]} onChange={e => setCaja(c => ({ ...c, [key]: e.target.value }))} inputMode="decimal" placeholder="0,00" style={{ width: "100%", boxSizing: "border-box", padding: "11px 24px 11px 12px", border: `1.5px solid ${C.brd}`, borderRadius: 10, fontFamily: F, fontSize: 15, color: C.char, outline: "none" }} />
+        <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: C.mutL, fontFamily: F, fontSize: 14 }}>€</span>
+      </div>
+    </div>
+  );
+
+  const cajaCard = (titulo, kE, kT) => (
+    <div style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 15, padding: 15, marginBottom: 12 }}>
+      <div style={{ fontFamily: SF, fontSize: 16, color: C.char, marginBottom: 12 }}>{titulo}</div>
+      <div style={{ display: "flex", gap: 10 }}>
+        {cajaInput(kE, "Efectivo en sobre")}
+        {cajaInput(kT, "Tarjeta")}
+      </div>
+    </div>
+  );
+
   if (!turno) {
     return (
       <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
@@ -132,9 +182,17 @@ export function CerrarTurnoView({ user }) {
   const semanales = tareas.filter(t => t.grupo === "semanal");
   const completo = revisadas === tareas.length && tareas.length > 0;
 
+  const efectivoSobre = pn(caja.c1e) + pn(caja.c2e);
+  const tarjetaTotal = pn(caja.c1t) + pn(caja.c2t);
+  const ticketsTotal = provList.filter(p => selProv.has(p.id)).reduce((s, p) => s + Number(p.importe), 0);
+  const totalDia = efectivoSobre + tarjetaTotal + ticketsTotal;
+
+  const backAction = modo === "caja" ? () => { setModo("cerrar"); setMsg(""); } : (modo === "cerrar" && !yaCerrado ? () => { setModo("ver"); setMsg(""); } : volver);
+  const backLabel = modo === "caja" ? "‹ Volver a las tareas" : (modo === "cerrar" && !yaCerrado ? "‹ Volver a las tareas" : "‹ Cambiar turno");
+
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
-      <button onClick={modo === "cerrar" && !yaCerrado ? () => { setModo("ver"); setMsg(""); } : volver} style={{ background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 10 }}>{modo === "cerrar" && !yaCerrado ? "‹ Volver a las tareas" : "‹ Cambiar turno"}</button>
+      <button onClick={backAction} style={{ background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 10 }}>{backLabel}</button>
       <div style={{ fontFamily: SF, fontSize: 18, color: C.char, textTransform: "capitalize", marginBottom: 14 }}>Turno de {turno}</div>
 
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.red, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
@@ -154,6 +212,31 @@ export function CerrarTurnoView({ user }) {
                 </div>
               </div>
             ))}
+            {cajaCerrada && (() => {
+              const c = cajaCerrada.row;
+              const tk = cajaCerrada.facturas.reduce((s, f) => s + Number(f.importe), 0);
+              const tot = Number(c.caja1_efectivo) + Number(c.caja1_tarjeta) + Number(c.caja2_efectivo) + Number(c.caja2_tarjeta) + tk;
+              const linea = (l, v) => <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 5 }}><span>{l}</span><span style={{ color: C.char, fontWeight: 600 }}>{fmt2(v)}</span></div>;
+              return (
+                <div style={{ marginTop: 18 }}>
+                  <div style={grpLbl}>Cierre de caja</div>
+                  <div style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 14, padding: 15 }}>
+                    <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 700, color: C.mutL, marginBottom: 7 }}>Caja 1</div>
+                    {linea("Efectivo en sobre", c.caja1_efectivo)}
+                    {linea("Tarjeta", c.caja1_tarjeta)}
+                    <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 700, color: C.mutL, margin: "12px 0 7px" }}>Caja 2</div>
+                    {linea("Efectivo en sobre", c.caja2_efectivo)}
+                    {linea("Tarjeta", c.caja2_tarjeta)}
+                    {cajaCerrada.facturas.length > 0 && <>
+                      <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 700, color: C.mutL, margin: "12px 0 7px" }}>Tickets proveedor (efectivo)</div>
+                      {cajaCerrada.facturas.map((f, i) => linea(f.proveedor, f.importe))}
+                    </>}
+                    <div style={{ borderTop: `1px solid ${C.brdL}`, margin: "11px 0 9px" }} />
+                    <div style={{ display: "flex", justifyContent: "space-between", fontFamily: SF, fontSize: 16, color: C.char }}><span>Total del día</span><span>{fmt2(tot)}</span></div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ) : modo === "ver" ? (
           <div>
@@ -164,7 +247,7 @@ export function CerrarTurnoView({ user }) {
             {semanales.map(filaVer)}
             <button onClick={abrirCierre} disabled={tareas.length === 0} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10 }}>Cerrar turno</button>
           </div>
-        ) : (
+        ) : modo === "cerrar" ? (
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 10 }}>
               <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>Marca cada tarea como hecha o no.</div>
@@ -174,7 +257,44 @@ export function CerrarTurnoView({ user }) {
             {diarias.map(tarjetaTarea)}
             {semanales.length > 0 && <div style={{ ...grpLbl, marginTop: 18 }}>Hoy además</div>}
             {semanales.map(tarjetaTarea)}
-            <button onClick={enviar} disabled={saving || !completo} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10, opacity: saving || !completo ? 0.5 : 1 }}>{saving ? "Enviando…" : completo ? "Confirmar cierre" : `Revisa todas (faltan ${tareas.length - revisadas})`}</button>
+            <button onClick={irACaja} disabled={!completo} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10, opacity: !completo ? 0.5 : 1 }}>{completo ? "Continuar al cierre de caja" : `Revisa todas (faltan ${tareas.length - revisadas})`}</button>
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 16 }}>Cuenta el dinero de cada caja e indica cuánto has metido en el sobre.</div>
+            {cajaCard("Caja 1", "c1e", "c1t")}
+            {cajaCard("Caja 2", "c2e", "c2t")}
+
+            <div style={{ marginTop: 6 }}>
+              <div style={grpLbl}>Pagos a proveedor en efectivo de hoy</div>
+              {provList.length === 0 ? (
+                <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "12px 14px" }}>No hay pagos en efectivo a proveedores pendientes de hoy.</div>
+              ) : (
+                <>
+                  <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginBottom: 10 }}>Marca los que has pagado tú en este turno. El ticket va al sobre y ese dinero cuenta.</div>
+                  {provList.map(p => {
+                    const on = selProv.has(p.id);
+                    return (
+                      <button key={p.id} onClick={() => toggleProv(p.id)} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", gap: 11, background: on ? "#FBF4E6" : "#fff", border: `1.5px solid ${on ? C.gold : C.brdL}`, borderRadius: 12, padding: "12px 14px", marginBottom: 8, cursor: "pointer", textAlign: "left" }}>
+                        <span style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: `2px solid ${on ? C.gold : C.brd}`, background: on ? C.gold : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <IcoCheck size={14} color="#fff" sw={3} />}</span>
+                        <span style={{ flex: 1, fontFamily: F, fontSize: 14, fontWeight: 600, color: C.char }}>{p.proveedor}</span>
+                        <span style={{ fontFamily: F, fontSize: 14, fontWeight: 700, color: C.char }}>{fmt2(p.importe)}</span>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+
+            <div style={{ background: C.char, borderRadius: 15, padding: "15px 18px", marginTop: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 13, color: "#C9C0B0", marginBottom: 6 }}><span>Efectivo en sobre</span><span style={{ color: "#fff", fontWeight: 600 }}>{fmt2(efectivoSobre)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 13, color: "#C9C0B0", marginBottom: 6 }}><span>Tarjeta</span><span style={{ color: "#fff", fontWeight: 600 }}>{fmt2(tarjetaTotal)}</span></div>
+              {ticketsTotal > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 13, color: "#C9C0B0", marginBottom: 6 }}><span>Tickets proveedor</span><span style={{ color: "#fff", fontWeight: 600 }}>{fmt2(ticketsTotal)}</span></div>}
+              <div style={{ borderTop: "1px solid #4A443B", margin: "9px 0" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: SF, fontSize: 18, color: C.gold }}><span>Total del día</span><span>{fmt2(totalDia)}</span></div>
+            </div>
+
+            <button onClick={enviar} disabled={saving} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 14, opacity: saving ? 0.5 : 1 }}>{saving ? "Cerrando…" : "Confirmar cierre"}</button>
           </div>
         )}
     </div>
