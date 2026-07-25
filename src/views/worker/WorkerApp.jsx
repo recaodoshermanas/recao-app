@@ -58,7 +58,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       {screen === "horario" && <MiHorarioView user={user} />}
       {screen === "cambio" && <CambioTurnoView user={user} />}
       {screen === "vacaciones" && <MisVacacionesView user={user} />}
-      {screen === "facturas" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={onReload} />}
+      {screen === "facturas" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={onReload} user={user} />}
       {screen === "cuenta" && <MiCuentaView />}
     </div>
   );

@@ -7,7 +7,7 @@ import { useConfirm } from "../hooks/useConfirm.jsx";
 const TIPOS_PAGO = [["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"]];
 const etiquetaPago = (t) => (t === "tarjeta" ? "Tarjeta" : t === "efectivo" ? "Efectivo" : "");
 
-export function WorkerView({ facturas, proveedores, onReload }) {
+export function WorkerView({ facturas, proveedores, onReload, user }) {
   const [modo, setModo] = useState("lista");
   const [editId, setEditId] = useState(null);
   const [proveedor, setProveedor] = useState("");
@@ -74,7 +74,9 @@ export function WorkerView({ facturas, proveedores, onReload }) {
                   <span>{mkLabel(mk)}</span>
                   <span style={{ fontFamily: F, fontSize: "13px", fontWeight: 700, color: C.mut }}>{fmt(items.reduce((s, f) => s + parseFloat(f.importe), 0))}</span>
                 </div>
-                {items.map(f => (
+                {items.map(f => {
+                  const mine = !!user && f.creado_por_id === user.id;
+                  return (
                   <div key={f.id} style={{ ...crd, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: F, fontSize: "14px", fontWeight: 600, color: C.char, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.proveedor}</div>
@@ -82,15 +84,19 @@ export function WorkerView({ facturas, proveedores, onReload }) {
                         <span>{new Date(f.fecha).toLocaleDateString("es-ES")}</span>
                         {f.tipo_pago && <span style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: f.tipo_pago === "tarjeta" ? "#E7EEF7" : "#EAF3EC", color: f.tipo_pago === "tarjeta" ? "#3F6EA5" : "#2E7D4F" }}>{etiquetaPago(f.tipo_pago)}</span>}
                         {f.nota && <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {f.nota}</span>}
+                        {!mine && <span style={{ fontStyle: "italic", color: C.mutL }}>· de otra persona</span>}
                       </div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "10px" }}>
                       <span style={{ fontFamily: F, fontSize: "15px", fontWeight: 700, color: C.char }}>{fmt2(f.importe)}</span>
-                      <button onClick={() => startEdit(f)} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "14px", color: C.mut, padding: "4px" }}>✎</button>
-                      <button onClick={() => ask("¿Eliminar esta factura?", () => handleDelete(f.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "18px", color: "#ccc", padding: "4px" }}>×</button>
+                      {mine && <>
+                        <button onClick={() => startEdit(f)} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "14px", color: C.mut, padding: "4px" }}>✎</button>
+                        <button onClick={() => ask("¿Eliminar esta factura?", () => handleDelete(f.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "18px", color: "#ccc", padding: "4px" }}>×</button>
+                      </>}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ))
           )}
