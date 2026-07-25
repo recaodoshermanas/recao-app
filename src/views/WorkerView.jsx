@@ -5,7 +5,9 @@ import { sb } from "../lib/supabase.js";
 import { useConfirm } from "../hooks/useConfirm.jsx";
 
 const TIPOS_PAGO = [["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"]];
+const TURNOS_TRAB = [["mañana", "Mañana"], ["tarde", "Tarde"]];
 const etiquetaPago = (t) => (t === "tarjeta" ? "Tarjeta" : t === "efectivo" ? "Efectivo" : "");
+const turnoPorHora = () => (new Date().getHours() < 15 ? "mañana" : "tarde");
 
 export function WorkerView({ facturas, proveedores, onReload, user }) {
   const [modo, setModo] = useState("lista");
@@ -13,6 +15,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
   const [proveedor, setProveedor] = useState("");
   const [importe, setImporte] = useState("");
   const [tipoPago, setTipoPago] = useState("efectivo");
+  const [turnoFactura, setTurnoFactura] = useState(turnoPorHora());
   const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
   const [nota, setNota] = useState("");
   const [saving, setSaving] = useState(false);
@@ -22,7 +25,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
 
   const isAdmin = user?.rol === "admin";
 
-  const resetForm = () => { setProveedor(""); setImporte(""); setTipoPago("efectivo"); setFecha(new Date().toISOString().split("T")[0]); setNota(""); setEditId(null); setIsNewProv(false); };
+  const resetForm = () => { setProveedor(""); setImporte(""); setTipoPago("efectivo"); setTurnoFactura(turnoPorHora()); setFecha(new Date().toISOString().split("T")[0]); setNota(""); setEditId(null); setIsNewProv(false); };
 
   const allProveedores = useMemo(() => {
     const fromFacs = [...new Set(facturas.map(f => f.proveedor))];
@@ -34,7 +37,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
     if (!proveedor.trim() || amt <= 0) return;
     setSaving(true);
     try {
-      const payload = { proveedor: proveedor.trim(), importe: amt, tipo_pago: tipoPago, fecha, nota: nota.trim() || null };
+      const payload = { proveedor: proveedor.trim(), importe: amt, tipo_pago: tipoPago, turno: turnoFactura, fecha, nota: nota.trim() || null };
       if (editId) await sb.update("facturas_proveedores", `id=eq.${editId}`, payload);
       else {
         await sb.insert("facturas_proveedores", payload);
@@ -50,7 +53,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
     setSaving(false);
   };
 
-  const startEdit = (f) => { setEditId(f.id); setProveedor(f.proveedor); setImporte(String(f.importe)); setTipoPago(f.tipo_pago || "efectivo"); setFecha(f.fecha); setNota(f.nota || ""); setModo("form"); };
+  const startEdit = (f) => { setEditId(f.id); setProveedor(f.proveedor); setImporte(String(f.importe)); setTipoPago(f.tipo_pago || "efectivo"); setTurnoFactura(f.turno || turnoPorHora()); setFecha(f.fecha); setNota(f.nota || ""); setModo("form"); };
 
   const handleDelete = async (id) => {
     try { await sb.delete("facturas_proveedores", `id=eq.${id}`); await onReload(); }
@@ -84,6 +87,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
                       <div style={{ fontFamily: F, fontSize: "14px", fontWeight: 600, color: C.char, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.proveedor}</div>
                       <div style={{ fontFamily: F, fontSize: "12px", color: C.mut, marginTop: "3px", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                         <span>{new Date(f.fecha).toLocaleDateString("es-ES")}</span>
+                        {f.turno && <span style={{ textTransform: "capitalize" }}>· {f.turno}</span>}
                         {f.tipo_pago && <span style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: f.tipo_pago === "tarjeta" ? "#E7EEF7" : "#EAF3EC", color: f.tipo_pago === "tarjeta" ? "#3F6EA5" : "#2E7D4F" }}>{etiquetaPago(f.tipo_pago)}</span>}
                         {f.nota && <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {f.nota}</span>}
                         {!canEdit && <span style={{ fontStyle: "italic", color: C.mutL }}>· de otra persona</span>}
@@ -126,6 +130,13 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
             {TIPOS_PAGO.map(([val, label]) => {
               const on = tipoPago === val;
               return <button key={val} onClick={() => setTipoPago(val)} style={{ flex: 1, padding: "13px", borderRadius: "10px", cursor: "pointer", fontFamily: F, fontSize: "14px", fontWeight: 700, border: on ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{label}</button>;
+            })}
+          </div>
+          <label style={lbl}>Turno en que se metió</label>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+            {TURNOS_TRAB.map(([val, label]) => {
+              const on = turnoFactura === val;
+              return <button key={val} onClick={() => setTurnoFactura(val)} style={{ flex: 1, padding: "13px", borderRadius: "10px", cursor: "pointer", fontFamily: F, fontSize: "14px", fontWeight: 700, border: on ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{label}</button>;
             })}
           </div>
           <label style={lbl}>Fecha</label>
