@@ -6,6 +6,7 @@ import { ymd } from "../../lib/turnos.js";
 
 function isoDow(d) { const g = d.getDay(); return g === 0 ? 7 : g; }
 const SUG = { "Mañana": "mañana", "Apoyo 1": "mañana", "Tarde": "tarde", "Apoyo 2": "tarde" };
+const grpLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: C.mutL, margin: "2px 2px 10px" };
 
 export function CerrarTurnoView({ user }) {
   const hoy = new Date();
@@ -68,6 +69,23 @@ export function CerrarTurnoView({ user }) {
     setSaving(false);
   };
 
+  const tarjetaTarea = (t) => {
+    const st = estado[t.id] || { hecha: true, justificacion: "" };
+    return (
+      <div key={t.id} style={{ background: "#fff", border: st.hecha ? `1px solid ${C.brdL}` : `1.5px solid ${C.red}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
+        <div onClick={() => toggle(t.id)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+          <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, background: st.hecha ? C.grn : "#fff", border: st.hecha ? "none" : `2px solid ${C.brd}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {st.hecha && <IcoCheck size={15} color="#fff" sw={3} />}
+          </span>
+          <span style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</span>
+        </div>
+        {!st.hecha && (
+          <input value={st.justificacion} onChange={e => setJust(t.id, e.target.value)} placeholder="¿Por qué no se hizo?" style={{ width: "100%", boxSizing: "border-box", marginTop: 10, padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />
+        )}
+      </div>
+    );
+  };
+
   if (!turno) {
     return (
       <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
@@ -87,6 +105,9 @@ export function CerrarTurnoView({ user }) {
       </div>
     );
   }
+
+  const diarias = tareas.filter(t => t.grupo !== "semanal");
+  const semanales = tareas.filter(t => t.grupo === "semanal");
 
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
@@ -113,23 +134,11 @@ export function CerrarTurnoView({ user }) {
           </div>
         ) : (
           <div>
-            {tareas.map(t => {
-              const st = estado[t.id] || { hecha: true, justificacion: "" };
-              return (
-                <div key={t.id} style={{ background: "#fff", border: st.hecha ? `1px solid ${C.brdL}` : `1.5px solid ${C.red}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
-                  <div onClick={() => toggle(t.id)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
-                    <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, background: st.hecha ? C.grn : "#fff", border: st.hecha ? "none" : `2px solid ${C.brd}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {st.hecha && <IcoCheck size={15} color="#fff" sw={3} />}
-                    </span>
-                    <span style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</span>
-                  </div>
-                  {!st.hecha && (
-                    <input value={st.justificacion} onChange={e => setJust(t.id, e.target.value)} placeholder="¿Por qué no se hizo?" style={{ width: "100%", boxSizing: "border-box", marginTop: 10, padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />
-                  )}
-                </div>
-              );
-            })}
-            <button onClick={enviar} disabled={saving || tareas.length === 0} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 6, opacity: saving ? 0.6 : 1 }}>{saving ? "Enviando…" : "Cerrar turno"}</button>
+            {semanales.length > 0 && <div style={grpLbl}>Diarias</div>}
+            {diarias.map(tarjetaTarea)}
+            {semanales.length > 0 && <div style={{ ...grpLbl, marginTop: 18 }}>Hoy además</div>}
+            {semanales.map(tarjetaTarea)}
+            <button onClick={enviar} disabled={saving || tareas.length === 0} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10, opacity: saving ? 0.6 : 1 }}>{saving ? "Enviando…" : "Cerrar turno"}</button>
           </div>
         )}
     </div>
