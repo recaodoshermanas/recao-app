@@ -15,6 +15,7 @@ export function CerrarTurnoView({ user }) {
   const fechaLarga = hoy.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
 
   const [turno, setTurno] = useState(null);
+  const [modo, setModo] = useState("ver");
   const [sugerido, setSugerido] = useState(null);
   const [tareas, setTareas] = useState([]);
   const [estado, setEstado] = useState({});
@@ -50,8 +51,8 @@ export function CerrarTurnoView({ user }) {
     setLoading(false);
   }, [user.id, fecha, dow]);
 
-  const elegir = (tn) => { setTurno(tn); load(tn); };
-  const volver = () => { setTurno(null); setTareas([]); setYaCerrado(null); setMsg(""); };
+  const elegir = (tn) => { setTurno(tn); setModo("ver"); load(tn); };
+  const volver = () => { setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setMsg(""); };
   const toggle = (id) => setEstado(s => ({ ...s, [id]: { ...s[id], hecha: !s[id].hecha } }));
   const setJust = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], justificacion: v } }));
 
@@ -68,6 +69,13 @@ export function CerrarTurnoView({ user }) {
     } catch (e) { setMsg(e.message || "Error al enviar"); }
     setSaving(false);
   };
+
+  const filaVer = (t) => (
+    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
+      <span style={{ width: 20, height: 20, borderRadius: "999px", border: `2px solid ${C.brd}`, flexShrink: 0 }} />
+      <span style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</span>
+    </div>
+  );
 
   const tarjetaTarea = (t) => {
     const st = estado[t.id] || { hecha: true, justificacion: "" };
@@ -91,7 +99,7 @@ export function CerrarTurnoView({ user }) {
       <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
         <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 6 }}>Hoy</div>
         <div style={{ fontFamily: SF, fontSize: 22, color: C.char, textTransform: "capitalize", marginBottom: 22 }}>{fechaLarga}</div>
-        <div style={{ fontFamily: F, fontSize: 14, color: C.mut, marginBottom: 14 }}>¿Qué turno estás cerrando?</div>
+        <div style={{ fontFamily: F, fontSize: 14, color: C.mut, marginBottom: 14 }}>¿Qué turno vas a hacer?</div>
         {[["mañana", "Turno de mañana", "07:00 – 15:00", "#cbf7d0", "#06281C", "M"], ["tarde", "Turno de tarde", "15:00 – 23:00", "#f5a68e", "#5a1f10", "T"]].map(([tn, lab, horas, bg, fg, ini]) => (
           <button key={tn} onClick={() => elegir(tn)} style={{ width: "100%", boxSizing: "border-box", textAlign: "left", background: "#fff", border: `1.5px solid ${sugerido === tn ? C.gold : C.brdL}`, borderRadius: 16, padding: 18, marginBottom: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}>
             <span style={{ width: 44, height: 44, borderRadius: 13, background: bg, color: fg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: SF, fontSize: 20 }}>{ini}</span>
@@ -111,7 +119,7 @@ export function CerrarTurnoView({ user }) {
 
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
-      <button onClick={volver} style={{ background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 10 }}>‹ Cambiar turno</button>
+      <button onClick={modo === "cerrar" && !yaCerrado ? () => setModo("ver") : volver} style={{ background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 10 }}>{modo === "cerrar" && !yaCerrado ? "‹ Volver a las tareas" : "‹ Cambiar turno"}</button>
       <div style={{ fontFamily: SF, fontSize: 18, color: C.char, textTransform: "capitalize", marginBottom: 14 }}>Turno de {turno}</div>
 
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.red, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
@@ -132,13 +140,23 @@ export function CerrarTurnoView({ user }) {
               </div>
             ))}
           </div>
+        ) : modo === "ver" ? (
+          <div>
+            <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 14 }}>Estas son tus tareas de hoy. Ve haciéndolas y cierra el turno al final.</div>
+            {semanales.length > 0 && <div style={grpLbl}>Diarias</div>}
+            {diarias.map(filaVer)}
+            {semanales.length > 0 && <div style={{ ...grpLbl, marginTop: 18 }}>Hoy además</div>}
+            {semanales.map(filaVer)}
+            <button onClick={() => setModo("cerrar")} disabled={tareas.length === 0} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10 }}>Cerrar turno</button>
+          </div>
         ) : (
           <div>
+            <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 14 }}>Desmarca lo que no hayas podido hacer y cierra el turno.</div>
             {semanales.length > 0 && <div style={grpLbl}>Diarias</div>}
             {diarias.map(tarjetaTarea)}
             {semanales.length > 0 && <div style={{ ...grpLbl, marginTop: 18 }}>Hoy además</div>}
             {semanales.map(tarjetaTarea)}
-            <button onClick={enviar} disabled={saving || tareas.length === 0} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10, opacity: saving ? 0.6 : 1 }}>{saving ? "Enviando…" : "Cerrar turno"}</button>
+            <button onClick={enviar} disabled={saving || tareas.length === 0} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10, opacity: saving ? 0.6 : 1 }}>{saving ? "Enviando…" : "Confirmar cierre"}</button>
           </div>
         )}
     </div>

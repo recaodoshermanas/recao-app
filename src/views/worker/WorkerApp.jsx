@@ -13,7 +13,7 @@ const TILES = [
   { id: "facturas", label: "Facturas", sub: "Registrar", Ico: IcoReceipt, iconBg: "#F0EEF6", iconFg: "#8B6DAF" },
   { id: "cuenta", label: "Mi cuenta", sub: "Contraseña", Ico: IcoUser, iconBg: "#F0ECE2", iconFg: "#8A7A54" },
 ];
-const TITULOS = { cerrar: "Cerrar turno", horario: "Mis horarios", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { cerrar: "Mi turno", horario: "Mis horarios", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [screen, setScreen] = useState("home");
@@ -27,8 +27,8 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
         <button onClick={() => setScreen("cerrar")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", background: C.gold, border: "none", borderRadius: 20, padding: 20, display: "flex", alignItems: "center", gap: 15, boxShadow: SHADOW.hero, textAlign: "left" }}>
           <span style={{ width: 46, height: 46, borderRadius: 14, background: C.goldDark, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IcoCheck size={24} color={C.gold} sw={2.2} /></span>
           <span style={{ flex: 1 }}>
-            <span style={{ display: "block", fontFamily: SF, fontSize: 21, color: C.goldDark }}>Cerrar turno</span>
-            <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.goldSub, marginTop: 2 }}>Marca tus tareas del turno</span>
+            <span style={{ display: "block", fontFamily: SF, fontSize: 21, color: C.goldDark }}>Mi turno</span>
+            <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.goldSub, marginTop: 2 }}>Tus tareas de hoy y cerrar el turno</span>
           </span>
           <IcoRight size={20} color={C.goldSub} sw={2.4} />
         </button>
