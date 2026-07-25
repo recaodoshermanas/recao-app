@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C, chipStyle, CHIP, avatar } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { resumenCalendario, rangoFechas, diasQueGastan, agruparRangos } from "../../lib/vacaciones.js";
+import { VacacionesPicker } from "../../components/VacacionesPicker.jsx";
 
 const ANIO = 2026;
 const secLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.mutL, margin: "0 2px 12px" };
@@ -46,8 +47,7 @@ export function VacacionesAdminView() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
   const [abrir, setAbrir] = useState(false);
-  const [nUid, setNUid] = useState(""); const [nIni, setNIni] = useState(""); const [nFin, setNFin] = useState(""); const [nDias, setNDias] = useState(""); const [nEstado, setNEstado] = useState("aceptado");
-  const [calc, setCalc] = useState(false);
+  const [nUid, setNUid] = useState(""); const [nEstado, setNEstado] = useState("aceptado");
   const [editUid, setEditUid] = useState(null); const [editVal, setEditVal] = useState("");
   const [histUid, setHistUid] = useState(null);
 
@@ -73,48 +73,33 @@ export function VacacionesAdminView() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // Los dias de vacaciones que gastan son solo los que le tocaba trabajar
-  const calcularDias = useCallback(async (uid, ini, fin) => {
-    const rows = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${uid}&fecha=gte.${ini}&fecha=lte.${fin}`);
-    const m = {}; rows.forEach(r => { m[r.fecha] = r.turno; });
-    return diasQueGastan(rangoFechas(ini, fin), m);
-  }, []);
-
-  useEffect(() => {
-    if (!nUid || !nIni || !nFin || nFin < nIni) { setNDias(""); return; }
-    let cancel = false; setCalc(true);
-    (async () => {
-      try { const d = await calcularDias(nUid, nIni, nFin); if (!cancel) setNDias(String(d.length)); }
-      catch (e) { if (!cancel) setNDias(""); }
-      if (!cancel) setCalc(false);
-    })();
-    return () => { cancel = true; };
-  }, [nUid, nIni, nFin, calcularDias]);
-
   const hoy = ymd(new Date());
-  const escribirVac = async (uid, ini, fin) => {
-    const marcar = await calcularDias(uid, ini, fin);
-    if (marcar.length) await sb.upsert("horarios", marcar.map(f => ({ usuario_id: uid, fecha: f, turno: "Vacaciones" })), "usuario_id,fecha");
-    return marcar.length;
-  };
-  const borrarVac = async (uid, ini, fin) => { await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=gte.${ini}&fecha=lte.${fin}&turno=eq.Vacaciones`); };
+  const escribirVacFechas = async (uid, fechas) => { if (fechas && fechas.length) await sb.upsert("horarios", fechas.map(f => ({ usuario_id: uid, fecha: f, turno: "Vacaciones" })), "usuario_id,fecha"); };
+  const borrarVacFechas = async (uid, fechas) => { if (fechas && fechas.length) await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=in.(${fechas.join(",")})&turno=eq.Vacaciones`); };
+  // Fallback para solicitudes antiguas sin lista de fechas
+  const calcularRango = async (uid, ini, fin) => { const rows = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${uid}&fecha=gte.${ini}&fecha=lte.${fin}`); const m = {}; rows.forEach(r => { m[r.fecha] = r.turno; }); return diasQueGastan(rangoFechas(ini, fin), m); };
 
   const cambiarEstado = async (s, estado) => {
     try {
       const patch = { estado, actualizado_en: new Date().toISOString() };
-      if (estado === "aceptado") { const n = await escribirVac(s.usuario_id, s.fecha_inicio, s.fecha_fin); if (n) patch.dias = n; }
-      else if (s.estado === "aceptado") await borrarVac(s.usuario_id, s.fecha_inicio, s.fecha_fin);
+      const fechas = Array.isArray(s.fechas) ? s.fechas : null;
+      if (estado === "aceptado") {
+        if (fechas) await escribirVacFechas(s.usuario_id, fechas);
+        else { const d = await calcularRango(s.usuario_id, s.fecha_inicio, s.fecha_fin); await escribirVacFechas(s.usuario_id, d); if (d.length) patch.dias = d.length; }
+      } else if (s.estado === "aceptado") {
+        if (fechas) await borrarVacFechas(s.usuario_id, fechas);
+        else await sb.delete("horarios", `usuario_id=eq.${s.usuario_id}&fecha=gte.${s.fecha_inicio}&fecha=lte.${s.fecha_fin}&turno=eq.Vacaciones`);
+      }
       await sb.update("vacaciones_solicitudes", `id=eq.${s.id}`, patch);
       await load();
     } catch (e) { flash(e.message); }
   };
-  const crear = async () => {
-    const dias = parseInt(nDias, 10);
-    if (!nUid || !nIni || !nFin || !dias) { flash("Trabajadora y fechas"); return; }
+  const crear = async (fechas) => {
+    if (!nUid || !fechas.length) { flash("Elige días"); return; }
     try {
-      if (nEstado === "aceptado") await escribirVac(nUid, nIni, nFin);
-      await sb.insert("vacaciones_solicitudes", { usuario_id: nUid, fecha_inicio: nIni, fecha_fin: nFin, dias, estado: nEstado });
-      setNIni(""); setNFin(""); setNDias(""); setAbrir(false); flash("Periodo añadido"); await load();
+      if (nEstado === "aceptado") await escribirVacFechas(nUid, fechas);
+      await sb.insert("vacaciones_solicitudes", { usuario_id: nUid, fecha_inicio: fechas[0], fecha_fin: fechas[fechas.length - 1], dias: fechas.length, fechas, estado: nEstado });
+      setAbrir(false); flash("Periodo añadido"); await load();
     } catch (e) { flash(e.message); }
   };
   const guardarCobertura = async (s, tipo, valor) => {
@@ -131,6 +116,7 @@ export function VacacionesAdminView() {
 
   const resumen = useMemo(() => { const o = {}; for (const t of trabReg) o[t.id] = resumenCalendario(saldos[t.id] ?? 22, vacDias[t.id] || [], sols.filter(s => s.usuario_id === t.id), hoy); return o; }, [trabReg, sols, saldos, vacDias, hoy]);
   const bloquesHist = histUid ? agruparRangos(vacDias[histUid] || [], descansos[histUid] || []) : [];
+  const restantesN = (nUid && resumen[nUid]) ? Math.max(0, resumen[nUid].restantes) : null;
 
   return (
     <div style={{ padding: "16px", maxWidth: 640, margin: "0 auto" }}>
@@ -163,20 +149,13 @@ export function VacacionesAdminView() {
 
       {!abrir ? <button onClick={() => setAbrir(true)} style={{ ...btnSm, background: "#fff", color: C.char, border: `1.5px solid ${C.brd}`, marginBottom: 18 }}>+ Añadir periodo</button>
         : (
-          <div style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 14, marginBottom: 18 }}>
-            <select value={nUid} onChange={e => setNUid(e.target.value)} style={{ ...sel, width: "100%", marginBottom: 8 }}>{trabReg.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select>
+          <div style={{ marginBottom: 18 }}>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              <input type="date" value={nIni} onChange={e => setNIni(e.target.value)} style={{ ...sel, flex: 1 }} />
-              <input type="date" value={nFin} onChange={e => setNFin(e.target.value)} style={{ ...sel, flex: 1 }} />
-            </div>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <div style={{ fontFamily: F, fontSize: 13, color: C.mut, flex: 1 }}>
-                {calc ? "Calculando…" : nDias ? <span><b style={{ fontFamily: SF, fontSize: 17, color: C.char }}>{nDias}</b> días de vacaciones</span> : "Elige las fechas"}
-              </div>
+              <select value={nUid} onChange={e => setNUid(e.target.value)} style={{ ...sel, flex: 1 }}>{trabReg.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select>
               <select value={nEstado} onChange={e => setNEstado(e.target.value)} style={sel}><option value="aceptado">Aceptado</option><option value="pendiente">Pendiente</option></select>
-              <button onClick={crear} disabled={!nDias} style={{ ...btnSm, background: C.char, color: C.gold, opacity: nDias ? 1 : 0.5 }}>Añadir</button>
             </div>
-            <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, marginTop: 8 }}>Solo cuentan los días que le tocaba trabajar. Si es "Aceptado", esos días se marcan como Vacaciones en el calendario.</div>
+            <VacacionesPicker key={nUid} usuarioId={nUid} maxDias={restantesN} submitLabel="Añadir" onSubmit={crear} onCancel={() => setAbrir(false)} />
+            <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, marginTop: 8 }}>Si es "Aceptado", esos días se marcan como Vacaciones en el calendario.</div>
           </div>
         )}
 
@@ -189,7 +168,7 @@ export function VacacionesAdminView() {
                 <Avatar name={nombreDe[s.usuario_id]} size={34} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: F, fontSize: 14, fontWeight: 600, color: C.char }}>{nombreDe[s.usuario_id] || "—"} · {fmtF(s.fecha_inicio)} – {fmtF(s.fecha_fin)}</div>
-                  <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 1 }}>{s.dias} días{coberturaTxt(s)}</div>
+                  <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 1 }}>{s.dias} {s.dias === 1 ? "día" : "días"}{coberturaTxt(s)}</div>
                 </div>
               </div>
               <span style={chipStyle(s.estado)}>{CHIP[s.estado].label}</span>
