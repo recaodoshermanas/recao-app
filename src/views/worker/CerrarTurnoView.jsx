@@ -6,7 +6,6 @@ import { ymd } from "../../lib/turnos.js";
 
 function isoDow(d) { const g = d.getDay(); return g === 0 ? 7 : g; }
 const SUG = { "Mañana": "mañana", "Apoyo 1": "mañana", "Tarde": "tarde", "Apoyo 2": "tarde" };
-const MOTIVOS = ["Falta de tiempo", "Sin material/stock", "Lo hace el turno siguiente", "No procedía hoy", "Otro"];
 const grpLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: C.mutL, margin: "2px 2px 10px" };
 
 export function CerrarTurnoView({ user }) {
@@ -46,7 +45,7 @@ export function CerrarTurnoView({ user }) {
       const all = await sb.select("cierre_tareas", `select=id,orden,texto,dia_semana,hora,grupo&turno=eq.${tn}&activa=eq.true&order=orden.asc`);
       const aplican = all.filter(t => t.dia_semana == null || t.dia_semana === dow);
       setTareas(aplican);
-      const st = {}; aplican.forEach(t => { st[t.id] = { estado: null, motivo: "", nota: "" }; });
+      const st = {}; aplican.forEach(t => { st[t.id] = { estado: null, nota: "" }; });
       setEstado(st);
     } catch (e) { setMsg(e.message || "Error"); }
     setLoading(false);
@@ -54,18 +53,17 @@ export function CerrarTurnoView({ user }) {
 
   const elegir = (tn) => { setTurno(tn); setModo("ver"); load(tn); };
   const volver = () => { setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setMsg(""); };
-  const abrirCierre = () => { setMsg(""); const st = {}; tareas.forEach(t => { st[t.id] = { estado: null, motivo: "", nota: "" }; }); setEstado(st); setModo("cerrar"); };
+  const abrirCierre = () => { setMsg(""); const st = {}; tareas.forEach(t => { st[t.id] = { estado: null, nota: "" }; }); setEstado(st); setModo("cerrar"); };
   const setEst = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], estado: v } }));
-  const setMotivo = (id, m) => setEstado(s => ({ ...s, [id]: { ...s[id], motivo: m } }));
   const setNota = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], nota: v } }));
 
-  const justif = (s) => s.estado === "no" ? (s.motivo === "Otro" ? s.nota.trim() : s.motivo) : null;
+  const justif = (s) => s.estado === "no" ? s.nota.trim() : null;
   const revisadas = tareas.filter(t => estado[t.id] && estado[t.id].estado).length;
 
   const enviar = async () => {
     const sinRevisar = tareas.filter(t => !estado[t.id] || !estado[t.id].estado);
     if (sinRevisar.length) { setMsg(`Te faltan ${sinRevisar.length} ${sinRevisar.length === 1 ? "tarea" : "tareas"} por revisar`); return; }
-    const faltaMotivo = tareas.filter(t => { const s = estado[t.id]; return s.estado === "no" && (!s.motivo || (s.motivo === "Otro" && !s.nota.trim())); });
+    const faltaMotivo = tareas.filter(t => { const s = estado[t.id]; return s.estado === "no" && !s.nota.trim(); });
     if (faltaMotivo.length) { setMsg("Indica el motivo de las tareas no hechas"); return; }
     setSaving(true); setMsg("");
     try {
@@ -91,7 +89,7 @@ export function CerrarTurnoView({ user }) {
   };
 
   const tarjetaTarea = (t) => {
-    const st = estado[t.id] || { estado: null, motivo: "", nota: "" };
+    const st = estado[t.id] || { estado: null, nota: "" };
     const done = st.estado === "hecha", no = st.estado === "no";
     return (
       <div key={t.id} style={{ background: "#fff", border: `1.5px solid ${no ? C.red : done ? "#BFE6CC" : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
@@ -103,14 +101,7 @@ export function CerrarTurnoView({ user }) {
         {no && (
           <div style={{ marginTop: 12 }}>
             <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: "#B23A2C", marginBottom: 8 }}>¿Por qué no se ha hecho?</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {MOTIVOS.map(m => { const on = st.motivo === m; return (
-                <button key={m} onClick={() => setMotivo(t.id, m)} style={{ fontFamily: F, fontSize: 12, fontWeight: 600, padding: "6px 11px", borderRadius: 999, cursor: "pointer", border: on ? "1.5px solid " + C.char : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{m}</button>
-              ); })}
-            </div>
-            {st.motivo === "Otro" && (
-              <input value={st.nota} onChange={e => setNota(t.id, e.target.value)} placeholder="Escribe el motivo" style={{ width: "100%", boxSizing: "border-box", marginTop: 10, padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />
-            )}
+            <input value={st.nota} onChange={e => setNota(t.id, e.target.value)} placeholder="Escribe el motivo" style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />
           </div>
         )}
       </div>
