@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { F, SF, C, btnDark, chipStyle, CHIP } from "../../lib/styles.js";
+import { F, SF, C, btnDark } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { TURNOS, ymd } from "../../lib/turnos.js";
 import { esTrabajo } from "../../lib/vacaciones.js";
@@ -10,9 +10,20 @@ function masDias(n) { const d = new Date(); d.setDate(d.getDate() + n); return y
 const secLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.mutL, margin: "22px 2px 10px" };
 const back = { background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 12 };
 
+const ESTADO = {
+  pendiente_companera: { label: "Esperando a la compañera", bg: "#FBF0DA", fg: "#8A6D1F" },
+  pendiente: { label: "Esperando a dirección", bg: "#FBF0DA", fg: "#8A6D1F" },
+  aceptado: { label: "Aceptado", bg: "#E7F3EC", fg: "#1E7A46" },
+  rechazado: { label: "Rechazado", bg: "#FBEAE7", fg: "#B23A2C" },
+};
+
 function ShiftChip({ turno }) {
   const d = TURNOS[turno]; if (!d) return null;
   return <span style={{ fontFamily: F, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: d.bg, color: d.fg }}>{turno}</span>;
+}
+function EstadoChip({ estado }) {
+  const e = ESTADO[estado] || { label: estado, bg: "#EEE", fg: "#555" };
+  return <span style={{ fontFamily: F, fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 999, background: e.bg, color: e.fg }}>{e.label}</span>;
 }
 
 export function CambioTurnoView({ user }) {
@@ -50,8 +61,14 @@ export function CambioTurnoView({ user }) {
     setBusy(true);
     try {
       await sb.fn("cambios-turno", { action: "crear", fecha_1: mio.fecha, turno_1: mio.turno, otra_id: elegida.otra_id, fecha_2: elegida.fecha, turno_2: elegida.turno });
-      setAbierto(false); flash("Propuesta enviada"); await load();
+      setAbierto(false); flash("Propuesta enviada a tu compañera"); await load();
     } catch (e) { flash(e.message || "Error"); }
+    setBusy(false);
+  };
+  const responder = async (c, respuesta) => {
+    setBusy(true);
+    try { await sb.fn("cambios-turno", { action: "responder", id: c.id, respuesta }); flash(respuesta === "aceptar" ? "Aceptado. Ahora lo revisa dirección" : "Has rechazado el cambio"); await load(); }
+    catch (e) { flash(e.message || "Error"); }
     setBusy(false);
   };
   const cancelar = async (c) => { try { await sb.fn("cambios-turno", { action: "eliminar", id: c.id }); await load(); } catch (e) { flash(e.message); } };
@@ -103,7 +120,7 @@ export function CambioTurnoView({ user }) {
               <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 6 }}>Pasarías a hacer</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontFamily: F, fontSize: 14, color: C.char, textTransform: "capitalize" }}>{fmtDia(elegida.fecha)}</span><ShiftChip turno={elegida.turno} /><span style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>(de {elegida.nombre})</span></div>
             </div>
-            <div style={{ fontFamily: F, fontSize: 12, color: C.mutL, margin: "12px 2px" }}>Cada una hará el turno de la otra. Se enviará a dirección para aprobarlo.</div>
+            <div style={{ fontFamily: F, fontSize: 12, color: C.mutL, margin: "12px 2px" }}>Primero lo tiene que aceptar {elegida.nombre}; después lo aprueba dirección.</div>
             <button onClick={enviar} disabled={busy} style={{ ...btnDark, fontSize: 16, padding: 15, opacity: busy ? 0.6 : 1 }}>{busy ? "Enviando…" : "Enviar propuesta"}</button>
           </div>
         )}
@@ -111,14 +128,42 @@ export function CambioTurnoView({ user }) {
     );
   }
 
+  const paraResponder = mios.filter(c => c.soyOtra && c.estado === "pendiente_companera");
+  const misCambios = mios.filter(c => !(c.soyOtra && c.estado === "pendiente_companera"));
+
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: C.gold, padding: "8px 12px", borderRadius: 10, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
       <button onClick={abrir} style={{ ...btnDark, fontSize: 15, padding: 14 }}>+ Proponer cambio de turno</button>
 
+      {paraResponder.length > 0 && (
+        <>
+          <div style={secLbl}>Para responder</div>
+          {paraResponder.map(c => (
+            <div key={c.id} style={{ background: "#fff", border: `1.5px solid ${C.gold}`, borderRadius: 14, padding: 15, marginBottom: 10 }}>
+              <div style={{ fontFamily: SF, fontSize: 16, color: C.char, marginBottom: 12 }}>{c.solicitante} quiere cambiar un turno contigo</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+                <span style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.mutL, width: 92, flexShrink: 0 }}>Tú harías</span>
+                <span style={{ fontFamily: F, fontSize: 13.5, color: C.char, textTransform: "capitalize" }}>{fmtDia(c.fecha_1)}</span>
+                <ShiftChip turno={c.turno_1} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.mutL, width: 92, flexShrink: 0 }}>{c.solicitante} haría tu</span>
+                <span style={{ fontFamily: F, fontSize: 13.5, color: C.char, textTransform: "capitalize" }}>{fmtDia(c.fecha_2)}</span>
+                <ShiftChip turno={c.turno_2} />
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button onClick={() => responder(c, "aceptar")} disabled={busy} style={{ flex: 1, background: C.grn, color: "#fff", border: "none", borderRadius: 11, padding: 12, fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>Aceptar</button>
+                <button onClick={() => responder(c, "rechazar")} disabled={busy} style={{ flex: 1, background: "#fff", color: "#B23A2C", border: "1.5px solid #EDC9C3", borderRadius: 11, padding: 12, fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>Rechazar</button>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
       <div style={secLbl}>Mis cambios</div>
-      {mios.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 18 }}>Aún no has propuesto ningún cambio</div>
-        : mios.map(c => (
+      {misCambios.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 18 }}>Aún no has propuesto ningún cambio</div>
+        : misCambios.map(c => (
           <div key={c.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: C.char }}>{c.soyYo ? "Tú" : c.solicitante}</span>
@@ -130,8 +175,8 @@ export function CambioTurnoView({ user }) {
               <ShiftChip turno={c.turno_2} />
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
-              <span style={chipStyle(c.estado)}>{CHIP[c.estado].label}</span>
-              {c.estado === "pendiente" && c.soyYo && <button onClick={() => cancelar(c)} style={{ background: "none", border: "none", color: C.mutL, fontFamily: F, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>}
+              <EstadoChip estado={c.estado} />
+              {(c.estado === "pendiente" || c.estado === "pendiente_companera") && c.soyYo && <button onClick={() => cancelar(c)} style={{ background: "none", border: "none", color: C.mutL, fontFamily: F, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>}
             </div>
           </div>
         ))}
