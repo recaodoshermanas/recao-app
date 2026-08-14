@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { F, SF, C, SHADOW } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
+import { ymd } from "../../lib/turnos.js";
+import { huecosCobertura } from "../../lib/cobertura.js";
 import { IcoRight, IcoLeft, IcoBars, IcoUsers } from "../../lib/icons.jsx";
 import { EvolucionView } from "./EvolucionView.jsx";
 import { DatosMesView } from "./DatosMesView.jsx";
@@ -14,14 +16,15 @@ import { VacacionesAdminView } from "./VacacionesAdminView.jsx";
 import { CierresAdminView } from "./CierresAdminView.jsx";
 import { CambiosAdminView } from "./CambiosAdminView.jsx";
 import { HorasExtrasView } from "./HorasExtrasView.jsx";
+import { CoberturaAdminView } from "./CoberturaAdminView.jsx";
 import { WorkerView } from "../WorkerView.jsx";
 
 const MUNDOS = {
   finanzas: { label: "Finanzas", sub: "Evolución · P&L · Tesorería · Datos mes · Facturas", Ico: IcoBars, iconBg: "#EAF0F8", iconFg: "#4A7AB5", tabs: [
     { id: "resumen", label: "Evolución" }, { id: "analitica", label: "Analítica" }, { id: "mes", label: "Datos mes" }, { id: "resultados", label: "P&L" }, { id: "tesoreria", label: "Tesorería" }, { id: "facturas", label: "Facturas" },
   ] },
-  equipo: { label: "Equipo", sub: "Cierres · Horarios · Vacaciones · Cambios · Horas · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
-    { id: "cierres", label: "Cierres" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cambios", label: "Cambios" }, { id: "horas", label: "Horas extras" }, { id: "usuarios", label: "Usuarios" },
+  equipo: { label: "Equipo", sub: "Cierres · Horarios · Vacaciones · Cobertura · Cambios · Horas · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
+    { id: "cierres", label: "Cierres" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cobertura", label: "Cobertura" }, { id: "cambios", label: "Cambios" }, { id: "horas", label: "Horas extras" }, { id: "usuarios", label: "Usuarios" },
   ] },
 };
 
@@ -31,11 +34,17 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
   const [focusMonth, setFocusMonth] = useState(null);
   const [avisosVac, setAvisosVac] = useState(0);
   const [avisosCambios, setAvisosCambios] = useState(0);
+  const [avisosCobertura, setAvisosCobertura] = useState(0);
 
   useEffect(() => {
     (async () => {
       try { const v = await sb.select("vacaciones_solicitudes", "select=id&estado=eq.pendiente"); setAvisosVac(v.length); } catch (e) { /* noop */ }
       try { const c = await sb.select("cambios_turno", "select=id&estado=eq.pendiente"); setAvisosCambios(c.length); } catch (e) { /* noop */ }
+      try {
+        const hoy = ymd(new Date()); const d = new Date(); d.setDate(d.getDate() + 60); const hasta = ymd(d);
+        const hor = await sb.select("horarios", `select=usuario_id,fecha,turno&fecha=gte.${hoy}&fecha=lte.${hasta}`);
+        setAvisosCobertura(new Set(huecosCobertura(hor).map(h => h.fecha)).size);
+      } catch (e) { /* noop */ }
     })();
   }, []);
 
@@ -43,9 +52,12 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
   const goEditMonth = (mk) => { setFocusMonth(mk); setMundo("finanzas"); setTab("mes"); };
 
   const avisoBtn = { width: "100%", boxSizing: "border-box", cursor: "pointer", background: C.char, border: "none", borderRadius: 15, padding: "15px 18px", display: "flex", alignItems: "center", gap: 13, textAlign: "left" };
+  const avisoNum = { width: 34, height: 34, borderRadius: "999px", background: C.gold, color: C.goldDark, fontFamily: SF, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+  const avisoTxt = { flex: 1, fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.gold };
 
   if (!mundo && tab !== "ajustes") {
     const hoy = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+    const hayAvisos = avisosVac > 0 || avisosCambios > 0 || avisosCobertura > 0;
     return (
       <div style={{ padding: "20px 16px", maxWidth: 620, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
@@ -64,20 +76,27 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
             </button>
           ); })}
         </div>
-        {(avisosVac > 0 || avisosCambios > 0) && (
+        {hayAvisos && (
           <div>
             <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.mutL, margin: "22px 2px 10px" }}>Necesita tu atención</div>
             {avisosVac > 0 && (
               <button onClick={() => { setMundo("equipo"); setTab("vacaciones"); }} style={avisoBtn}>
-                <span style={{ width: 34, height: 34, borderRadius: "999px", background: C.gold, color: C.goldDark, fontFamily: SF, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{avisosVac}</span>
-                <span style={{ flex: 1, fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.gold }}>solicitud{avisosVac > 1 ? "es" : ""} de vacaciones por revisar</span>
+                <span style={avisoNum}>{avisosVac}</span>
+                <span style={avisoTxt}>solicitud{avisosVac > 1 ? "es" : ""} de vacaciones por revisar</span>
+                <IcoRight size={18} color={C.gold} sw={2.4} />
+              </button>
+            )}
+            {avisosCobertura > 0 && (
+              <button onClick={() => { setMundo("equipo"); setTab("cobertura"); }} style={{ ...avisoBtn, marginTop: avisosVac > 0 ? 10 : 0 }}>
+                <span style={avisoNum}>{avisosCobertura}</span>
+                <span style={avisoTxt}>día{avisosCobertura > 1 ? "s" : ""} con turnos sin cubrir</span>
                 <IcoRight size={18} color={C.gold} sw={2.4} />
               </button>
             )}
             {avisosCambios > 0 && (
-              <button onClick={() => { setMundo("equipo"); setTab("cambios"); }} style={{ ...avisoBtn, marginTop: avisosVac > 0 ? 10 : 0 }}>
-                <span style={{ width: 34, height: 34, borderRadius: "999px", background: C.gold, color: C.goldDark, fontFamily: SF, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{avisosCambios}</span>
-                <span style={{ flex: 1, fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.gold }}>cambio{avisosCambios > 1 ? "s" : ""} de turno por revisar</span>
+              <button onClick={() => { setMundo("equipo"); setTab("cambios"); }} style={{ ...avisoBtn, marginTop: (avisosVac > 0 || avisosCobertura > 0) ? 10 : 0 }}>
+                <span style={avisoNum}>{avisosCambios}</span>
+                <span style={avisoTxt}>cambio{avisosCambios > 1 ? "s" : ""} de turno por revisar</span>
                 <IcoRight size={18} color={C.gold} sw={2.4} />
               </button>
             )}
@@ -115,6 +134,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
       {tab === "cierres" && <CierresAdminView />}
       {tab === "horarios" && <HorariosAdminView />}
       {tab === "vacaciones" && <VacacionesAdminView />}
+      {tab === "cobertura" && <CoberturaAdminView />}
       {tab === "cambios" && <CambiosAdminView />}
       {tab === "horas" && <HorasExtrasView />}
       {tab === "usuarios" && <UsuariosView currentUser={currentUser} />}
