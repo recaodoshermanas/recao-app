@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { F, SF, C, inp, btnDark, LOGO, avatar } from "../lib/styles.js";
+import { NotificacionesBell } from "./NotificacionesBell.jsx";
 
 export function LoginScreen({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -43,6 +44,7 @@ export function Header({ user, onLogout }) {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontFamily: F, fontSize: 12, color: "#C9C0B0" }}>{user && user.nombre}</span>
           <span style={{ width: 30, height: 30, borderRadius: "999px", background: av.bg, color: av.fg, fontFamily: SF, fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>{av.inicial}</span>
+          {user && <NotificacionesBell user={user} />}
           <button onClick={onLogout} style={{ background: "transparent", border: "none", color: "#8A8070", fontFamily: F, fontSize: 12, cursor: "pointer", padding: "4px 6px" }}>Salir</button>
         </div>
       </div>
