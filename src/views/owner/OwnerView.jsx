@@ -18,14 +18,15 @@ import { CambiosAdminView } from "./CambiosAdminView.jsx";
 import { HorasExtrasView } from "./HorasExtrasView.jsx";
 import { CoberturaAdminView } from "./CoberturaAdminView.jsx";
 import { IncidenciasAdminView } from "./IncidenciasAdminView.jsx";
+import { TareasAdminView } from "./TareasAdminView.jsx";
 import { WorkerView } from "../WorkerView.jsx";
 
 const MUNDOS = {
   finanzas: { label: "Finanzas", sub: "Evolución · P&L · Tesorería · Datos mes · Facturas", Ico: IcoBars, iconBg: "#EAF0F8", iconFg: "#4A7AB5", tabs: [
     { id: "resumen", label: "Evolución" }, { id: "analitica", label: "Analítica" }, { id: "mes", label: "Datos mes" }, { id: "resultados", label: "P&L" }, { id: "tesoreria", label: "Tesorería" }, { id: "facturas", label: "Facturas" },
   ] },
-  equipo: { label: "Equipo", sub: "Cierres · Incidencias · Horarios · Vacaciones · Cobertura · Cambios · Horas · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
-    { id: "cierres", label: "Cierres" }, { id: "incidencias", label: "Incidencias" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cobertura", label: "Cobertura" }, { id: "cambios", label: "Cambios" }, { id: "horas", label: "Horas extras" }, { id: "usuarios", label: "Usuarios" },
+  equipo: { label: "Equipo", sub: "Cierres · Tareas · Incidencias · Horarios · Vacaciones · Cobertura · Cambios · Horas · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
+    { id: "cierres", label: "Cierres" }, { id: "tareas", label: "Tareas" }, { id: "incidencias", label: "Incidencias" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cobertura", label: "Cobertura" }, { id: "cambios", label: "Cambios" }, { id: "horas", label: "Horas extras" }, { id: "usuarios", label: "Usuarios" },
   ] },
 };
 
@@ -133,6 +134,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
       {tab === "tesoreria" && <TesoreriaView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} />}
       {tab === "facturas" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={onReload} user={currentUser} />}
       {tab === "cierres" && <CierresAdminView />}
+      {tab === "tareas" && <TareasAdminView />}
       {tab === "incidencias" && <IncidenciasAdminView />}
       {tab === "horarios" && <HorariosAdminView />}
       {tab === "vacaciones" && <VacacionesAdminView />}
