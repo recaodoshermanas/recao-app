@@ -6,16 +6,18 @@ import { MiHorarioView } from "./MiHorarioView.jsx";
 import { MisVacacionesView } from "./MisVacacionesView.jsx";
 import { MiCuentaView } from "./MiCuentaView.jsx";
 import { CambioTurnoView } from "./CambioTurnoView.jsx";
+import { RevisarTurnoView } from "./RevisarTurnoView.jsx";
 import { WorkerView } from "../WorkerView.jsx";
 
 const TILES = [
   { id: "horario", label: "Mis horarios", sub: "Tu calendario", Ico: IcoCalendar, iconBg: "#EAF4EE", iconFg: "#2D8B4E" },
+  { id: "revisar", label: "Turno anterior", sub: "Revisar y reportar", Ico: IcoCheck, iconBg: "#FBEDE9", iconFg: "#C44D3F" },
   { id: "cambio", label: "Cambiar turno", sub: "Con una compañera", Ico: IcoSwap, iconBg: "#FBEEDC", iconFg: "#C08A2E" },
   { id: "vacaciones", label: "Mis vacaciones", sub: "Días y solicitudes", Ico: IcoSun, iconBg: "#E4F5F5", iconFg: "#189595" },
   { id: "facturas", label: "Facturas", sub: "Registrar", Ico: IcoReceipt, iconBg: "#F0EEF6", iconFg: "#8B6DAF" },
   { id: "cuenta", label: "Mi cuenta", sub: "Contraseña", Ico: IcoUser, iconBg: "#F0ECE2", iconFg: "#8A7A54" },
 ];
-const TITULOS = { cerrar: "Mi turno", horario: "Mis horarios", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { cerrar: "Mi turno", horario: "Mis horarios", revisar: "Turno anterior", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [screen, setScreen] = useState("home");
@@ -56,6 +58,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       </div>
       {screen === "cerrar" && <CerrarTurnoView user={user} />}
       {screen === "horario" && <MiHorarioView user={user} />}
+      {screen === "revisar" && <RevisarTurnoView user={user} />}
       {screen === "cambio" && <CambioTurnoView user={user} />}
       {screen === "vacaciones" && <MisVacacionesView user={user} />}
       {screen === "facturas" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={onReload} user={user} />}
