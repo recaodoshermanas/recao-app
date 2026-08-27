@@ -81,12 +81,14 @@ export function TareasAdminView() {
     try { await sb.delete("tareas_admin", `id=eq.${edit.id}`); setEdit(null); await load(); } catch (e) { /* noop */ }
     setBusy(false);
   };
-  const cambiarEstado = async (t, estado) => {
-    setTasks(prev => prev.map(x => x.id === t.id ? { ...x, estado } : x));
-    try { await sb.update("tareas_admin", `id=eq.${t.id}`, { estado, actualizado_en: new Date().toISOString() }); } catch (e) { load(); }
-  };
 
   const sel = { flex: 1, minWidth: 0, border: `1.5px solid ${C.brd}`, borderRadius: 10, padding: "8px 10px", fontFamily: F, fontSize: 12.5, color: C.char, background: "#fff", outline: "none" };
+  const filtrosPA = (
+    <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
+      <select value={fProp} onChange={e => setFProp(e.target.value)} style={sel}><option value="">Todos</option>{PROPIETARIOS.map(p => <option key={p} value={p}>{p}</option>)}</select>
+      <select value={fArea} onChange={e => setFArea(e.target.value)} style={sel}><option value="">Área</option>{areas.map(a => <option key={a} value={a}>{a}</option>)}</select>
+    </div>
+  );
 
   const TarjetaMini = ({ t, onClick }) => {
     const vencida = t.fecha_fin && t.fecha_fin < HOY && t.estado !== "hecha";
@@ -102,7 +104,6 @@ export function TareasAdminView() {
     );
   };
 
-  // ---- Vistas ----
   const Lista = () => (
     <div>
       <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
@@ -133,10 +134,7 @@ export function TareasAdminView() {
 
   const Tablero = () => (
     <div>
-      <div style={{ display: "flex", gap: 7, marginBottom: 12 }}>
-        <select value={fProp} onChange={e => setFProp(e.target.value)} style={sel}><option value="">Todos</option>{PROPIETARIOS.map(p => <option key={p} value={p}>{p}</option>)}</select>
-        <select value={fArea} onChange={e => setFArea(e.target.value)} style={sel}><option value="">Área</option>{areas.map(a => <option key={a} value={a}>{a}</option>)}</select>
-      </div>
+      {filtrosPA}
       <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
         {ESTADOS.map(col => {
           const items = base.filter(t => t.estado === col.id);
@@ -193,19 +191,79 @@ export function TareasAdminView() {
     );
   };
 
+  const Timeline = () => {
+    const withDates = base.filter(t => t.fecha_fin || t.fecha_inicio);
+    const sinFechas = base.filter(t => !t.fecha_fin && !t.fecha_inicio);
+    if (withDates.length === 0) return (
+      <div>{filtrosPA}<div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 26 }}>No hay tareas con fechas para el timeline.</div>
+        {sinFechas.map(t => <TarjetaMini key={t.id} t={t} onClick={() => abrir(t)} />)}</div>
+    );
+    const dayMs = 86400000;
+    const toMs = (s) => new Date(s + "T00:00:00").getTime();
+    const rows = withDates.map(t => { const s = toMs(t.fecha_inicio || t.fecha_fin); const e = toMs(t.fecha_fin || t.fecha_inicio); return { t, sd: Math.min(s, e), ed: Math.max(s, e) }; });
+    const todayMs = toMs(HOY);
+    let min = Math.min(todayMs, ...rows.map(r => r.sd)) - 3 * dayMs;
+    let max = Math.max(todayMs, ...rows.map(r => r.ed)) + 3 * dayMs;
+    const totalDays = Math.round((max - min) / dayMs) + 1;
+    const pxDay = 26, leftW = 106, rowH = 34, headH = 24;
+    const trackW = totalDays * pxDay;
+    const xOf = (ms) => Math.round((ms - min) / dayMs) * pxDay;
+    const marks = [];
+    for (let i = 0; i < totalDays; i++) { const d = new Date(min + i * dayMs); if (((d.getDay() + 6) % 7) === 0) marks.push({ x: i * pxDay, label: `${d.getDate()}/${d.getMonth() + 1}` }); }
+    const todayX = xOf(todayMs);
+    rows.sort((a, b) => a.sd - b.sd);
+    return (
+      <div>
+        {filtrosPA}
+        <div style={{ overflowX: "auto", border: `1px solid ${C.brdL}`, borderRadius: 14, background: "#fff" }}>
+          <div style={{ position: "relative", width: leftW + trackW, minWidth: "100%" }}>
+            <div style={{ display: "flex", height: headH, borderBottom: `1px solid ${C.brdL}` }}>
+              <div style={{ width: leftW, flexShrink: 0, position: "sticky", left: 0, background: "#fff", zIndex: 3, borderRight: `1px solid ${C.brdL}` }} />
+              <div style={{ position: "relative", width: trackW }}>
+                {marks.map((m, i) => <span key={i} style={{ position: "absolute", left: m.x + 3, top: 6, fontFamily: F, fontSize: 9.5, color: C.mutL, whiteSpace: "nowrap" }}>{m.label}</span>)}
+              </div>
+            </div>
+            <div style={{ position: "absolute", top: 0, bottom: 0, left: leftW + todayX, width: 2, background: C.gold, zIndex: 2, pointerEvents: "none" }} />
+            {marks.map((m, i) => <div key={i} style={{ position: "absolute", top: headH, bottom: 0, left: leftW + m.x, width: 1, background: C.brdL, opacity: 0.5, zIndex: 0 }} />)}
+            {rows.map(({ t, sd, ed }) => {
+              const x = xOf(sd); const w = Math.max(pxDay - 4, xOf(ed) - xOf(sd) + pxDay - 4); const col = estadoDe(t.estado).fg;
+              return (
+                <div key={t.id} style={{ display: "flex", height: rowH, alignItems: "center", borderBottom: `1px solid ${C.brdL}` }}>
+                  <button onClick={() => abrir(t)} style={{ width: leftW, flexShrink: 0, position: "sticky", left: 0, background: "#fff", zIndex: 1, borderRight: `1px solid ${C.brdL}`, borderTop: "none", borderBottom: "none", borderLeft: "none", textAlign: "left", padding: "0 8px", cursor: "pointer", height: "100%", fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.char, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.titulo}</button>
+                  <div style={{ position: "relative", width: trackW, height: "100%" }}>
+                    <button onClick={() => abrir(t)} title={t.titulo} style={{ position: "absolute", left: x + 2, top: 7, height: rowH - 15, width: w, background: col, opacity: t.estado === "hecha" ? 0.5 : 1, border: "none", borderRadius: 7, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, padding: "0 5px", overflow: "hidden" }}>
+                      {(t.propietarios || []).slice(0, 3).map(n => <span key={n} style={{ fontFamily: F, fontSize: 9, fontWeight: 800, color: "#fff" }}>{n.charAt(0)}</span>)}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontFamily: F, fontSize: 11, color: C.mut }}><span style={{ width: 14, height: 2, background: C.gold, display: "inline-block" }} /> Hoy · desliza la tabla para ver más fechas</div>
+        {sinFechas.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 8 }}>Sin fechas</div>
+            {sinFechas.map(t => <TarjetaMini key={t.id} t={t} onClick={() => abrir(t)} />)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={{ padding: "16px", maxWidth: 700, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-        <div style={{ display: "flex", gap: 4, background: "#EFE9DD", borderRadius: 11, padding: 3, flex: 1 }}>
-          {[["lista", "Lista"], ["tablero", "Tablero"], ["calendario", "Calendario"]].map(([v, l]) => (
-            <button key={v} onClick={() => setVista(v)} style={{ flex: 1, padding: "7px 4px", borderRadius: 8, border: "none", background: vista === v ? "#fff" : "transparent", color: vista === v ? C.char : C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer", boxShadow: vista === v ? SHADOW.card : "none" }}>{l}</button>
-          ))}
-        </div>
-        <button onClick={nuevo} style={{ background: C.char, color: C.gold, border: "none", borderRadius: 11, padding: "10px 15px", fontFamily: F, fontSize: 13.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>+ Nueva</button>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        <button onClick={nuevo} style={{ background: C.char, color: C.gold, border: "none", borderRadius: 11, padding: "10px 16px", fontFamily: F, fontSize: 13.5, fontWeight: 700, cursor: "pointer" }}>+ Nueva tarea</button>
+      </div>
+      <div style={{ display: "flex", gap: 4, background: "#EFE9DD", borderRadius: 11, padding: 3, marginBottom: 14 }}>
+        {[["lista", "Lista"], ["tablero", "Tablero"], ["calendario", "Calendario"], ["timeline", "Timeline"]].map(([v, l]) => (
+          <button key={v} onClick={() => setVista(v)} style={{ flex: 1, padding: "7px 3px", borderRadius: 8, border: "none", background: vista === v ? "#fff" : "transparent", color: vista === v ? C.char : C.mut, fontFamily: F, fontSize: 12, fontWeight: 700, cursor: "pointer", boxShadow: vista === v ? SHADOW.card : "none" }}>{l}</button>
+        ))}
       </div>
 
       {loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 26 }}>Cargando…</div>
-        : vista === "lista" ? <Lista /> : vista === "tablero" ? <Tablero /> : <Calendario />}
+        : vista === "lista" ? <Lista /> : vista === "tablero" ? <Tablero /> : vista === "calendario" ? <Calendario /> : <Timeline />}
 
       {edit && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.45)", zIndex: 70, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setEdit(null)}>
