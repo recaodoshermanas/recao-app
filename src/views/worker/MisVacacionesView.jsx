@@ -3,6 +3,7 @@ import { F, SF, C, btnDark, chipStyle, CHIP } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { resumenCalendario, agruparRangos } from "../../lib/vacaciones.js";
 import { VacacionesPicker } from "../../components/VacacionesPicker.jsx";
+import { VacacionesNormas } from "../../components/VacacionesNormas.jsx";
 
 const ANIO = 2026;
 function fmtF(s) { if (!s) return ""; const p = s.split("-"); return `${p[2]}/${p[1]}`; }
@@ -16,6 +17,7 @@ export function MisVacacionesView({ user }) {
   const [vacDias, setVacDias] = useState([]);
   const [descansos, setDescansos] = useState([]);
   const [abierto, setAbierto] = useState(false);
+  const [verNormas, setVerNormas] = useState(false);
   const [msg, setMsg] = useState("");
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2600); };
@@ -54,12 +56,14 @@ export function MisVacacionesView({ user }) {
         </div>
       </div>
 
+      <button onClick={() => setVerNormas(true)} style={{ width: "100%", boxSizing: "border-box", marginTop: 10, background: "#fff", border: `1.5px solid ${C.brd}`, borderRadius: 12, padding: "10px", fontFamily: F, fontSize: 13, fontWeight: 600, color: C.char, cursor: "pointer" }}>Ver normas de vacaciones</button>
+
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: C.gold, padding: "8px 12px", borderRadius: 10, marginTop: 12, textAlign: "center" }}>{msg}</div>}
 
       {!abierto ? (
-        <button onClick={() => setAbierto(true)} style={{ ...btnDark, fontSize: 15, padding: 14, marginTop: 14 }}>+ Solicitar vacaciones</button>
+        <button onClick={() => setAbierto(true)} style={{ ...btnDark, fontSize: 15, padding: 14, marginTop: 12 }}>+ Solicitar vacaciones</button>
       ) : (
-        <div style={{ marginTop: 14 }}>
+        <div style={{ marginTop: 12 }}>
           <VacacionesPicker usuarioId={user.id} maxDias={Math.max(0, r.restantes)} submitLabel="Enviar" onSubmit={solicitar} onCancel={() => setAbierto(false)} />
         </div>
       )}
@@ -97,6 +101,8 @@ export function MisVacacionesView({ user }) {
             );
           })}
         </div>}
+
+      {verNormas && <VacacionesNormas onClose={() => setVerNormas(false)} />}
     </div>
   );
 }
