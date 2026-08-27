@@ -18,9 +18,10 @@ export function MisVacacionesView({ user }) {
   const [descansos, setDescansos] = useState([]);
   const [abierto, setAbierto] = useState(false);
   const [verNormas, setVerNormas] = useState(false);
+  const [errs, setErrs] = useState([]);
   const [msg, setMsg] = useState("");
 
-  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2600); };
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3200); };
   const load = useCallback(async () => {
     try {
       setSols(await sb.select("vacaciones_solicitudes", `select=*&usuario_id=eq.${user.id}&order=fecha_inicio.desc`));
@@ -39,8 +40,15 @@ export function MisVacacionesView({ user }) {
 
   const solicitar = async (fechas) => {
     if (!fechas.length) return;
-    await sb.insert("vacaciones_solicitudes", { usuario_id: user.id, fecha_inicio: fechas[0], fecha_fin: fechas[fechas.length - 1], dias: fechas.length, fechas, estado: "pendiente" });
-    setAbierto(false); flash("Solicitud enviada"); await load();
+    setErrs([]);
+    try {
+      const res = await sb.fn("vacaciones", { action: "solicitar", fechas });
+      setAbierto(false);
+      flash(res.avisos && res.avisos.length ? "Solicitud enviada. " + res.avisos[0] : "Solicitud enviada");
+      await load();
+    } catch (e) {
+      setErrs(String(e.message || "No se pudo enviar la solicitud").split("  ·  "));
+    }
   };
   const cancelar = async (s) => { try { await sb.delete("vacaciones_solicitudes", `id=eq.${s.id}`); await load(); } catch (e) { flash(e.message); } };
 
@@ -61,10 +69,16 @@ export function MisVacacionesView({ user }) {
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: C.gold, padding: "8px 12px", borderRadius: 10, marginTop: 12, textAlign: "center" }}>{msg}</div>}
 
       {!abierto ? (
-        <button onClick={() => setAbierto(true)} style={{ ...btnDark, fontSize: 15, padding: 14, marginTop: 12 }}>+ Solicitar vacaciones</button>
+        <button onClick={() => { setErrs([]); setAbierto(true); }} style={{ ...btnDark, fontSize: 15, padding: 14, marginTop: 12 }}>+ Solicitar vacaciones</button>
       ) : (
         <div style={{ marginTop: 12 }}>
-          <VacacionesPicker usuarioId={user.id} maxDias={Math.max(0, r.restantes)} submitLabel="Enviar" onSubmit={solicitar} onCancel={() => setAbierto(false)} />
+          {errs.length > 0 && (
+            <div style={{ background: "#FBEDE9", border: "1px solid #EDC9C3", borderRadius: 12, padding: "11px 13px", marginBottom: 10 }}>
+              <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: C.red, marginBottom: 5 }}>No se puede enviar todavía:</div>
+              {errs.map((x, i) => <div key={i} style={{ fontFamily: F, fontSize: 12.5, color: C.red, lineHeight: 1.4, marginTop: i ? 4 : 0 }}>• {x}</div>)}
+            </div>
+          )}
+          <VacacionesPicker usuarioId={user.id} maxDias={Math.max(0, r.restantes)} submitLabel="Enviar" onSubmit={solicitar} onCancel={() => { setAbierto(false); setErrs([]); }} />
         </div>
       )}
 

@@ -3,6 +3,7 @@ import { F, SF, C, chipStyle, CHIP, avatar } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { resumenCalendario, rangoFechas, diasQueGastan, agruparRangos } from "../../lib/vacaciones.js";
 import { VacacionesPicker } from "../../components/VacacionesPicker.jsx";
+import { FechasCerradas } from "../../components/FechasCerradas.jsx";
 
 const ANIO = 2026;
 const secLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.mutL, margin: "0 2px 12px" };
@@ -158,6 +159,9 @@ export function VacacionesAdminView() {
           </div>
         ); })}
       </div>
+
+      <div style={secLbl}>Fechas cerradas</div>
+      <FechasCerradas />
 
       {!abrir ? <button onClick={() => setAbrir(true)} style={{ ...btnSm, background: "#fff", color: C.char, border: `1.5px solid ${C.brd}`, marginBottom: 18 }}>+ Añadir periodo</button>
         : (
