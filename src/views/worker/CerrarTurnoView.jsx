@@ -24,6 +24,7 @@ export function CerrarTurnoView({ user }) {
   const [cajaCerrada, setCajaCerrada] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const [msg, setMsg] = useState("");
 
   const [caja, setCaja] = useState({ c1e: "", c1t: "", c2e: "", c2t: "" });
@@ -101,9 +102,10 @@ export function CerrarTurnoView({ user }) {
       const p_caja = { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
       const p_facturas = Object.entries(selProv).map(([id, c]) => ({ id, caja: c }));
       await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas });
+      setConfirmando(false);
       setModo("ver");
       await load(turno);
-    } catch (e) { setMsg(e.message || "Error al cerrar"); }
+    } catch (e) { setMsg(e.message || "Error al cerrar"); setConfirmando(false); }
     setSaving(false);
   };
 
@@ -188,6 +190,9 @@ export function CerrarTurnoView({ user }) {
   const sub1 = pn(caja.c1e) + pn(caja.c1t) + ticketsC1;
   const sub2 = pn(caja.c2e) + pn(caja.c2t) + ticketsC2;
   const totalDia = sub1 + sub2;
+
+  const hechasN = tareas.filter(t => estado[t.id] && estado[t.id].estado === "hecha").length;
+  const noHechasList = tareas.filter(t => estado[t.id] && estado[t.id].estado === "no").map(t => ({ texto: t.texto, nota: estado[t.id].nota }));
 
   const backAction = modo === "caja" ? () => { setModo("cerrar"); setMsg(""); } : (modo === "cerrar" && !yaCerrado ? () => { setModo("ver"); setMsg(""); } : volver);
   const backLabel = modo === "caja" ? "‹ Volver a las tareas" : (modo === "cerrar" && !yaCerrado ? "‹ Volver a las tareas" : "‹ Cambiar turno");
@@ -306,9 +311,52 @@ export function CerrarTurnoView({ user }) {
               <div style={{ display: "flex", justifyContent: "space-between", fontFamily: SF, fontSize: 18, color: C.gold }}><span>Total del día</span><span>{fmt2(totalDia)}</span></div>
             </div>
 
-            <button onClick={enviar} disabled={saving} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 14, opacity: saving ? 0.5 : 1 }}>{saving ? "Cerrando…" : "Confirmar cierre"}</button>
+            <button onClick={() => setConfirmando(true)} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 14 }}>Revisar y cerrar</button>
           </div>
         )}
+
+      {confirmando && (
+        <div onClick={() => setConfirmando(false)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.cream, width: "100%", maxWidth: 540, maxHeight: "88vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "18px 18px 24px" }}>
+            <div style={{ width: 40, height: 4, background: C.brd, borderRadius: 999, margin: "0 auto 16px" }} />
+            <div style={{ fontFamily: SF, fontSize: 20, color: C.char }}>Confirmar cierre</div>
+            <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginTop: 3, marginBottom: 16, textTransform: "capitalize" }}>Turno de {turno} · {fechaLarga}</div>
+
+            <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1, background: "#E7F3EC", borderRadius: 12, padding: "12px 14px", textAlign: "center" }}>
+                <div style={{ fontFamily: SF, fontSize: 26, color: "#1E7A46", lineHeight: 1 }}>{hechasN}</div>
+                <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: "#1E7A46", marginTop: 4 }}>hechas</div>
+              </div>
+              <div style={{ flex: 1, background: noHechasList.length ? "#FBEAE7" : "#F0EADF", borderRadius: 12, padding: "12px 14px", textAlign: "center" }}>
+                <div style={{ fontFamily: SF, fontSize: 26, color: noHechasList.length ? "#B23A2C" : C.mut, lineHeight: 1 }}>{noHechasList.length}</div>
+                <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: noHechasList.length ? "#B23A2C" : C.mut, marginTop: 4 }}>sin hacer</div>
+              </div>
+            </div>
+
+            {noHechasList.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 8 }}>Tareas sin hacer</div>
+                {noHechasList.map((x, i) => (
+                  <div key={i} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 10, padding: "9px 12px", marginBottom: 7 }}>
+                    <div style={{ fontFamily: F, fontSize: 13, color: C.char }}>{x.texto}</div>
+                    <div style={{ fontFamily: F, fontSize: 12, color: "#B23A2C", marginTop: 2 }}>{x.nota}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: C.char, borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
+              <span style={{ fontFamily: F, fontSize: 13, color: "#fff", fontWeight: 600 }}>Total del día en caja</span>
+              <span style={{ fontFamily: SF, fontSize: 18, color: C.gold }}>{fmt2(totalDia)}</span>
+            </div>
+
+            <div style={{ fontFamily: F, fontSize: 12, color: "#7A5C1A", background: "#FBF4E6", border: "1px solid #EAD9AE", borderRadius: 10, padding: "10px 12px", marginBottom: 16, lineHeight: 1.45 }}>Una vez cerrado, el registro <b>no se puede modificar</b>. Si después ves algo mal, se corrige por la vía de la incidencia.</div>
+
+            <button onClick={enviar} disabled={saving} style={{ ...btnDark, fontSize: 16, padding: 15, opacity: saving ? 0.5 : 1 }}>{saving ? "Cerrando…" : "Sí, cerrar turno"}</button>
+            <button onClick={() => setConfirmando(false)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Revisar</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
