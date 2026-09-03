@@ -23,73 +23,151 @@ function comprimir(file, maxSide = 1200, quality = 0.55) {
 
 export function RevisarTurnoView({ user }) {
   const [cierre, setCierre] = useState(null);
-  const [items, setItems] = useState([]);
+  const [yaVerif, setYaVerif] = useState(false);
+  const [completadas, setCompletadas] = useState([]);
+  const [noCompletadas, setNoCompletadas] = useState([]);
+  const [reportadas, setReportadas] = useState([]);
+  const [marcadas, setMarcadas] = useState({});
   const [loading, setLoading] = useState(true);
-  const [openItem, setOpenItem] = useState(null);
-  const [foto, setFoto] = useState(null);
-  const [comentario, setComentario] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmar, setConfirmar] = useState(false);
   const [msg, setMsg] = useState("");
-  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3000); };
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3200); };
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { const r = await sb.fn("incidencias", { action: "turno_anterior" }); setCierre(r.cierre || null); setItems(r.items || []); }
-    catch (e) { /* noop */ }
+    try {
+      const r = await sb.fn("incidencias", { action: "turno_anterior" });
+      setCierre(r.cierre || null);
+      setYaVerif(!!r.ya_verificado);
+      setCompletadas(r.completadas || []);
+      setNoCompletadas(r.no_completadas || []);
+      setReportadas(r.reportadas || []);
+      setMarcadas({});
+    } catch (e) { /* noop */ }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const abrir = (id) => { setOpenItem(id); setFoto(null); setComentario(""); };
-  const onFoto = async (e) => { const f = e.target.files && e.target.files[0]; if (!f) return; try { setFoto(await comprimir(f)); } catch { flash("No se pudo procesar la foto"); } };
-  const reportar = async (id) => {
+  const toggle = (id) => setMarcadas(m => { const c = { ...m }; if (c[id]) delete c[id]; else c[id] = { comentario: "", foto: null }; return c; });
+  const setCom = (id, v) => setMarcadas(m => ({ ...m, [id]: { ...m[id], comentario: v } }));
+  const onFoto = async (id, e) => { const f = e.target.files && e.target.files[0]; if (!f) return; try { const d = await comprimir(f); setMarcadas(m => ({ ...m, [id]: { ...m[id], foto: d } })); } catch { flash("No se pudo procesar la foto"); } };
+
+  const nMarcadas = Object.keys(marcadas).length;
+  const pedirEnviar = () => {
+    if (Object.values(marcadas).some(v => !v.foto)) { flash("Cada tarea marcada como no conforme necesita una foto"); return; }
+    setConfirmar(true);
+  };
+  const enviar = async () => {
     setBusy(true);
     try {
-      await sb.fn("incidencias", { action: "reportar", cierre_item_id: id, comentario: comentario.trim() || null, foto: foto || null });
-      setItems(prev => prev.map(x => x.id === id ? { ...x, reportada: true } : x));
-      setOpenItem(null); setFoto(null); setComentario(""); flash("Reportado. Dirección lo verá.");
-    } catch (e) { flash(e.message || "Error"); }
+      const noconformes = Object.entries(marcadas).map(([id, v]) => ({ cierre_item_id: Number(id), comentario: (v.comentario || "").trim() || null, foto: v.foto }));
+      await sb.fn("incidencias", { action: "verificar", cierre_id: cierre.id, noconformes });
+      setConfirmar(false);
+      flash("Verificación enviada. Dirección lo revisará.");
+      await load();
+    } catch (e) { setConfirmar(false); flash(e.message || "No se pudo enviar"); }
     setBusy(false);
   };
+
+  const cab = cierre && (
+    <div style={{ background: C.char, borderRadius: 16, padding: "14px 16px", marginBottom: 14 }}>
+      <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.gold }}>Turno anterior</div>
+      <div style={{ fontFamily: SF, fontSize: 18, color: "#fff", marginTop: 3, textTransform: "capitalize" }}>{cierre.turno} · {fmtDia(cierre.fecha)}</div>
+      <div style={{ fontFamily: F, fontSize: 12.5, color: "#C9C0B0", marginTop: 2 }}>Cerrado por {cierre.nombre}</div>
+    </div>
+  );
+
+  const seccionNoCompletadas = noCompletadas.length > 0 && (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: C.mutL, marginBottom: 8 }}>El turno anterior dejó sin hacer</div>
+      {noCompletadas.map(it => (
+        <div key={it.id} style={{ background: "#F7F4EE", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", marginBottom: 8 }}>
+          <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut }}>{it.texto}</div>
+          {it.justificacion && <div style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 3, fontStyle: "italic" }}>“{it.justificacion}”</div>}
+        </div>
+      ))}
+      <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 2 }}>Estas ya constan como no hechas. No se verifican.</div>
+    </div>
+  );
 
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: C.gold, padding: "8px 12px", borderRadius: 10, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
+
       {loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 24 }}>Cargando…</div>
         : !cierre ? <div style={{ fontFamily: F, fontSize: 14, color: C.mut, textAlign: "center", padding: 30 }}>No hay ningún turno anterior reciente para revisar.</div>
-          : <>
-            <div style={{ background: C.char, borderRadius: 16, padding: "14px 16px", marginBottom: 14 }}>
-              <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.gold }}>Turno anterior</div>
-              <div style={{ fontFamily: SF, fontSize: 18, color: "#fff", marginTop: 3, textTransform: "capitalize" }}>{cierre.turno} · {fmtDia(cierre.fecha)}</div>
-              <div style={{ fontFamily: F, fontSize: 12.5, color: "#C9C0B0", marginTop: 2 }}>Cerrado por {cierre.nombre}</div>
-            </div>
-            <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 14, lineHeight: 1.4 }}>Estas tareas se marcaron como hechas. Si alguna no estaba hecha de verdad, repórtalo (puedes añadir una foto como prueba).</div>
-            {items.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 20 }}>El turno anterior no marcó ninguna tarea.</div>
-              : items.map(it => (
-                <div key={it.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
-                  <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{it.texto}</div>
-                  {it.reportada ? (
-                    <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: C.red, marginTop: 10 }}>Reportada ✓</div>
-                  ) : openItem === it.id ? (
-                    <div style={{ marginTop: 12 }}>
-                      <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: `1.5px dashed ${C.brd}`, borderRadius: 12, padding: foto ? 8 : 14, cursor: "pointer", marginBottom: 10 }}>
-                        {foto ? <img src={foto} alt="" style={{ maxHeight: 160, maxWidth: "100%", borderRadius: 8, display: "block" }} />
-                          : <span style={{ fontFamily: F, fontSize: 13, color: C.mut }}>Añadir foto (opcional)</span>}
-                        <input type="file" accept="image/*" capture="environment" onChange={onFoto} style={{ display: "none" }} />
-                      </label>
-                      <textarea value={comentario} onChange={e => setComentario(e.target.value)} placeholder="¿Qué pasó? (opcional)" rows={2} style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 12, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, outline: "none", resize: "vertical", marginBottom: 10 }} />
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={() => reportar(it.id)} disabled={busy} style={{ flex: 1, background: C.red, color: "#fff", border: "none", borderRadius: 11, padding: 12, fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "Enviando…" : "Reportar"}</button>
-                        <button onClick={() => setOpenItem(null)} style={{ background: "#fff", color: C.mut, border: `1.5px solid ${C.brd}`, borderRadius: 11, padding: "12px 16px", fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          : yaVerif ? (
+            <div>
+              {cab}
+              <div style={{ background: "#E7F3EC", color: "#1E7A46", fontFamily: SF, fontSize: 16, borderRadius: 14, padding: 14, marginBottom: 14, textAlign: "center" }}>Verificación enviada ✓</div>
+              {reportadas.length > 0 ? (
+                <div>
+                  <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: C.mutL, marginBottom: 8 }}>Marcaste como no conformes</div>
+                  {reportadas.map((x, i) => {
+                    const t = completadas.find(c => c.id === x.cierre_item_id);
+                    return (
+                      <div key={i} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", marginBottom: 8 }}>
+                        <div style={{ fontFamily: F, fontSize: 13.5, color: C.char }}>{t ? t.texto : "Tarea"}</div>
+                        {x.comentario && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 3 }}>{x.comentario}</div>}
                       </div>
-                    </div>
-                  ) : (
-                    <button onClick={() => abrir(it.id)} style={{ marginTop: 10, background: "#FBEDE9", color: C.red, border: "none", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>No estaba hecha</button>
-                  )}
+                    );
+                  })}
                 </div>
-              ))}
-          </>
-      }
+              ) : <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 8 }}>No marcaste ninguna tarea como no conforme.</div>}
+              {seccionNoCompletadas}
+            </div>
+          ) : (
+            <div>
+              {cab}
+              <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 14, lineHeight: 1.4 }}>Estas tareas se marcaron como <b>hechas</b>. Si alguna no estaba hecha de verdad, márcala como no conforme y adjunta una foto. Cuando termines, envía la verificación.</div>
+              {completadas.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>El turno anterior no marcó ninguna tarea como hecha.</div>
+                : completadas.map(it => {
+                  const mk = marcadas[it.id];
+                  return (
+                    <div key={it.id} style={{ background: "#fff", border: `1.5px solid ${mk ? C.red : C.brdL}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
+                      <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{it.texto}</div>
+                      {!mk ? (
+                        <button onClick={() => toggle(it.id)} style={{ marginTop: 10, background: "#FBEDE9", color: C.red, border: "none", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>No estaba hecha</button>
+                      ) : (
+                        <div style={{ marginTop: 12 }}>
+                          <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: `1.5px dashed ${mk.foto ? C.grn : C.red}`, borderRadius: 12, padding: mk.foto ? 8 : 14, cursor: "pointer", marginBottom: 10 }}>
+                            {mk.foto ? <img src={mk.foto} alt="" style={{ maxHeight: 160, maxWidth: "100%", borderRadius: 8, display: "block" }} />
+                              : <span style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: C.red }}>Foto obligatoria · toca para hacerla</span>}
+                            <input type="file" accept="image/*" capture="environment" onChange={e => onFoto(it.id, e)} style={{ display: "none" }} />
+                          </label>
+                          <textarea value={mk.comentario} onChange={e => setCom(it.id, e.target.value)} placeholder="Comentario (opcional)" rows={2} style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 12, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, outline: "none", resize: "vertical", marginBottom: 8 }} />
+                          <button onClick={() => toggle(it.id)} style={{ background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>Quitar marca</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+              {seccionNoCompletadas}
+
+              <button onClick={pedirEnviar} disabled={completadas.length === 0} style={{ width: "100%", boxSizing: "border-box", marginTop: 18, background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: completadas.length === 0 ? 0.5 : 1 }}>
+                {nMarcadas > 0 ? `Enviar verificación · ${nMarcadas} no conforme${nMarcadas > 1 ? "s" : ""}` : "Enviar verificación · todo conforme"}
+              </button>
+            </div>
+          )}
+
+      {confirmar && (
+        <div onClick={() => setConfirmar(false)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.cream, width: "100%", maxWidth: 540, borderRadius: "20px 20px 0 0", padding: "18px 18px 24px" }}>
+            <div style={{ width: 40, height: 4, background: C.brd, borderRadius: 999, margin: "0 auto 16px" }} />
+            <div style={{ fontFamily: SF, fontSize: 20, color: C.char, marginBottom: 6 }}>Enviar verificación</div>
+            <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut, marginBottom: 16, lineHeight: 1.45 }}>
+              {nMarcadas > 0
+                ? `Vas a marcar ${nMarcadas} tarea${nMarcadas > 1 ? "s" : ""} como no conforme${nMarcadas > 1 ? "s" : ""}, con su foto. `
+                : "No has marcado ninguna tarea como no conforme. "}
+              Una vez enviada, la verificación <b>no se puede modificar</b>.
+            </div>
+            <button onClick={enviar} disabled={busy} style={{ width: "100%", boxSizing: "border-box", background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Enviando…" : "Enviar verificación"}</button>
+            <button onClick={() => setConfirmar(false)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
