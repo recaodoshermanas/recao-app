@@ -4,6 +4,7 @@ import { sb } from "../../lib/supabase.js";
 
 const DOW = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 function fmtDia(f) { if (!f) return ""; const p = f.split("-"); const d = new Date(f + "T00:00:00"); return `${DOW[d.getDay()]} ${p[2]}/${p[1]}`; }
+function fmtF(s) { if (!s) return ""; const p = s.split("-"); return `${p[2]}/${p[1]}/${p[0]}`; }
 const RES = { descartado: { label: "Descartado", bg: "#E7F3EC", fg: "#1E7A46" }, sin_fallo: { label: "Sin fallo", bg: "#EAF0F8", fg: "#3D6AA5" }, confirmado: { label: "Confirmado", bg: "#FBEAE7", fg: "#B23A2C" } };
 const NIVELES = [["", "Sin falta"], ["leve", "Leve"], ["grave", "Grave"], ["muy_grave", "Muy grave"]];
 const NIVEL_L = { leve: "Leve", grave: "Grave", muy_grave: "Muy grave" };
@@ -25,19 +26,41 @@ export function DisciplinaAdminView() {
   const [rNivel, setRNivel] = useState("");
   const [rArt, setRArt] = useState("");
   const [rNota, setRNota] = useState("");
+  const [trabajadoras, setTrabajadoras] = useState([]);
+  const [expUid, setExpUid] = useState("");
+  const [expData, setExpData] = useState(null);
+  const [expLoading, setExpLoading] = useState(false);
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3800); };
   const call = (action, extra) => sb.fn("disciplina", { action, ...(extra || {}) });
 
+  useEffect(() => { (async () => { try { const r = await sb.fn("gestion-usuarios", { action: "listar" }); setTrabajadoras((r.usuarios || []).filter(u => u.rol === "trabajadora" && u.activo && !u.eventual)); } catch (e) { /* noop */ } })(); }, []);
+
   const load = useCallback(async () => {
+    if (tab === "exp") { setLoading(false); return; }
     setLoading(true);
     try {
       if (tab === "verif") setVerif((await call("bandeja_verificaciones")).items || []);
       else if (tab === "causas") setCausas((await call("bandeja_causas")).items || []);
-      else setAvisos((await call("listar_avisos", fEstado ? { estado: fEstado } : {})).avisos || []);
+      else if (tab === "avisos") setAvisos((await call("listar_avisos", fEstado ? { estado: fEstado } : {})).avisos || []);
     } catch (e) { flash(e.message || "Error"); }
     setLoading(false);
   }, [tab, fEstado]);
   useEffect(() => { load(); }, [load]);
+
+  const loadExp = useCallback(async (uid) => {
+    if (!uid) { setExpData(null); return; }
+    setExpLoading(true);
+    try {
+      const hoy = new Date().toISOString().slice(0, 10);
+      const faltas = await sb.select("faltas", `select=*&usuario_id=eq.${uid}&or=(fecha_caducidad.is.null,fecha_caducidad.gte.${hoy})&order=fecha.desc`);
+      const fallos = await sb.select("fallos", `select=*&usuario_id=eq.${uid}&estado=eq.confirmado&order=fecha.desc&limit=100`);
+      const f30 = await sb.rpc("disc_fallos_30", { p_uid: uid });
+      const s90 = await sb.rpc("disc_falsedades_90", { p_uid: uid });
+      setExpData({ faltas: faltas || [], fallos: fallos || [], f30: Number(f30) || 0, s90: Number(s90) || 0 });
+    } catch (e) { flash(e.message || "Error"); }
+    setExpLoading(false);
+  }, []);
+  useEffect(() => { loadExp(expUid); }, [expUid, loadExp]);
 
   const verFoto = async (id) => { setFotos(p => ({ ...p, [id]: "loading" })); try { const r = await sb.fn("incidencias", { action: "detalle", id }); setFotos(p => ({ ...p, [id]: r.foto || null })); } catch (e) { setFotos(p => ({ ...p, [id]: null })); } };
   const emitir = async (id) => { setBusy(true); try { await call("emitir_verificacion", { incidencia_id: id }); flash("Aviso emitido a la responsable"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
@@ -115,18 +138,65 @@ export function DisciplinaAdminView() {
     </div>
   );
 
+  const Expedientes = () => (
+    <div>
+      <select value={expUid} onChange={e => setExpUid(e.target.value)} style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 12, padding: "11px 12px", fontFamily: F, fontSize: 14, color: C.char, background: "#fff", outline: "none", marginBottom: 14 }}>
+        <option value="">Elige una trabajadora…</option>
+        {trabajadoras.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+      </select>
+      {!expUid ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 20 }}>Selecciona a quién ver.</div>
+        : expLoading || !expData ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 20 }}>Cargando…</div>
+          : (
+            <div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                <div style={{ flex: 1, background: expData.f30 >= 3 ? "#FBEAE7" : "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", textAlign: "center" }}>
+                  <div style={{ fontFamily: SF, fontSize: 22, color: expData.f30 >= 3 ? "#B23A2C" : C.char }}>{expData.f30}<span style={{ fontSize: 13, color: C.mutL }}>/4</span></div>
+                  <div style={{ fontFamily: F, fontSize: 11, color: C.mut }}>fallos · 30 días</div>
+                </div>
+                <div style={{ flex: 1, background: expData.s90 >= 2 ? "#FBEAE7" : "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", textAlign: "center" }}>
+                  <div style={{ fontFamily: SF, fontSize: 22, color: expData.s90 >= 2 ? "#B23A2C" : C.char }}>{expData.s90}<span style={{ fontSize: 13, color: C.mutL }}>/3</span></div>
+                  <div style={{ fontFamily: F, fontSize: 11, color: C.mut }}>falsedades · 90 días</div>
+                </div>
+              </div>
+
+              <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 9 }}>Faltas vigentes</div>
+              {expData.faltas.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: "#1E7A46", background: "#E7F3EC", borderRadius: 10, padding: "10px 12px", textAlign: "center", marginBottom: 18 }}>Sin faltas vigentes ✓</div>
+                : <div style={{ marginBottom: 18 }}>{expData.faltas.map(f => (
+                  <div key={f.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <div>
+                      <span style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", padding: "3px 9px", borderRadius: 999, background: "#FBEAE7", color: "#B23A2C" }}>{NIVEL_L[f.nivel] || f.nivel}</span>
+                      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 6 }}>Del {fmtF(f.fecha)}{f.articulo ? ` · art. ${f.articulo}` : ""}</div>
+                    </div>
+                    {f.fecha_caducidad && <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, textAlign: "right" }}>Caduca<br /><b style={{ color: C.char }}>{fmtF(f.fecha_caducidad)}</b></div>}
+                  </div>
+                ))}</div>}
+
+              <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 9 }}>Fallos ({expData.fallos.length})</div>
+              {expData.fallos.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 8 }}>Sin fallos.</div>
+                : expData.fallos.map(f => (
+                  <div key={f.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 10, padding: "9px 12px", marginBottom: 7, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontFamily: F, fontSize: 12.5, color: C.char }}>Turno <b style={{ textTransform: "capitalize" }}>{f.turno}</b> · {fmtF(f.fecha)}<div style={{ fontSize: 11, color: C.mutL, marginTop: 2 }}>{SUPTXT[f.supuesto] || `Supuesto ${f.supuesto}`}</div></div>
+                    {f.es_falsedad && <span style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, color: "#B23A2C", background: "#FBEAE7", borderRadius: 999, padding: "3px 8px", whiteSpace: "nowrap" }}>falsedad</span>}
+                  </div>
+                ))}
+            </div>
+          )}
+    </div>
+  );
+
   return (
     <div style={{ padding: "16px", maxWidth: 640, margin: "0 auto" }}>
       <div style={{ display: "flex", gap: 4, background: "#EFE9DD", borderRadius: 11, padding: 3, marginBottom: 14 }}>
-        {[["verif", "Verificaciones"], ["causas", "Causas"], ["avisos", "Avisos"]].map(([v, l]) => (
-          <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "7px 4px", borderRadius: 8, border: "none", background: tab === v ? "#fff" : "transparent", color: tab === v ? C.char : C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer", boxShadow: tab === v ? SHADOW.card : "none" }}>{l}</button>
+        {[["verif", "Verificaciones"], ["causas", "Causas"], ["avisos", "Avisos"], ["exp", "Expedientes"]].map(([v, l]) => (
+          <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "7px 3px", borderRadius: 8, border: "none", background: tab === v ? "#fff" : "transparent", color: tab === v ? C.char : C.mut, fontFamily: F, fontSize: 11.5, fontWeight: 700, cursor: "pointer", boxShadow: tab === v ? SHADOW.card : "none" }}>{l}</button>
         ))}
       </div>
 
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: C.gold, padding: "8px 12px", borderRadius: 10, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
 
-      {loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 26 }}>Cargando…</div>
-        : tab === "verif" ? <Verif /> : tab === "causas" ? <Causas /> : <Avisos />}
+      {tab === "exp" ? <Expedientes />
+        : loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 26 }}>Cargando…</div>
+          : tab === "verif" ? <Verif /> : tab === "causas" ? <Causas /> : <Avisos />}
 
       {resolviendo && (
         <div onClick={() => setResolviendo(null)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
