@@ -6,14 +6,13 @@ import { TURNOS, TURNO_OPCIONES, ymd } from "../../lib/turnos.js";
 
 const DIAS = ["L", "M", "X", "J", "V", "S", "D"];
 const MESES_C = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-const ABBR = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Descanso": "D", "Vacaciones": "V" };
+const ABBR = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P" };
 const TRABAJO = ["Mañana", "Tarde", "Apoyo 1", "Apoyo 2"];
 const navBtn = { border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 
 function lunesDe(d) { const x = new Date(d); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); x.setHours(0, 0, 0, 0); return x; }
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function fmtDiaLargo(d) { const dd = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][d.getDay()]; return `${dd} ${d.getDate()} ${MESES_C[d.getMonth()]}`; }
-// "Laura Travieso" -> "Laura T."  (para distinguir a las dos Lauras)
 function nombreCorto(n) { const p = (n || "").trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[1].charAt(0)}.` : p[0]; }
 
 function Avatar({ name, size = 26 }) { const a = avatar(name); return <span style={{ width: size, height: size, borderRadius: "999px", background: a.bg, color: a.fg, fontFamily: SF, fontSize: Math.round(size * 0.42), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{a.inicial}</span>; }
@@ -96,6 +95,9 @@ export function HorariosAdminView() {
   const eventuales = trab.filter(t => t.eventual);
   const eventualesLibres = addTo ? eventuales.filter(t => mapa[`${t.id}|${addTo.fecha}`] !== addTo.turno) : [];
 
+  const gruposLibres = [["Descanso", porTurno["Descanso"]], ["Vacaciones", porTurno["Vacaciones"]], ["Baja", porTurno["Baja"]], ["Permiso", porTurno["Permiso"]], ["Sin asignar", sinAsignar]];
+  const hayGruposLibres = gruposLibres.some(([, g]) => g.length > 0);
+
   return (
     <div style={{ padding: "14px", maxWidth: 680, margin: "0 auto" }}>
       <div style={{ display: "flex", gap: 8, background: "#F0EBE1", padding: 4, borderRadius: 13, marginBottom: 14 }}>
@@ -132,9 +134,9 @@ export function HorariosAdminView() {
               </div>
             ); })}
 
-            {(porTurno["Descanso"].length + porTurno["Vacaciones"].length + sinAsignar.length) > 0 && (
+            {hayGruposLibres && (
               <div style={{ marginTop: 4 }}>
-                {[["Descanso", porTurno["Descanso"]], ["Vacaciones", porTurno["Vacaciones"]], ["Sin asignar", sinAsignar]].map(([lab, gente]) => gente.length === 0 ? null : (
+                {gruposLibres.map(([lab, gente]) => gente.length === 0 ? null : (
                   <div key={lab} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                     <span style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: C.mutL, minWidth: 74 }}>{lab}</span>
                     {gente.map(g => <PersonaChip key={g.id} t={g} mut onClick={() => setPicker({ uid: g.id, fecha: fechaDia })} />)}
