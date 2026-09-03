@@ -31,6 +31,11 @@ export function DisciplinaAdminView() {
   const [expUid, setExpUid] = useState("");
   const [expData, setExpData] = useState(null);
   const [expLoading, setExpLoading] = useState(false);
+  const [naOpen, setNaOpen] = useState(false);
+  const [naUid, setNaUid] = useState("");
+  const [naFecha, setNaFecha] = useState("");
+  const [naTurno, setNaTurno] = useState("mañana");
+  const [naDesc, setNaDesc] = useState("");
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3800); };
   const call = (action, extra) => sb.fn("disciplina", { action, ...(extra || {}) });
 
@@ -71,6 +76,8 @@ export function DisciplinaAdminView() {
   const emitirNoCierre = async (fecha, turno) => { if (!window.confirm("Se emitirá un aviso a las dos personas de ese turno por no registrar el cierre. ¿Seguir?")) return; setBusy(true); try { await call("emitir_no_cierre", { fecha, turno }); flash("Aviso de no-cierre emitido"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const abrirResolver = (a) => { setResolviendo(a); setRRes("confirmado"); setRNivel(""); setRArt(""); setRNota(""); };
   const resolver = async () => { setBusy(true); try { await call("resolver", { aviso_id: resolviendo.id, resultado: rRes, nivel: rRes === "confirmado" && rNivel ? rNivel : undefined, articulo: rArt || undefined, nota: rNota || undefined }); setResolviendo(null); flash("Aviso resuelto"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
+  const abrirManual = () => { setNaUid(trabajadoras[0]?.id || ""); setNaFecha(new Date().toISOString().slice(0, 10)); setNaTurno("mañana"); setNaDesc(""); setNaOpen(true); };
+  const crearManual = async () => { if (!naUid || !naFecha || !naDesc.trim()) { flash("Rellena persona, fecha y descripción"); return; } setBusy(true); try { await call("crear_aviso_manual", { usuario_id: naUid, fecha: naFecha, turno: naTurno, descripcion: naDesc.trim() }); setNaOpen(false); flash("Aviso emitido"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
 
   const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 15, marginBottom: 11, boxShadow: SHADOW.card };
   const btn = (bg, fg) => ({ flex: 1, background: bg, color: fg, border: "none", borderRadius: 10, padding: 11, fontFamily: F, fontSize: 13.5, fontWeight: 700, cursor: "pointer" });
@@ -124,6 +131,7 @@ export function DisciplinaAdminView() {
 
   const Avisos = () => (
     <div>
+      <button onClick={abrirManual} style={{ width: "100%", boxSizing: "border-box", marginBottom: 12, background: "#fff", border: `1.5px dashed ${C.brd}`, borderRadius: 12, padding: "10px", fontFamily: F, fontSize: 13, fontWeight: 600, color: C.char, cursor: "pointer" }}>+ Aviso manual (validación indebida · sup. 2)</button>
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
         {[["emitido", "Pendientes"], ["resuelto", "Resueltos"], ["", "Todos"]].map(([v, l]) => (
           <button key={l} onClick={() => setFEstado(v)} style={{ flex: 1, padding: "8px 6px", borderRadius: 10, border: `1.5px solid ${fEstado === v ? C.char : C.brd}`, background: fEstado === v ? C.char : "#fff", color: fEstado === v ? C.gold : C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{l}</button>
@@ -177,7 +185,7 @@ export function DisciplinaAdminView() {
                   <div key={f.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                     <div>
                       <span style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", padding: "3px 9px", borderRadius: 999, background: "#FBEAE7", color: "#B23A2C" }}>{NIVEL_L[f.nivel] || f.nivel}</span>
-                      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 6 }}>Del {fmtF(f.fecha)}{f.articulo ? ` · art. ${f.articulo}` : ""}</div>
+                      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 6 }}>Del {fmtF(f.fecha)}{f.articulo ? ` · art. ${f.articulo}` : ""}{f.acuse_en ? ` · recibí: ${f.acuse_tipo === "no_conforme" ? "no conforme" : "recibido"}` : " · sin acuse"}</div>
                     </div>
                     {f.fecha_caducidad && <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, textAlign: "right" }}>Caduca<br /><b style={{ color: C.char }}>{fmtF(f.fecha_caducidad)}</b></div>}
                   </div>
@@ -195,6 +203,9 @@ export function DisciplinaAdminView() {
     </div>
   );
 
+  const seg = (on) => ({ flex: 1, padding: "9px", borderRadius: 10, border: `1.5px solid ${on ? C.char : C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut, fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer", textTransform: "capitalize" });
+  const inpStyle = { width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 10, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, background: "#fff", outline: "none" };
+
   return (
     <div style={{ padding: "16px", maxWidth: 640, margin: "0 auto" }}>
       <div style={{ display: "flex", gap: 3, background: "#EFE9DD", borderRadius: 11, padding: 3, marginBottom: 14 }}>
@@ -208,6 +219,35 @@ export function DisciplinaAdminView() {
       {tab === "exp" ? <Expedientes />
         : loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 26 }}>Cargando…</div>
           : tab === "verif" ? <Verif /> : tab === "causas" ? <Causas /> : tab === "nocierre" ? <NoCierre /> : <Avisos />}
+
+      {naOpen && (
+        <div onClick={() => setNaOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.cream, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "18px 18px 26px" }}>
+            <div style={{ width: 40, height: 4, background: C.brd, borderRadius: 999, margin: "0 auto 16px" }} />
+            <div style={{ fontFamily: SF, fontSize: 20, color: C.char }}>Aviso manual</div>
+            <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 16 }}>Supuesto 2 · validó como conforme una tarea que no lo estaba (falsedad, solo a quien verificó).</div>
+            <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 7 }}>Persona (quien verificó)</div>
+            <select value={naUid} onChange={e => setNaUid(e.target.value)} style={{ ...inpStyle, marginBottom: 12 }}>{trabajadoras.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select>
+            <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 7 }}>Fecha del hecho</div>
+                <input type="date" value={naFecha} onChange={e => setNaFecha(e.target.value)} style={inpStyle} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 7 }}>Turno</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => setNaTurno("mañana")} style={seg(naTurno === "mañana")}>mañana</button>
+                  <button onClick={() => setNaTurno("tarde")} style={seg(naTurno === "tarde")}>tarde</button>
+                </div>
+              </div>
+            </div>
+            <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 7 }}>Descripción de los hechos</div>
+            <textarea value={naDesc} onChange={e => setNaDesc(e.target.value)} placeholder="Qué validó como conforme y por qué no lo estaba…" rows={3} style={{ ...inpStyle, resize: "vertical", marginBottom: 16 }} />
+            <button onClick={crearManual} disabled={busy} style={{ width: "100%", boxSizing: "border-box", background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Emitiendo…" : "Emitir aviso"}</button>
+            <button onClick={() => setNaOpen(false)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {resolviendo && (
         <div onClick={() => setResolviendo(null)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
