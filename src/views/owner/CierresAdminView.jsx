@@ -55,23 +55,23 @@ export function CierresAdminView() {
   };
 
   const cajaDe = (c) => (c.caja && c.caja[0]) || null;
-  const totalCaja = (caja) => {
+  const ventasCaja = (caja) => {
     if (!caja) return 0;
-    const tk = (caja.tickets || []).reduce((s, t) => s + Number(t.importe), 0);
-    return Number(caja.caja1_efectivo) + Number(caja.caja1_tarjeta) + Number(caja.caja2_efectivo) + Number(caja.caja2_tarjeta) + tk;
+    return Number(caja.caja1_efectivo) + Number(caja.caja1_tarjeta) + Number(caja.caja2_efectivo) + Number(caja.caja2_tarjeta);
   };
+  const provCaja = (caja) => caja ? (caja.tickets || []).reduce((s, t) => s + Number(t.importe), 0) : 0;
 
-  const lineaCaja = (l, v) => <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 4 }}><span>{l}</span><span style={{ color: C.char, fontWeight: 600 }}>{fmt2(v)}</span></div>;
+  const lineaCaja = (l, v, mut) => <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 12.5, color: mut ? C.mutL : C.mut, marginBottom: 4 }}><span>{l}</span><span style={{ color: mut ? C.mut : C.char, fontWeight: 600 }}>{fmt2(v)}</span></div>;
   const bloqueCaja = (titulo, ef, ta, tickets) => {
-    const t = tickets.reduce((s, x) => s + Number(x.importe), 0);
-    const sub = Number(ef) + Number(ta) + t;
+    const sub = Number(ef) + Number(ta);
     return (
       <div style={{ marginBottom: 11 }}>
         <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: C.char, marginBottom: 6 }}>{titulo}</div>
-        {lineaCaja("Efectivo en sobre", ef)}
+        {lineaCaja("Efectivo (ventas)", ef)}
         {lineaCaja("Tarjeta", ta)}
-        {tickets.map((x, i) => lineaCaja(`Ticket · ${x.proveedor}`, x.importe))}
-        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 12.5, color: C.char, fontWeight: 700, marginTop: 4, paddingTop: 5, borderTop: `1px dashed ${C.brdL}` }}><span>Subtotal caja</span><span>{fmt2(sub)}</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 12.5, color: C.char, fontWeight: 700, marginTop: 4, paddingTop: 5, borderTop: `1px dashed ${C.brdL}` }}><span>Ventas de la caja</span><span>{fmt2(sub)}</span></div>
+        {tickets.length > 0 && <div style={{ fontFamily: F, fontSize: 10.5, color: C.mutL, marginTop: 7, marginBottom: 3 }}>Pagado a proveedores desde esta caja (no es venta):</div>}
+        {tickets.map((x, i) => lineaCaja(`· ${x.proveedor}`, x.importe, true))}
       </div>
     );
   };
@@ -103,7 +103,8 @@ export function CierresAdminView() {
           const open = abierto === c.id;
           const completo = pend === 0;
           const caja = cajaDe(c);
-          const cajaTot = totalCaja(caja);
+          const ventas = ventasCaja(caja);
+          const prov = provCaja(caja);
           const tk1 = caja ? (caja.tickets || []).filter(t => t.caja === 1) : [];
           const tk2 = caja ? (caja.tickets || []).filter(t => t.caja === 2) : [];
           return (
@@ -114,7 +115,7 @@ export function CierresAdminView() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{nombreDe[c.usuario_id] || "—"}</div>
                     <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 1, textTransform: "capitalize" }}>{fmtF(c.fecha)} · {c.turno}</div>
-                    {caja && <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: C.goldDark, marginTop: 2 }}>Caja: {fmt2(cajaTot)}</div>}
+                    {caja && <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: C.goldDark, marginTop: 2 }}>Ventas: {fmt2(ventas)}</div>}
                   </div>
                 </div>
                 <span style={{ fontFamily: F, fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 999, background: completo ? "#E7F3EC" : "#FBEAE7", color: completo ? "#1E7A46" : "#B23A2C", whiteSpace: "nowrap", flexShrink: 0 }}>{hechas}/{items.length}{completo ? "" : ` · ${pend} sin hacer`}</span>
@@ -127,7 +128,8 @@ export function CierresAdminView() {
                       <div style={{ background: "#FBF8F1", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: 13 }}>
                         {bloqueCaja("Caja 1", caja.caja1_efectivo, caja.caja1_tarjeta, tk1)}
                         {bloqueCaja("Caja 2", caja.caja2_efectivo, caja.caja2_tarjeta, tk2)}
-                        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: SF, fontSize: 15, color: C.char, borderTop: `1px solid ${C.brdL}`, paddingTop: 9 }}><span>Total del turno</span><span>{fmt2(cajaTot)}</span></div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: SF, fontSize: 15, color: C.char, borderTop: `1px solid ${C.brdL}`, paddingTop: 9 }}><span>Ventas del turno</span><span>{fmt2(ventas)}</span></div>
+                        {prov > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 7 }}><span>Pagado a proveedores (sale de la caja)</span><span>{fmt2(prov)}</span></div>}
                       </div>
                     </div>
                   )}
