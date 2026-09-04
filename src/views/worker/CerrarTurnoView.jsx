@@ -155,7 +155,7 @@ export function CerrarTurnoView({ user }) {
     <div style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 15, padding: 15, marginBottom: 12 }}>
       <div style={{ fontFamily: SF, fontSize: 16, color: C.char, marginBottom: 12 }}>{titulo}</div>
       <div style={{ display: "flex", gap: 10 }}>
-        {cajaInput(kE, "Efectivo en sobre")}
+        {cajaInput(kE, "Efectivo (ventas)")}
         {cajaInput(kT, "Tarjeta")}
       </div>
     </div>
@@ -187,8 +187,9 @@ export function CerrarTurnoView({ user }) {
 
   const ticketsC1 = provList.filter(p => selProv[p.id] === 1).reduce((s, p) => s + Number(p.importe), 0);
   const ticketsC2 = provList.filter(p => selProv[p.id] === 2).reduce((s, p) => s + Number(p.importe), 0);
-  const sub1 = pn(caja.c1e) + pn(caja.c1t) + ticketsC1;
-  const sub2 = pn(caja.c2e) + pn(caja.c2t) + ticketsC2;
+  const totalTickets = ticketsC1 + ticketsC2;
+  const sub1 = pn(caja.c1e) + pn(caja.c1t);
+  const sub2 = pn(caja.c2e) + pn(caja.c2t);
   const totalDia = sub1 + sub2;
 
   const hechasN = tareas.filter(t => estado[t.id] && estado[t.id].estado === "hecha").length;
@@ -225,16 +226,18 @@ export function CerrarTurnoView({ user }) {
               const facs2 = cajaCerrada.facturas.filter(f => f.caja === 2);
               const tk1 = facs1.reduce((s, f) => s + Number(f.importe), 0);
               const tk2 = facs2.reduce((s, f) => s + Number(f.importe), 0);
-              const s1 = Number(c.caja1_efectivo) + Number(c.caja1_tarjeta) + tk1;
-              const s2 = Number(c.caja2_efectivo) + Number(c.caja2_tarjeta) + tk2;
-              const linea = (l, v) => <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 5 }}><span>{l}</span><span style={{ color: C.char, fontWeight: 600 }}>{fmt2(v)}</span></div>;
+              const s1 = Number(c.caja1_efectivo) + Number(c.caja1_tarjeta);
+              const s2 = Number(c.caja2_efectivo) + Number(c.caja2_tarjeta);
+              const provTotal = tk1 + tk2;
+              const linea = (l, v, mut) => <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 13, color: mut ? C.mutL : C.mut, marginBottom: 5 }}><span>{l}</span><span style={{ color: mut ? C.mut : C.char, fontWeight: 600 }}>{fmt2(v)}</span></div>;
               const bloque = (titulo, ef, ta, facs, sub) => (
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: C.char, marginBottom: 7 }}>{titulo}</div>
-                  {linea("Efectivo en sobre", ef)}
+                  {linea("Efectivo (ventas)", ef)}
                   {linea("Tarjeta", ta)}
-                  {facs.map((f, i) => linea(`Ticket · ${f.proveedor}`, f.importe))}
-                  <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 13, color: C.char, fontWeight: 700, marginTop: 4, paddingTop: 6, borderTop: `1px dashed ${C.brdL}` }}><span>Subtotal caja</span><span>{fmt2(sub)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 13, color: C.char, fontWeight: 700, marginTop: 4, paddingTop: 6, borderTop: `1px dashed ${C.brdL}` }}><span>Ventas de la caja</span><span>{fmt2(sub)}</span></div>
+                  {facs.length > 0 && <div style={{ fontFamily: F, fontSize: 10.5, color: C.mutL, marginTop: 8, marginBottom: 4 }}>Pagado a proveedores desde esta caja (no es venta):</div>}
+                  {facs.map((f, i) => linea(`· ${f.proveedor}`, f.importe, true))}
                 </div>
               );
               return (
@@ -244,6 +247,7 @@ export function CerrarTurnoView({ user }) {
                     {bloque("Caja 1", c.caja1_efectivo, c.caja1_tarjeta, facs1, s1)}
                     {bloque("Caja 2", c.caja2_efectivo, c.caja2_tarjeta, facs2, s2)}
                     <div style={{ display: "flex", justifyContent: "space-between", fontFamily: SF, fontSize: 16, color: C.char, borderTop: `1px solid ${C.brdL}`, paddingTop: 11 }}><span>Total del día</span><span>{fmt2(s1 + s2)}</span></div>
+                    {provTotal > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 8 }}><span>Pagado a proveedores (sale de la caja)</span><span>{fmt2(provTotal)}</span></div>}
                   </div>
                 </div>
               );
@@ -272,7 +276,7 @@ export function CerrarTurnoView({ user }) {
           </div>
         ) : (
           <div>
-            <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 16 }}>Cuenta el dinero de cada caja e indica cuánto has metido en el sobre.</div>
+            <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 16 }}>Indica lo vendido en cada caja: efectivo y tarjeta.</div>
             {cajaCard("Caja 1", "c1e", "c1t")}
             {cajaCard("Caja 2", "c2e", "c2t")}
 
@@ -282,7 +286,7 @@ export function CerrarTurnoView({ user }) {
                 <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "12px 14px" }}>No hay pagos en efectivo a proveedores de este turno.</div>
               ) : (
                 <>
-                  <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginBottom: 10 }}>Elige a qué caja/sobre va cada pago que has hecho en efectivo. El ticket va a ese sobre y cuenta como dinero.</div>
+                  <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginBottom: 10, lineHeight: 1.4 }}>Marca de qué caja salió el dinero de cada pago en efectivo. Es solo para cuadrar la caja: <b>no cuenta como venta</b>.</div>
                   {provList.map(p => {
                     const sel = selProv[p.id];
                     const cajaBtn = (n) => <button key={n} onClick={() => setProvCaja(p.id, n)} style={{ flex: 1, padding: "9px", borderRadius: 9, cursor: "pointer", fontFamily: F, fontSize: 12.5, fontWeight: 700, border: `1.5px solid ${sel === n ? C.gold : C.brd}`, background: sel === n ? C.gold : "#fff", color: sel === n ? C.goldDark : C.mut }}>Caja {n}</button>;
@@ -301,14 +305,15 @@ export function CerrarTurnoView({ user }) {
             </div>
 
             <div style={{ background: C.char, borderRadius: 15, padding: "15px 18px", marginTop: 16 }}>
-              {[["Caja 1", pn(caja.c1e), pn(caja.c1t), ticketsC1, sub1], ["Caja 2", pn(caja.c2e), pn(caja.c2t), ticketsC2, sub2]].map(([lab, ef, ta, tk, sub]) => (
+              {[["Caja 1", pn(caja.c1e), pn(caja.c1t), sub1], ["Caja 2", pn(caja.c2e), pn(caja.c2t), sub2]].map(([lab, ef, ta, sub]) => (
                 <div key={lab} style={{ marginBottom: 11 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 14, color: "#fff", fontWeight: 600 }}><span>{lab}</span><span>{fmt2(sub)}</span></div>
-                  <div style={{ fontFamily: F, fontSize: 11.5, color: "#9a927f", marginTop: 2 }}>Efectivo {fmt2(ef)} · Tarjeta {fmt2(ta)}{tk > 0 ? ` · Tickets ${fmt2(tk)}` : ""}</div>
+                  <div style={{ fontFamily: F, fontSize: 11.5, color: "#9a927f", marginTop: 2 }}>Efectivo {fmt2(ef)} · Tarjeta {fmt2(ta)}</div>
                 </div>
               ))}
               <div style={{ borderTop: "1px solid #4A443B", margin: "6px 0 9px" }} />
               <div style={{ display: "flex", justifyContent: "space-between", fontFamily: SF, fontSize: 18, color: C.gold }}><span>Total del día</span><span>{fmt2(totalDia)}</span></div>
+              {totalTickets > 0 && <div style={{ fontFamily: F, fontSize: 11.5, color: "#9a927f", marginTop: 8 }}>Pagado a proveedores desde la caja: {fmt2(totalTickets)} · no es venta</div>}
             </div>
 
             <button onClick={() => setConfirmando(true)} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 14 }}>Revisar y cerrar</button>
@@ -345,9 +350,12 @@ export function CerrarTurnoView({ user }) {
               </div>
             )}
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: C.char, borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
-              <span style={{ fontFamily: F, fontSize: 13, color: "#fff", fontWeight: 600 }}>Total del día en caja</span>
-              <span style={{ fontFamily: SF, fontSize: 18, color: C.gold }}>{fmt2(totalDia)}</span>
+            <div style={{ background: C.char, borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontFamily: F, fontSize: 13, color: "#fff", fontWeight: 600 }}>Total del día (ventas)</span>
+                <span style={{ fontFamily: SF, fontSize: 18, color: C.gold }}>{fmt2(totalDia)}</span>
+              </div>
+              {totalTickets > 0 && <div style={{ fontFamily: F, fontSize: 11.5, color: "#9a927f", marginTop: 6 }}>Pagado a proveedores desde la caja: {fmt2(totalTickets)} · no es venta</div>}
             </div>
 
             <div style={{ fontFamily: F, fontSize: 12, color: "#7A5C1A", background: "#FBF4E6", border: "1px solid #EAD9AE", borderRadius: 10, padding: "10px 12px", marginBottom: 16, lineHeight: 1.45 }}>Una vez cerrado, el registro <b>no se puede modificar</b>. Si después ves algo mal, se corrige por la vía de la incidencia.</div>
