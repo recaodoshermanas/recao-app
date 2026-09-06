@@ -49,19 +49,25 @@ export function RevisarTurnoView({ user }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const toggle = (id) => setMarcadas(m => { const c = { ...m }; if (c[id]) delete c[id]; else c[id] = { comentario: "", foto: null }; return c; });
+  const toggle = (id) => setMarcadas(m => { const c = { ...m }; if (c[id]) delete c[id]; else c[id] = { comentario: "", fotos: [] }; return c; });
   const setCom = (id, v) => setMarcadas(m => ({ ...m, [id]: { ...m[id], comentario: v } }));
-  const onFoto = async (id, e) => { const f = e.target.files && e.target.files[0]; if (!f) return; try { const d = await comprimir(f); setMarcadas(m => ({ ...m, [id]: { ...m[id], foto: d } })); } catch { flash("No se pudo procesar la foto"); } };
+  const onFoto = async (id, e) => {
+    const files = Array.from(e.target.files || []); if (!files.length) return;
+    try { const nuevas = []; for (const f of files) nuevas.push(await comprimir(f)); setMarcadas(m => ({ ...m, [id]: { ...m[id], fotos: [...((m[id] || {}).fotos || []), ...nuevas] } })); }
+    catch { flash("No se pudo procesar la foto"); }
+    e.target.value = "";
+  };
+  const quitarFoto = (id, idx) => setMarcadas(m => ({ ...m, [id]: { ...m[id], fotos: (m[id].fotos || []).filter((_, i) => i !== idx) } }));
 
   const nMarcadas = Object.keys(marcadas).length;
   const pedirEnviar = () => {
-    if (Object.values(marcadas).some(v => !v.foto)) { flash("Cada tarea marcada como no conforme necesita una foto"); return; }
+    if (Object.values(marcadas).some(v => !v.fotos || !v.fotos.length)) { flash("Cada tarea marcada como no conforme necesita al menos una foto"); return; }
     setConfirmar(true);
   };
   const enviar = async () => {
     setBusy(true);
     try {
-      const noconformes = Object.entries(marcadas).map(([id, v]) => ({ cierre_item_id: Number(id), comentario: (v.comentario || "").trim() || null, foto: v.foto }));
+      const noconformes = Object.entries(marcadas).map(([id, v]) => ({ cierre_item_id: Number(id), comentario: (v.comentario || "").trim() || null, fotos: v.fotos }));
       await sb.fn("incidencias", { action: "verificar", cierre_id: cierre.id, noconformes });
       setConfirmar(false);
       flash("Verificación enviada. Dirección lo revisará.");
@@ -120,10 +126,11 @@ export function RevisarTurnoView({ user }) {
           ) : (
             <div>
               {cab}
-              <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 14, lineHeight: 1.4 }}>Estas tareas se marcaron como <b>hechas</b>. Si alguna no estaba hecha de verdad, márcala como no conforme y adjunta una foto. Cuando termines, envía la verificación.</div>
+              <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 14, lineHeight: 1.4 }}>Estas tareas se marcaron como <b>hechas</b>. Si alguna no estaba hecha de verdad, márcala como no conforme y adjunta una o varias fotos. Cuando termines, envía la verificación.</div>
               {completadas.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>El turno anterior no marcó ninguna tarea como hecha.</div>
                 : completadas.map(it => {
                   const mk = marcadas[it.id];
+                  const fotos = (mk && mk.fotos) || [];
                   return (
                     <div key={it.id} style={{ background: "#fff", border: `1.5px solid ${mk ? C.red : C.brdL}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
                       <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{it.texto}</div>
@@ -131,9 +138,18 @@ export function RevisarTurnoView({ user }) {
                         <button onClick={() => toggle(it.id)} style={{ marginTop: 10, background: "#FBEDE9", color: C.red, border: "none", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>No estaba hecha</button>
                       ) : (
                         <div style={{ marginTop: 12 }}>
-                          <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: `1.5px dashed ${mk.foto ? C.grn : C.red}`, borderRadius: 12, padding: mk.foto ? 8 : 14, cursor: "pointer", marginBottom: 10 }}>
-                            {mk.foto ? <img src={mk.foto} alt="" style={{ maxHeight: 160, maxWidth: "100%", borderRadius: 8, display: "block" }} />
-                              : <span style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: C.red }}>Foto obligatoria · toca para hacerla</span>}
+                          {fotos.length > 0 && (
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                              {fotos.map((f, i) => (
+                                <div key={i} style={{ position: "relative" }}>
+                                  <img src={f} alt="" style={{ width: 76, height: 76, objectFit: "cover", borderRadius: 8, display: "block" }} />
+                                  <button onClick={() => quitarFoto(it.id, i)} style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: 999, background: C.char, color: "#fff", border: "none", fontSize: 13, cursor: "pointer", lineHeight: "22px", padding: 0 }}>×</button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: `1.5px dashed ${fotos.length ? C.grn : C.red}`, borderRadius: 12, padding: 12, cursor: "pointer", marginBottom: 10 }}>
+                            <span style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: fotos.length ? C.grn : C.red }}>{fotos.length ? "Añadir otra foto" : "Foto obligatoria · toca para hacerla"}</span>
                             <input type="file" accept="image/*" capture="environment" onChange={e => onFoto(it.id, e)} style={{ display: "none" }} />
                           </label>
                           <textarea value={mk.comentario} onChange={e => setCom(it.id, e.target.value)} placeholder="Comentario (opcional)" rows={2} style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 12, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, outline: "none", resize: "vertical", marginBottom: 8 }} />
