@@ -25,7 +25,6 @@ export function DisciplinaAdminView() {
   const [resolviendo, setResolviendo] = useState(null);
   const [rRes, setRRes] = useState("confirmado");
   const [rNivel, setRNivel] = useState("");
-  const [rArt, setRArt] = useState("");
   const [rNota, setRNota] = useState("");
   const [trabajadoras, setTrabajadoras] = useState([]);
   const [expUid, setExpUid] = useState("");
@@ -69,19 +68,20 @@ export function DisciplinaAdminView() {
   }, []);
   useEffect(() => { loadExp(expUid); }, [expUid, loadExp]);
 
-  const verFoto = async (id) => { setFotos(p => ({ ...p, [id]: "loading" })); try { const r = await sb.fn("incidencias", { action: "detalle", id }); setFotos(p => ({ ...p, [id]: r.foto || null })); } catch (e) { setFotos(p => ({ ...p, [id]: null })); } };
+  const verFoto = async (id) => { setFotos(p => ({ ...p, [id]: "loading" })); try { const r = await sb.fn("incidencias", { action: "detalle", id }); setFotos(p => ({ ...p, [id]: (r.fotos && r.fotos.length ? r.fotos : (r.foto ? [r.foto] : [])) })); } catch (e) { setFotos(p => ({ ...p, [id]: [] })); } };
   const emitir = async (id) => { setBusy(true); try { await call("emitir_verificacion", { incidencia_id: id }); flash("Aviso emitido a la responsable"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const descartar = async (id) => { if (!window.confirm("¿Descartar esta verificación? No generará aviso.")) return; setBusy(true); try { await call("descartar_verificacion", { incidencia_id: id }); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const revisarCausa = async (id, decision) => { if (decision === "rechazada" && !window.confirm("Rechazar la causa generará un aviso a las dos personas del turno. ¿Seguir?")) return; setBusy(true); try { await call("revisar_causa", { cierre_item_id: id, decision, justificacion: causaNota[id] || null }); flash(decision === "rechazada" ? "Causa rechazada · aviso emitido" : "Causa validada"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const emitirNoCierre = async (fecha, turno) => { if (!window.confirm("Se emitirá un aviso a las dos personas de ese turno por no registrar el cierre. ¿Seguir?")) return; setBusy(true); try { await call("emitir_no_cierre", { fecha, turno }); flash("Aviso de no-cierre emitido"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
-  const abrirResolver = (a) => { setResolviendo(a); setRRes("confirmado"); setRNivel(""); setRArt(""); setRNota(""); };
-  const resolver = async () => { setBusy(true); try { await call("resolver", { aviso_id: resolviendo.id, resultado: rRes, nivel: rRes === "confirmado" && rNivel ? rNivel : undefined, articulo: rArt || undefined, nota: rNota || undefined }); setResolviendo(null); flash("Aviso resuelto"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
+  const abrirResolver = (a) => { setResolviendo(a); setRRes("confirmado"); setRNivel(""); setRNota(""); };
+  const resolver = async () => { setBusy(true); try { await call("resolver", { aviso_id: resolviendo.id, resultado: rRes, nivel: rRes === "confirmado" && rNivel ? rNivel : undefined, nota: rNota || undefined }); setResolviendo(null); flash("Aviso resuelto"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const abrirManual = () => { setNaUid(trabajadoras[0]?.id || ""); setNaFecha(new Date().toISOString().slice(0, 10)); setNaTurno("mañana"); setNaDesc(""); setNaOpen(true); };
   const crearManual = async () => { if (!naUid || !naFecha || !naDesc.trim()) { flash("Rellena persona, fecha y descripción"); return; } setBusy(true); try { await call("crear_aviso_manual", { usuario_id: naUid, fecha: naFecha, turno: naTurno, descripcion: naDesc.trim() }); setNaOpen(false); flash("Aviso emitido"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
 
   const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 15, marginBottom: 11, boxShadow: SHADOW.card };
   const btn = (bg, fg) => ({ flex: 1, background: bg, color: fg, border: "none", borderRadius: 10, padding: 11, fontFamily: F, fontSize: 13.5, fontWeight: 700, cursor: "pointer" });
   const vacio = (t) => <div style={{ fontFamily: SF, fontSize: 16, color: "#1E7A46", textAlign: "center", padding: 30 }}>{t}</div>;
+  const fotosView = (f) => f === undefined ? null : f === "loading" ? <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 10 }}>Cargando…</div> : (!f || f.length === 0) ? <div style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 10 }}>Sin fotos</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>{f.map((x, i) => <img key={i} src={x} alt="" style={{ width: "100%", borderRadius: 12, display: "block" }} />)}</div>;
 
   const Verif = () => verif.length === 0 ? vacio("Nada pendiente ✓")
     : verif.map(it => {
@@ -94,10 +94,7 @@ export function DisciplinaAdminView() {
           </div>
           <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 7, lineHeight: 1.5 }}>Turno <b style={{ textTransform: "capitalize" }}>{it.turno}</b> · {fmtDia(it.fecha)}<br />Sin hacer: <b style={{ color: C.red }}>{it.cerrado_por_nombre}</b> · reportó <b>{it.reportado_por_nombre}</b></div>
           {it.comentario && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: "#FAF7F2", borderRadius: 10, padding: "9px 12px", marginTop: 9, fontStyle: "italic" }}>“{it.comentario}”</div>}
-          {f === undefined ? <button onClick={() => verFoto(it.id)} style={{ marginTop: 10, background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>Ver prueba</button>
-            : f === "loading" ? <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 10 }}>Cargando…</div>
-              : f === null ? <div style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 10 }}>Sin foto</div>
-                : <img src={f} alt="" style={{ width: "100%", borderRadius: 12, marginTop: 10, display: "block" }} />}
+          {f === undefined ? <button onClick={() => verFoto(it.id)} style={{ marginTop: 10, background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>Ver fotos</button> : fotosView(f)}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button onClick={() => emitir(it.id)} disabled={busy} style={btn(C.char, C.gold)}>Aceptar (emitir aviso)</button>
             <button onClick={() => descartar(it.id)} disabled={busy} style={btn("#fff", C.mut)}>Descartar</button>
@@ -151,7 +148,7 @@ export function DisciplinaAdminView() {
               <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 4 }}>Turno <b style={{ textTransform: "capitalize" }}>{a.turno}</b> · {fmtDia(a.fecha)}{a.es_falsedad ? " · falsedad" : ""}</div>
               <div style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 4 }}>{SUPTXT[a.supuesto] || a.descripcion}</div>
               {a.alegacion_en && <div style={{ background: "#EAF0F8", borderRadius: 10, padding: "9px 12px", marginTop: 9 }}><div style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: "#3D6AA5", marginBottom: 4 }}>Alegación de la trabajadora</div><div style={{ fontFamily: F, fontSize: 13, color: C.char, lineHeight: 1.4 }}>{a.alegacion || "(sin texto)"}</div></div>}
-              {a.estado === "resuelto" && (a.nivel || a.resolucion_nota) && <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 8 }}>{a.nivel ? <b style={{ color: C.red }}>Falta {NIVEL_L[a.nivel]} (art. {a.articulo})</b> : null}{a.resolucion_nota ? <div style={{ marginTop: 3 }}>{a.resolucion_nota}</div> : null}</div>}
+              {a.estado === "resuelto" && (a.nivel || a.resolucion_nota) && <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 8 }}>{a.nivel ? <b style={{ color: C.red }}>Falta {NIVEL_L[a.nivel]}</b> : null}{a.resolucion_nota ? <div style={{ marginTop: 3 }}>{a.resolucion_nota}</div> : null}</div>}
               {a.estado === "emitido" && <button onClick={() => abrirResolver(a)} style={{ width: "100%", marginTop: 12, background: C.char, color: C.gold, border: "none", borderRadius: 10, padding: 12, fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Resolver</button>}
             </div>
           );
@@ -185,7 +182,7 @@ export function DisciplinaAdminView() {
                   <div key={f.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                     <div>
                       <span style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", padding: "3px 9px", borderRadius: 999, background: "#FBEAE7", color: "#B23A2C" }}>{NIVEL_L[f.nivel] || f.nivel}</span>
-                      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 6 }}>Del {fmtF(f.fecha)}{f.articulo ? ` · art. ${f.articulo}` : ""}{f.acuse_en ? ` · recibí: ${f.acuse_tipo === "no_conforme" ? "no conforme" : "recibido"}` : " · sin acuse"}</div>
+                      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 6 }}>Del {fmtF(f.fecha)}{f.acuse_en ? ` · recibí: ${f.acuse_tipo === "no_conforme" ? "no conforme" : "recibido"}` : " · sin acuse"}</div>
                     </div>
                     {f.fecha_caducidad && <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, textAlign: "right" }}>Caduca<br /><b style={{ color: C.char }}>{fmtF(f.fecha_caducidad)}</b></div>}
                   </div>
@@ -270,14 +267,13 @@ export function DisciplinaAdminView() {
             {rRes === "confirmado" && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 8 }}>¿Calificar como falta? (opcional)</div>
-                <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {NIVELES.map(([v, l]) => { const on = rNivel === v; return <button key={l} onClick={() => setRNivel(v)} style={{ padding: "8px 12px", borderRadius: 10, border: `1.5px solid ${on ? C.char : C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{l}</button>; })}
                 </div>
-                {rNivel && <input value={rArt} onChange={e => setRArt(e.target.value)} placeholder="Artículo del convenio (obligatorio)" style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${rArt ? C.brd : "#EDC9C3"}`, borderRadius: 10, padding: "9px 11px", fontFamily: F, fontSize: 14, color: C.char, outline: "none", marginBottom: 10 }} />}
               </div>
             )}
             <textarea value={rNota} onChange={e => setRNota(e.target.value)} placeholder="Motivo / nota de la resolución" rows={2} style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 12, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, outline: "none", resize: "vertical", marginBottom: 16 }} />
-            <button onClick={resolver} disabled={busy || (rRes === "confirmado" && rNivel && !rArt.trim())} style={{ width: "100%", boxSizing: "border-box", background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: (busy || (rRes === "confirmado" && rNivel && !rArt.trim())) ? 0.5 : 1 }}>{busy ? "Guardando…" : "Confirmar resolución"}</button>
+            <button onClick={resolver} disabled={busy} style={{ width: "100%", boxSizing: "border-box", background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Guardando…" : "Confirmar resolución"}</button>
             <button onClick={() => setResolviendo(null)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
           </div>
         </div>
