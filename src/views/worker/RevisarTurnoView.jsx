@@ -52,16 +52,17 @@ export function RevisarTurnoView({ user }) {
   const toggle = (id) => setMarcadas(m => { const c = { ...m }; if (c[id]) delete c[id]; else c[id] = { comentario: "", fotos: [] }; return c; });
   const setCom = (id, v) => setMarcadas(m => ({ ...m, [id]: { ...m[id], comentario: v } }));
   const onFoto = async (id, e) => {
-    const files = Array.from(e.target.files || []); if (!files.length) return;
-    try { const nuevas = []; for (const f of files) nuevas.push(await comprimir(f)); setMarcadas(m => ({ ...m, [id]: { ...m[id], fotos: [...((m[id] || {}).fotos || []), ...nuevas] } })); }
-    catch { flash("No se pudo procesar la foto"); }
+    const files = Array.from(e.target.files || []);
     e.target.value = "";
+    for (const f of files) {
+      try { const d = await comprimir(f); setMarcadas(m => ({ ...m, [id]: { ...m[id], fotos: [...(m[id]?.fotos || []), d] } })); } catch { flash("No se pudo procesar una foto"); }
+    }
   };
-  const quitarFoto = (id, idx) => setMarcadas(m => ({ ...m, [id]: { ...m[id], fotos: (m[id].fotos || []).filter((_, i) => i !== idx) } }));
+  const quitarFoto = (id, i) => setMarcadas(m => ({ ...m, [id]: { ...m[id], fotos: (m[id].fotos || []).filter((_, j) => j !== i) } }));
 
   const nMarcadas = Object.keys(marcadas).length;
   const pedirEnviar = () => {
-    if (Object.values(marcadas).some(v => !v.fotos || !v.fotos.length)) { flash("Cada tarea marcada como no conforme necesita al menos una foto"); return; }
+    if (Object.values(marcadas).some(v => !v.fotos || v.fotos.length === 0)) { flash("Cada tarea marcada como no conforme necesita al menos una foto"); return; }
     setConfirmar(true);
   };
   const enviar = async () => {
@@ -94,6 +95,21 @@ export function RevisarTurnoView({ user }) {
         </div>
       ))}
       <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 2 }}>Estas ya constan como no hechas. No se verifican.</div>
+    </div>
+  );
+
+  const thumbs = (mk, id) => (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+      {(mk.fotos || []).map((f, i) => (
+        <div key={i} style={{ position: "relative" }}>
+          <img src={f} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, display: "block" }} />
+          <button onClick={() => quitarFoto(id, i)} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: 999, background: C.red, color: "#fff", border: "2px solid #fff", fontSize: 11, fontWeight: 700, cursor: "pointer", lineHeight: 1, padding: 0 }}>×</button>
+        </div>
+      ))}
+      <label style={{ width: 72, height: 72, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, border: `1.5px dashed ${(mk.fotos || []).length ? C.grn : C.red}`, borderRadius: 8, cursor: "pointer", color: (mk.fotos || []).length ? C.grn : C.red, fontFamily: F, fontSize: 22 }}>
+        +<span style={{ fontSize: 9.5, fontWeight: 700 }}>foto</span>
+        <input type="file" accept="image/*" capture="environment" multiple onChange={e => onFoto(id, e)} style={{ display: "none" }} />
+      </label>
     </div>
   );
 
@@ -130,7 +146,6 @@ export function RevisarTurnoView({ user }) {
               {completadas.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>El turno anterior no marcó ninguna tarea como hecha.</div>
                 : completadas.map(it => {
                   const mk = marcadas[it.id];
-                  const fotos = (mk && mk.fotos) || [];
                   return (
                     <div key={it.id} style={{ background: "#fff", border: `1.5px solid ${mk ? C.red : C.brdL}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
                       <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{it.texto}</div>
@@ -138,20 +153,8 @@ export function RevisarTurnoView({ user }) {
                         <button onClick={() => toggle(it.id)} style={{ marginTop: 10, background: "#FBEDE9", color: C.red, border: "none", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>No estaba hecha</button>
                       ) : (
                         <div style={{ marginTop: 12 }}>
-                          {fotos.length > 0 && (
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                              {fotos.map((f, i) => (
-                                <div key={i} style={{ position: "relative" }}>
-                                  <img src={f} alt="" style={{ width: 76, height: 76, objectFit: "cover", borderRadius: 8, display: "block" }} />
-                                  <button onClick={() => quitarFoto(it.id, i)} style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: 999, background: C.char, color: "#fff", border: "none", fontSize: 13, cursor: "pointer", lineHeight: "22px", padding: 0 }}>×</button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: `1.5px dashed ${fotos.length ? C.grn : C.red}`, borderRadius: 12, padding: 12, cursor: "pointer", marginBottom: 10 }}>
-                            <span style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: fotos.length ? C.grn : C.red }}>{fotos.length ? "Añadir otra foto" : "Foto obligatoria · toca para hacerla"}</span>
-                            <input type="file" accept="image/*" capture="environment" onChange={e => onFoto(it.id, e)} style={{ display: "none" }} />
-                          </label>
+                          {thumbs(mk, it.id)}
+                          {(mk.fotos || []).length === 0 && <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.red, marginBottom: 10, marginTop: -4 }}>Foto obligatoria (al menos una)</div>}
                           <textarea value={mk.comentario} onChange={e => setCom(it.id, e.target.value)} placeholder="Comentario (opcional)" rows={2} style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 12, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, outline: "none", resize: "vertical", marginBottom: 8 }} />
                           <button onClick={() => toggle(it.id)} style={{ background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>Quitar marca</button>
                         </div>
