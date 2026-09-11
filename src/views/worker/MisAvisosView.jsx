@@ -11,8 +11,14 @@ function docSancion(s) {
 Falta ${NIVEL_L[s.nivel] || s.nivel}
 Fecha del hecho: ${fmtF(s.fecha)}
 Hechos: ${s.hechos || "—"}
-Convenio de referencia: mayoristas y minoristas de alimentación de Sevilla.
 Acusar recibo no implica aceptar el contenido.`;
+}
+function comprimir(file, maxSide = 1200, q = 0.55) {
+  return new Promise((res, rej) => {
+    const img = new Image(); const u = URL.createObjectURL(file);
+    img.onload = () => { URL.revokeObjectURL(u); let w = img.width, h = img.height; if (w >= h && w > maxSide) { h = Math.round(h * maxSide / w); w = maxSide; } else if (h > maxSide) { w = Math.round(w * maxSide / h); h = maxSide; } const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(img, 0, 0, w, h); res(c.toDataURL("image/jpeg", q)); };
+    img.onerror = rej; img.src = u;
+  });
 }
 function Countdown({ hasta }) {
   const [now, setNow] = useState(Date.now());
@@ -30,6 +36,7 @@ export function MisAvisosView({ user }) {
   const [loading, setLoading] = useState(true);
   const [abierto, setAbierto] = useState(null);
   const [texto, setTexto] = useState("");
+  const [fotos, setFotos] = useState([]);
   const [pruebas, setPruebas] = useState({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -45,15 +52,15 @@ export function MisAvisosView({ user }) {
 
   const abrir = async (a) => {
     if (abierto === a.id) { setAbierto(null); return; }
-    setAbierto(a.id); setTexto("");
+    setAbierto(a.id); setTexto(""); setFotos([]);
     if (!a.leido_en) { try { await sb.fn("disciplina", { action: "acuse", aviso_id: a.id }); setAvisos(prev => prev.map(x => x.id === a.id ? { ...x, leido_en: new Date().toISOString() } : x)); } catch (e) { /* noop */ } }
   };
-  const verPrueba = async (a) => { setPruebas(p => ({ ...p, [a.id]: "loading" })); try { const r = await sb.fn("disciplina", { action: "prueba", aviso_id: a.id }); setPruebas(p => ({ ...p, [a.id]: r.fotos || [] })); } catch (e) { setPruebas(p => ({ ...p, [a.id]: [] })); } };
-  const alegar = async (a) => { if (!texto.trim()) { flash("Escribe tu alegación"); return; } setBusy(true); try { await sb.fn("disciplina", { action: "alegar", aviso_id: a.id, texto: texto.trim() }); flash("Alegación presentada"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
+  const verPrueba = async (a) => { setPruebas(p => ({ ...p, [a.id]: "loading" })); try { const r = await sb.fn("disciplina", { action: "prueba", aviso_id: a.id }); setPruebas(p => ({ ...p, [a.id]: (r.fotos && r.fotos.length ? r.fotos : (r.foto ? [r.foto] : [])) })); } catch (e) { setPruebas(p => ({ ...p, [a.id]: [] })); } };
+  const onFoto = async (e) => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) { try { const d = await comprimir(f); setFotos(prev => [...prev, d]); } catch { /* noop */ } } };
+  const alegar = async (a) => { if (!texto.trim() && !fotos.length) { flash("Escribe tu alegación"); return; } setBusy(true); try { await sb.fn("disciplina", { action: "alegar", aviso_id: a.id, texto: texto.trim() || null, archivos: fotos }); flash("Alegación presentada"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const acusar = async (s, tipo) => { setBusy(true); try { await sb.fn("disciplina", { action: "acuse_sancion", falta_id: s.id, tipo, documento: docSancion(s), dispositivo: (navigator.userAgent || "").slice(0, 200) }); flash(tipo === "no_conforme" ? "Recibí firmado (no conforme)" : "Recibí firmado"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
 
   const sancPend = sanciones.filter(s => !s.acuse_en);
-  const motivosDe = (a) => (a.motivos && a.motivos.length) ? a.motivos : [{ descripcion: a.descripcion, tarea_texto: a.tarea_texto }];
 
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
@@ -86,14 +93,12 @@ export function MisAvisosView({ user }) {
               const alegado = !!a.alegacion_en;
               const pr = pruebas[a.id];
               const res = RES[a.resultado];
-              const motivos = motivosDe(a);
-              const tienePrueba = (a.motivos || []).some(m => m.incidencia_id) || a.incidencia_id;
               return (
                 <div key={a.id} style={{ background: "#fff", border: `1.5px solid ${emitido ? C.gold : C.brdL}`, borderRadius: 16, padding: 15, marginBottom: 11 }}>
                   <div onClick={() => abrir(a)} style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontFamily: SF, fontSize: 16, color: C.char }}>Aviso · {fmtDia(a.fecha)}</div>
-                      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 1, textTransform: "capitalize" }}>Turno {a.turno} · {motivos.length} {motivos.length === 1 ? "cosa" : "cosas"}</div>
+                      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 1, textTransform: "capitalize" }}>Turno {a.turno}</div>
                     </div>
                     {emitido
                       ? <span style={{ fontFamily: F, fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 999, background: "#FBF0DA", color: "#8a6a1e", whiteSpace: "nowrap" }}>{alegado ? "Alegado" : "Por responder"}</span>
@@ -103,23 +108,16 @@ export function MisAvisosView({ user }) {
                   {open && (
                     <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.brdL}` }}>
                       <div style={{ fontFamily: F, fontSize: 12, color: "#7A5C1A", background: "#FBF4E6", border: "1px solid #EAD9AE", borderRadius: 10, padding: "9px 12px", marginBottom: 12, lineHeight: 1.4 }}>Esto <b>no es una sanción</b>. Es un paso previo: puedes dar tu versión antes de que dirección decida.</div>
-
-                      {motivos.map((m, i) => (
-                        <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                          <span style={{ color: C.red, fontWeight: 700 }}>•</span>
-                          <div style={{ fontFamily: F, fontSize: 13.5, color: C.char, lineHeight: 1.4 }}>{m.descripcion}</div>
-                        </div>
-                      ))}
-
-                      {tienePrueba && (
-                        <div style={{ marginTop: 6 }}>
-                          {pr === undefined && <button onClick={() => verPrueba(a)} style={{ background: C.char, color: C.gold, border: "none", borderRadius: 9, padding: "7px 14px", fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Ver pruebas</button>}
+                      <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.4 }}>{a.descripcion}</div>
+                      {a.tarea_texto && <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginTop: 6 }}>Tarea: {a.tarea_texto}</div>}
+                      {a.incidencia_id && (
+                        <div style={{ marginTop: 10 }}>
+                          {pr === undefined && <button onClick={() => verPrueba(a)} style={{ background: C.char, color: C.gold, border: "none", borderRadius: 9, padding: "7px 14px", fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Ver prueba</button>}
                           {pr === "loading" && <span style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Cargando…</span>}
-                          {Array.isArray(pr) && pr.length === 0 && <span style={{ fontFamily: F, fontSize: 12, color: C.mutL }}>Sin fotos</span>}
-                          {Array.isArray(pr) && pr.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>{pr.map((f, i) => <img key={i} src={f} alt="" style={{ width: "100%", maxWidth: 240, borderRadius: 12, display: "block" }} />)}</div>}
+                          {Array.isArray(pr) && pr.length === 0 && <span style={{ fontFamily: F, fontSize: 12, color: C.mutL }}>Sin prueba</span>}
+                          {Array.isArray(pr) && pr.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>{pr.map((f, i) => <img key={i} src={f} alt="" style={{ width: "100%", borderRadius: 12, display: "block" }} />)}</div>}
                         </div>
                       )}
-
                       {emitido ? (
                         <div style={{ marginTop: 14 }}>
                           <div style={{ fontFamily: F, fontSize: 12.5, marginBottom: 10 }}><Countdown hasta={a.plazo_alegacion} /></div>
@@ -131,7 +129,11 @@ export function MisAvisosView({ user }) {
                           ) : (
                             <div>
                               <textarea value={texto} onChange={e => setTexto(e.target.value)} placeholder="Tu versión de lo ocurrido…" rows={3} style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 12, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, outline: "none", resize: "vertical", marginBottom: 8 }} />
-                              <button onClick={() => alegar(a)} disabled={busy} style={{ width: "100%", background: C.char, color: C.gold, border: "none", borderRadius: 10, padding: 12, fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Enviando…" : "Presentar alegación"}</button>
+                              {fotos.length > 0 && <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>{fotos.map((f, i) => <img key={i} src={f} alt="" style={{ width: 54, height: 54, objectFit: "cover", borderRadius: 8 }} />)}</div>}
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <label style={{ flex: "0 0 auto", border: `1.5px solid ${C.brd}`, borderRadius: 10, padding: "10px 14px", fontFamily: F, fontSize: 13, fontWeight: 600, color: C.mut, cursor: "pointer" }}>+ Foto<input type="file" accept="image/*" multiple onChange={onFoto} style={{ display: "none" }} /></label>
+                                <button onClick={() => alegar(a)} disabled={busy} style={{ flex: 1, background: C.char, color: C.gold, border: "none", borderRadius: 10, padding: 12, fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Enviando…" : "Presentar alegación"}</button>
+                              </div>
                             </div>
                           )}
                         </div>
