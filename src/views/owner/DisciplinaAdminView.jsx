@@ -35,6 +35,14 @@ export function DisciplinaAdminView() {
   const [naFecha, setNaFecha] = useState("");
   const [naTurno, setNaTurno] = useState("mañana");
   const [naDesc, setNaDesc] = useState("");
+  const [fmOpen, setFmOpen] = useState(false);
+  const [fmUid, setFmUid] = useState("");
+  const [fmFecha, setFmFecha] = useState("");
+  const [fmTurno, setFmTurno] = useState("");
+  const [fmDesc, setFmDesc] = useState("");
+  const [fmFalsedad, setFmFalsedad] = useState(false);
+  const [fmPlus, setFmPlus] = useState(true);
+  const [fmNivel, setFmNivel] = useState("");
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3800); };
   const call = (action, extra) => sb.fn("disciplina", { action, ...(extra || {}) });
 
@@ -77,11 +85,16 @@ export function DisciplinaAdminView() {
   const resolver = async () => { setBusy(true); try { await call("resolver", { aviso_id: resolviendo.id, resultado: rRes, nivel: rRes === "confirmado" && rNivel ? rNivel : undefined, nota: rNota || undefined }); setResolviendo(null); flash("Aviso resuelto"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const abrirManual = () => { setNaUid(trabajadoras[0]?.id || ""); setNaFecha(new Date().toISOString().slice(0, 10)); setNaTurno("mañana"); setNaDesc(""); setNaOpen(true); };
   const crearManual = async () => { if (!naUid || !naFecha || !naDesc.trim()) { flash("Rellena persona, fecha y descripción"); return; } setBusy(true); try { await call("crear_aviso_manual", { usuario_id: naUid, fecha: naFecha, turno: naTurno, descripcion: naDesc.trim() }); setNaOpen(false); flash("Aviso emitido"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
+  const abrirFallo = () => { setFmUid(trabajadoras[0]?.id || ""); setFmFecha(new Date().toISOString().slice(0, 10)); setFmTurno(""); setFmDesc(""); setFmFalsedad(false); setFmPlus(true); setFmNivel(""); setFmOpen(true); };
+  const crearFallo = async () => { if (!fmUid || !fmFecha || !fmDesc.trim()) { flash("Rellena persona, fecha y descripción"); return; } setBusy(true); try { await call("crear_fallo_manual", { usuario_id: fmUid, fecha: fmFecha, turno: fmTurno || null, descripcion: fmDesc.trim(), es_falsedad: fmFalsedad, cuenta_plus: fmPlus, nivel: fmNivel || undefined }); setFmOpen(false); flash("Fallo registrado"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
 
   const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 15, marginBottom: 11, boxShadow: SHADOW.card };
   const btn = (bg, fg) => ({ flex: 1, background: bg, color: fg, border: "none", borderRadius: 10, padding: 11, fontFamily: F, fontSize: 13.5, fontWeight: 700, cursor: "pointer" });
   const vacio = (t) => <div style={{ fontFamily: SF, fontSize: 16, color: "#1E7A46", textAlign: "center", padding: 30 }}>{t}</div>;
   const fotosView = (f) => f === undefined ? null : f === "loading" ? <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 10 }}>Cargando…</div> : (!f || f.length === 0) ? <div style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 10 }}>Sin fotos</div> : <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>{f.map((x, i) => <img key={i} src={x} alt="" style={{ width: "100%", borderRadius: 12, display: "block" }} />)}</div>;
+  const seg = (on) => ({ flex: 1, padding: "9px", borderRadius: 10, border: `1.5px solid ${on ? C.char : C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut, fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" });
+  const inpStyle = { width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 10, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, background: "#fff", outline: "none" };
+  const lbl = { fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 7 };
 
   const Verif = () => verif.length === 0 ? vacio("Nada pendiente ✓")
     : verif.map(it => {
@@ -128,7 +141,10 @@ export function DisciplinaAdminView() {
 
   const Avisos = () => (
     <div>
-      <button onClick={abrirManual} style={{ width: "100%", boxSizing: "border-box", marginBottom: 12, background: "#fff", border: `1.5px dashed ${C.brd}`, borderRadius: 12, padding: "10px", fontFamily: F, fontSize: 13, fontWeight: 600, color: C.char, cursor: "pointer" }}>+ Aviso manual (validación indebida · sup. 2)</button>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button onClick={abrirFallo} style={{ flex: 1, boxSizing: "border-box", background: "#fff", border: `1.5px dashed ${C.brd}`, borderRadius: 12, padding: "10px", fontFamily: F, fontSize: 12.5, fontWeight: 700, color: C.char, cursor: "pointer" }}>+ Fallo / falta manual</button>
+        <button onClick={abrirManual} style={{ flex: 1, boxSizing: "border-box", background: "#fff", border: `1.5px dashed ${C.brd}`, borderRadius: 12, padding: "10px", fontFamily: F, fontSize: 12.5, fontWeight: 600, color: C.mut, cursor: "pointer" }}>+ Aviso (sup. 2)</button>
+      </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
         {[["emitido", "Pendientes"], ["resuelto", "Resueltos"], ["", "Todos"]].map(([v, l]) => (
           <button key={l} onClick={() => setFEstado(v)} style={{ flex: 1, padding: "8px 6px", borderRadius: 10, border: `1.5px solid ${fEstado === v ? C.char : C.brd}`, background: fEstado === v ? C.char : "#fff", color: fEstado === v ? C.gold : C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{l}</button>
@@ -176,7 +192,7 @@ export function DisciplinaAdminView() {
                   <div style={{ fontFamily: F, fontSize: 11, color: C.mut }}>falsedades · 90 días</div>
                 </div>
               </div>
-              <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 9 }}>Faltas vigentes</div>
+              <div style={lbl}>Faltas vigentes</div>
               {expData.faltas.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: "#1E7A46", background: "#E7F3EC", borderRadius: 10, padding: "10px 12px", textAlign: "center", marginBottom: 18 }}>Sin faltas vigentes ✓</div>
                 : <div style={{ marginBottom: 18 }}>{expData.faltas.map(f => (
                   <div key={f.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
@@ -187,11 +203,11 @@ export function DisciplinaAdminView() {
                     {f.fecha_caducidad && <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, textAlign: "right" }}>Caduca<br /><b style={{ color: C.char }}>{fmtF(f.fecha_caducidad)}</b></div>}
                   </div>
                 ))}</div>}
-              <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 9 }}>Fallos ({expData.fallos.length})</div>
+              <div style={lbl}>Fallos ({expData.fallos.length})</div>
               {expData.fallos.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 8 }}>Sin fallos.</div>
                 : expData.fallos.map(f => (
                   <div key={f.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 10, padding: "9px 12px", marginBottom: 7, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontFamily: F, fontSize: 12.5, color: C.char }}>Turno <b style={{ textTransform: "capitalize" }}>{f.turno}</b> · {fmtF(f.fecha)}<div style={{ fontSize: 11, color: C.mutL, marginTop: 2 }}>{SUPTXT[f.supuesto] || `Supuesto ${f.supuesto}`}</div></div>
+                    <div style={{ fontFamily: F, fontSize: 12.5, color: C.char }}>{f.turno ? <>Turno <b style={{ textTransform: "capitalize" }}>{f.turno}</b> · </> : null}{fmtF(f.fecha)}<div style={{ fontSize: 11, color: C.mutL, marginTop: 2 }}>{f.origen === "manual" ? "Manual" : (SUPTXT[f.supuesto] || `Supuesto ${f.supuesto}`)}{f.cuenta_plus === false ? " · no cuenta al plus" : ""}</div></div>
                     {f.es_falsedad && <span style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, color: "#B23A2C", background: "#FBEAE7", borderRadius: 999, padding: "3px 8px", whiteSpace: "nowrap" }}>falsedad</span>}
                   </div>
                 ))}
@@ -199,9 +215,6 @@ export function DisciplinaAdminView() {
           )}
     </div>
   );
-
-  const seg = (on) => ({ flex: 1, padding: "9px", borderRadius: 10, border: `1.5px solid ${on ? C.char : C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut, fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer", textTransform: "capitalize" });
-  const inpStyle = { width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 10, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, background: "#fff", outline: "none" };
 
   return (
     <div style={{ padding: "16px", maxWidth: 640, margin: "0 auto" }}>
@@ -217,28 +230,75 @@ export function DisciplinaAdminView() {
         : loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 26 }}>Cargando…</div>
           : tab === "verif" ? <Verif /> : tab === "causas" ? <Causas /> : tab === "nocierre" ? <NoCierre /> : <Avisos />}
 
+      {fmOpen && (
+        <div onClick={() => setFmOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.cream, width: "100%", maxWidth: 540, maxHeight: "92vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "18px 18px 26px" }}>
+            <div style={{ width: 40, height: 4, background: C.brd, borderRadius: 999, margin: "0 auto 16px" }} />
+            <div style={{ fontFamily: SF, fontSize: 20, color: C.char }}>Fallo / falta manual</div>
+            <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 16 }}>Para corregir un fallo de turno o registrar una sanción de conducta. Se anota directamente (sin plazo de alegación).</div>
+            <div style={lbl}>Persona</div>
+            <select value={fmUid} onChange={e => setFmUid(e.target.value)} style={{ ...inpStyle, marginBottom: 12 }}>{trabajadoras.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select>
+            <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={lbl}>Fecha</div>
+                <input type="date" value={fmFecha} onChange={e => setFmFecha(e.target.value)} style={inpStyle} />
+              </div>
+              <div style={{ flex: 1.4 }}>
+                <div style={lbl}>Turno (opcional)</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[["", "—"], ["mañana", "Mañ."], ["tarde", "Tar."]].map(([v, l]) => <button key={l} onClick={() => setFmTurno(v)} style={seg(fmTurno === v)}>{l}</button>)}
+                </div>
+              </div>
+            </div>
+            <div style={lbl}>Descripción de los hechos</div>
+            <textarea value={fmDesc} onChange={e => setFmDesc(e.target.value)} placeholder="Qué ha pasado…" rows={3} style={{ ...inpStyle, resize: "vertical", marginBottom: 14 }} />
+
+            <div style={lbl}>¿Cuenta para el plus?</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+              <button onClick={() => setFmPlus(true)} style={seg(fmPlus)}>Sí · plus + disciplina</button>
+              <button onClick={() => setFmPlus(false)} style={seg(!fmPlus)}>No · solo disciplina</button>
+            </div>
+            <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginBottom: 14, lineHeight: 1.4 }}>{fmPlus ? "Resta en el plus y cuenta en los contadores disciplinarios." : "No afecta al plus; solo cuenta como conducta (contadores disciplinarios)."}</div>
+
+            <div style={lbl}>¿Es falsedad?</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <button onClick={() => setFmFalsedad(false)} style={seg(!fmFalsedad)}>No</button>
+              <button onClick={() => setFmFalsedad(true)} style={seg(fmFalsedad)}>Sí (cuenta en las falsedades)</button>
+            </div>
+
+            <div style={lbl}>Calificar como falta (opcional)</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 18 }}>
+              {NIVELES.map(([v, l]) => { const on = fmNivel === v; return <button key={l} onClick={() => setFmNivel(v)} style={{ padding: "8px 12px", borderRadius: 10, border: `1.5px solid ${on ? C.char : C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{l}</button>; })}
+            </div>
+
+            <button onClick={crearFallo} disabled={busy} style={{ width: "100%", boxSizing: "border-box", background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Guardando…" : "Registrar fallo"}</button>
+            <button onClick={() => setFmOpen(false)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
       {naOpen && (
         <div onClick={() => setNaOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div onClick={e => e.stopPropagation()} style={{ background: C.cream, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "18px 18px 26px" }}>
             <div style={{ width: 40, height: 4, background: C.brd, borderRadius: 999, margin: "0 auto 16px" }} />
             <div style={{ fontFamily: SF, fontSize: 20, color: C.char }}>Aviso manual</div>
-            <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 16 }}>Supuesto 2 · validó como conforme una tarea que no lo estaba (falsedad, solo a quien verificó).</div>
-            <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 7 }}>Persona (quien verificó)</div>
+            <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 16 }}>Supuesto 2 · validó como conforme una tarea que no lo estaba. Emite un aviso con plazo de alegación (48h).</div>
+            <div style={lbl}>Persona (quien verificó)</div>
             <select value={naUid} onChange={e => setNaUid(e.target.value)} style={{ ...inpStyle, marginBottom: 12 }}>{trabajadoras.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select>
             <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 7 }}>Fecha del hecho</div>
+                <div style={lbl}>Fecha del hecho</div>
                 <input type="date" value={naFecha} onChange={e => setNaFecha(e.target.value)} style={inpStyle} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 7 }}>Turno</div>
+                <div style={lbl}>Turno</div>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => setNaTurno("mañana")} style={seg(naTurno === "mañana")}>mañana</button>
-                  <button onClick={() => setNaTurno("tarde")} style={seg(naTurno === "tarde")}>tarde</button>
+                  <button onClick={() => setNaTurno("mañana")} style={{ ...seg(naTurno === "mañana"), textTransform: "capitalize" }}>mañana</button>
+                  <button onClick={() => setNaTurno("tarde")} style={{ ...seg(naTurno === "tarde"), textTransform: "capitalize" }}>tarde</button>
                 </div>
               </div>
             </div>
-            <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 7 }}>Descripción de los hechos</div>
+            <div style={lbl}>Descripción de los hechos</div>
             <textarea value={naDesc} onChange={e => setNaDesc(e.target.value)} placeholder="Qué validó como conforme y por qué no lo estaba…" rows={3} style={{ ...inpStyle, resize: "vertical", marginBottom: 16 }} />
             <button onClick={crearManual} disabled={busy} style={{ width: "100%", boxSizing: "border-box", background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>{busy ? "Emitiendo…" : "Emitir aviso"}</button>
             <button onClick={() => setNaOpen(false)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
@@ -252,7 +312,7 @@ export function DisciplinaAdminView() {
             <div style={{ width: 40, height: 4, background: C.brd, borderRadius: 999, margin: "0 auto 16px" }} />
             <div style={{ fontFamily: SF, fontSize: 20, color: C.char }}>Resolver aviso</div>
             <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 16 }}>{resolviendo.usuario_nombre} · turno {resolviendo.turno} · {fmtDia(resolviendo.fecha)}</div>
-            <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 8 }}>Resultado</div>
+            <div style={lbl}>Resultado</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 16 }}>
               {[["descartado", "Descartar el hecho", "No pasó / no procede"], ["sin_fallo", "Incidencia sin fallo", "Queda constancia, no cuenta"], ["confirmado", "Confirmar el fallo", "Se anota en los contadores"]].map(([v, t, s]) => {
                 const on = rRes === v;
@@ -266,7 +326,7 @@ export function DisciplinaAdminView() {
             </div>
             {rRes === "confirmado" && (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 8 }}>¿Calificar como falta? (opcional)</div>
+                <div style={lbl}>¿Calificar como falta? (opcional)</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {NIVELES.map(([v, l]) => { const on = rNivel === v; return <button key={l} onClick={() => setRNivel(v)} style={{ padding: "8px 12px", borderRadius: 10, border: `1.5px solid ${on ? C.char : C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{l}</button>; })}
                 </div>
