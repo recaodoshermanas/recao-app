@@ -6,8 +6,8 @@ import { TURNOS, TURNO_OPCIONES, ymd } from "../../lib/turnos.js";
 
 const DIAS = ["L", "M", "X", "J", "V", "S", "D"];
 const MESES_C = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-const ABBR = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P" };
-const TRABAJO = ["Mañana", "Tarde", "Apoyo 1", "Apoyo 2"];
+const ABBR = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P" };
+const TRABAJO = ["Mañana", "Tarde", "Apoyo 1", "Apoyo 2", "Apoyo 3"];
 const navBtn = { border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 
 function lunesDe(d) { const x = new Date(d); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); x.setHours(0, 0, 0, 0); return x; }
