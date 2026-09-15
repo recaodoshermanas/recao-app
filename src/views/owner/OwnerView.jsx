@@ -52,6 +52,16 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
     })();
   }, []);
 
+  useEffect(() => {
+    const nav = (dest) => {
+      const enEquipo = ["disciplina", "vacaciones", "cambios", "cobertura", "cierres", "incidencias", "horarios", "horas", "usuarios"];
+      if (enEquipo.includes(dest)) { setMundo("equipo"); setTab(dest); }
+    };
+    const h = (e) => { const d = e.detail && e.detail.destino; if (d) nav(d); };
+    window.addEventListener("recao-nav", h);
+    return () => window.removeEventListener("recao-nav", h);
+  }, []);
+
   const entrar = (m) => { setMundo(m); setTab(MUNDOS[m].tabs[0].id); };
   const goEditMonth = (mk) => { setFocusMonth(mk); setMundo("finanzas"); setTab("mes"); };
   const especial = tab === "ajustes" || tab === "tareas";

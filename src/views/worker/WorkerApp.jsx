@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { F, SF, C, SHADOW } from "../../lib/styles.js";
 import { IcoCheck, IcoRight, IcoLeft, IcoCalendar, IcoSun, IcoReceipt, IcoUser, IcoSwap, IcoBars } from "../../lib/icons.jsx";
 import { CerrarTurnoView } from "./CerrarTurnoView.jsx";
@@ -25,6 +25,12 @@ const TITULOS = { cerrar: "Mi turno", horario: "Mis horarios", revisar: "Turno a
 
 export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [screen, setScreen] = useState("home");
+
+  useEffect(() => {
+    const h = (e) => { const d = e.detail && e.detail.destino; if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); };
+    window.addEventListener("recao-nav", h);
+    return () => window.removeEventListener("recao-nav", h);
+  }, []);
 
   if (screen === "home") {
     const hoy = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });

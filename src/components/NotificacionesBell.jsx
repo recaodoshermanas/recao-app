@@ -11,6 +11,14 @@ function hace(ts) {
   return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 }
 
+// A qué sección lleva cada notificación al pulsarla
+const DESTINO = {
+  aviso_incidencia: "avisos", resolucion: "avisos", plazo_alegacion: "avisos", acuse_pendiente: "avisos", sancion: "avisos",
+  incidencia_reportada: "disciplina", alegacion_presentada: "disciplina", umbral_cerca: "disciplina", prescripcion_proxima: "disciplina", acuse_5d: "disciplina", cierre_incompleto: "disciplina",
+  vacaciones_pendiente: "vacaciones", vacaciones_resuelto: "vacaciones",
+  cambio_por_responder: "cambio", cambio_resuelto: "cambio", cambio_pendiente_admin: "cambios",
+};
+
 const IcoBell = ({ color = "#C9C0B0", size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
 );
@@ -26,10 +34,13 @@ export function NotificacionesBell({ user }) {
 
   const noLeidas = items.filter(n => !n.leida).length;
 
-  const marcarUna = async (n) => {
-    if (n.leida) return;
-    setItems(prev => prev.map(x => x.id === n.id ? { ...x, leida: true } : x));
-    try { await sb.update("notificaciones", `id=eq.${n.id}`, { leida: true }); } catch (e) { /* noop */ }
+  const clic = async (n) => {
+    const destino = DESTINO[n.tipo];
+    if (destino) { setOpen(false); window.dispatchEvent(new CustomEvent("recao-nav", { detail: { destino } })); }
+    if (!n.leida) {
+      setItems(prev => prev.map(x => x.id === n.id ? { ...x, leida: true } : x));
+      try { await sb.update("notificaciones", `id=eq.${n.id}`, { leida: true }); } catch (e) { /* noop */ }
+    }
   };
   const marcarTodas = async () => {
     setItems(prev => prev.map(x => ({ ...x, leida: true })));
@@ -53,12 +64,12 @@ export function NotificacionesBell({ user }) {
             {items.length === 0 ? (
               <div style={{ padding: "34px 16px", textAlign: "center", fontFamily: F, fontSize: 13, color: C.mut }}>No tienes notificaciones</div>
             ) : items.map(n => (
-              <button key={n.id} onClick={() => marcarUna(n)} style={{ width: "100%", boxSizing: "border-box", textAlign: "left", display: "flex", gap: 10, alignItems: "flex-start", padding: "12px 16px", background: n.leida ? "#fff" : "#FBF4E6", border: "none", borderBottom: `1px solid ${C.brdL}`, cursor: "pointer" }}>
+              <button key={n.id} onClick={() => clic(n)} style={{ width: "100%", boxSizing: "border-box", textAlign: "left", display: "flex", gap: 10, alignItems: "flex-start", padding: "12px 16px", background: n.leida ? "#fff" : "#FBF4E6", border: "none", borderBottom: `1px solid ${C.brdL}`, cursor: "pointer" }}>
                 <span style={{ width: 8, height: 8, borderRadius: 999, background: n.leida ? "transparent" : C.gold, marginTop: 6, flexShrink: 0 }} />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: "block", fontFamily: F, fontSize: 13.5, fontWeight: 700, color: C.char }}>{n.titulo}</span>
                   {n.cuerpo && <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 2, lineHeight: 1.35 }}>{n.cuerpo}</span>}
-                  <span style={{ display: "block", fontFamily: F, fontSize: 11, color: C.mutL, marginTop: 4 }}>{hace(n.creado_en)}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: F, fontSize: 11, color: C.mutL, marginTop: 4 }}>{hace(n.creado_en)}{DESTINO[n.tipo] && <span style={{ color: C.blu, fontWeight: 600 }}>· abrir</span>}</span>
                 </span>
               </button>
             ))}
