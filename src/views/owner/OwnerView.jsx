@@ -21,14 +21,15 @@ import { IncidenciasAdminView } from "./IncidenciasAdminView.jsx";
 import { DisciplinaAdminView } from "./DisciplinaAdminView.jsx";
 import { PlusMesView } from "./PlusMesView.jsx";
 import { TareasAdminView } from "./TareasAdminView.jsx";
+import { CVCandidatosView } from "./CVCandidatosView.jsx";
 import { WorkerView } from "../WorkerView.jsx";
 
 const MUNDOS = {
   finanzas: { label: "Finanzas", sub: "Evolución · P&L · Tesorería · Datos mes · Plus · Facturas", Ico: IcoBars, iconBg: "#EAF0F8", iconFg: "#4A7AB5", tabs: [
     { id: "resumen", label: "Evolución" }, { id: "analitica", label: "Analítica" }, { id: "mes", label: "Datos mes" }, { id: "resultados", label: "P&L" }, { id: "tesoreria", label: "Tesorería" }, { id: "plus", label: "Plus" }, { id: "facturas", label: "Facturas" },
   ] },
-  equipo: { label: "Equipo", sub: "Cierres · Incidencias · Disciplina · Horarios · Vacaciones · Cobertura · Cambios · Horas · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
-    { id: "cierres", label: "Cierres" }, { id: "incidencias", label: "Incidencias" }, { id: "disciplina", label: "Disciplina" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cobertura", label: "Cobertura" }, { id: "cambios", label: "Cambios" }, { id: "horas", label: "Horas extras" }, { id: "usuarios", label: "Usuarios" },
+  equipo: { label: "Equipo", sub: "Cierres · Incidencias · Disciplina · Candidatos · Horarios · Vacaciones · Cobertura · Cambios · Horas · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
+    { id: "cierres", label: "Cierres" }, { id: "incidencias", label: "Incidencias" }, { id: "disciplina", label: "Disciplina" }, { id: "candidatos", label: "Candidatos" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cobertura", label: "Cobertura" }, { id: "cambios", label: "Cambios" }, { id: "horas", label: "Horas extras" }, { id: "usuarios", label: "Usuarios" },
   ] },
 };
 
@@ -54,7 +55,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
 
   useEffect(() => {
     const nav = (dest) => {
-      const enEquipo = ["disciplina", "vacaciones", "cambios", "cobertura", "cierres", "incidencias", "horarios", "horas", "usuarios"];
+      const enEquipo = ["disciplina", "vacaciones", "cambios", "cobertura", "cierres", "incidencias", "horarios", "horas", "usuarios", "candidatos"];
       if (enEquipo.includes(dest)) { setMundo("equipo"); setTab(dest); }
     };
     const h = (e) => { const d = e.detail && e.detail.destino; if (d) nav(d); };
@@ -160,6 +161,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
       {tab === "cierres" && <CierresAdminView />}
       {tab === "incidencias" && <IncidenciasAdminView />}
       {tab === "disciplina" && <DisciplinaAdminView />}
+      {tab === "candidatos" && <CVCandidatosView />}
       {tab === "horarios" && <HorariosAdminView />}
       {tab === "vacaciones" && <VacacionesAdminView />}
       {tab === "cobertura" && <CoberturaAdminView />}
