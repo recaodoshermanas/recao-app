@@ -167,10 +167,16 @@ export function CVCandidatosView() {
 
             <Crit c={abierto} />
 
-            <div style={{ fontFamily: F, fontSize: 13.5, color: C.char, lineHeight: 1.5, marginTop: 12, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "12px 14px" }}>{abierto.resumen}</div>
+            {abierto.resumen && <div style={{ fontFamily: F, fontSize: 13.5, color: C.char, lineHeight: 1.5, marginTop: 12, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "12px 14px" }}>{abierto.resumen}</div>}
 
-            <a href={gmailUrl(abierto.gmail_id)} target="_blank" rel="noopener" style={{ display: "block", textAlign: "center", marginTop: 12, background: C.char, color: C.gold, borderRadius: 12, padding: 13, fontFamily: F, fontSize: 14, fontWeight: 700, textDecoration: "none" }}>Ver CV en Gmail ↗</a>
-            {abierto.cv_archivo && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, textAlign: "center", marginTop: 6 }}>{abierto.cv_archivo}</div>}
+            <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, margin: "16px 0 7px" }}>Currículum</div>
+            {abierto.cv_texto ? (
+              <div style={{ fontFamily: F, fontSize: 13.5, color: C.char, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "13px 15px", maxHeight: "42vh", overflowY: "auto" }}>{abierto.cv_texto}</div>
+            ) : (
+              <div style={{ fontFamily: F, fontSize: 13, color: C.mut, lineHeight: 1.5, background: "#F5F0E6", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "12px 14px" }}>No hay texto del CV guardado para esta candidata. Puedes ver el original en el correo.</div>
+            )}
+            {abierto.cv_archivo && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 6 }}>📎 {abierto.cv_archivo}</div>}
+            <a href={gmailUrl(abierto.gmail_id)} target="_blank" rel="noopener" style={{ display: "inline-block", marginTop: 10, color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Ver original en Gmail ↗</a>
 
             <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, margin: "16px 0 7px" }}>Notas de dirección</div>
             <textarea value={nota} onChange={e => setNota(e.target.value)} placeholder="Anota lo que quieras sobre esta candidata…" rows={2} style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 12, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, outline: "none", resize: "vertical" }} />
