@@ -161,7 +161,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
       {tab === "cierres" && <CierresAdminView />}
       {tab === "incidencias" && <IncidenciasAdminView />}
       {tab === "disciplina" && <DisciplinaAdminView />}
-      {tab === "candidatos" && <CVCandidatosView />}
+      {tab === "candidatos" && <CVCandidatosView currentUser={currentUser} />}
       {tab === "horarios" && <HorariosAdminView />}
       {tab === "vacaciones" && <VacacionesAdminView />}
       {tab === "cobertura" && <CoberturaAdminView />}

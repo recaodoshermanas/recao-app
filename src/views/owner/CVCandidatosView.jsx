@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C, SHADOW, avatar } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
+import { EvaluacionSheet } from "./EvaluacionSheet.jsx";
+import { RankingView } from "./RankingView.jsx";
+import { calcularEvaluacion } from "../../lib/evaluacionCandidatas.js";
 
 const CRIT = [["c_experiencia", "Experiencia", "Exp."], ["c_cercania", "Cercanía", "Cerca"], ["c_turnos", "Turnos", "Turnos"], ["c_incorporacion", "Incorporación", "Ya"]];
 const TABS = [["revisar", "Por revisar"], ["interesa", "Interesan"], ["entrevista", "Entrevista"], ["descartada", "Descartadas"]];
 const FILTROS = [["cual", "Cualificadas"], ["c_experiencia", "Experiencia"], ["c_cercania", "Cerca"], ["c_incorporacion", "Disponible ya"], ["sincv", "Sin CV legible"]];
 const ESTADO_L = { revisar: "Por revisar", interesa: "Interesan", entrevista: "Entrevista", descartada: "Descartada" };
 const puntos = (c) => CRIT.reduce((n, [k]) => n + (c[k] === "Sí" ? 1 : 0), 0);
-const norm = (s) => (s || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const norm = (s) => (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 function fmtF(f) { if (!f) return ""; const d = new Date(f); return d.toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
 function gmailUrl(id) { return `https://mail.google.com/mail/u/5/#all/${id}`; }
 
@@ -30,14 +33,17 @@ function Crit({ c }) {
   );
 }
 
-export function CVCandidatosView() {
+export function CVCandidatosView({ currentUser }) {
   const [rows, setRows] = useState([]);
+  const [evals, setEvals] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pantalla, setPantalla] = useState("candidatas"); // candidatas | ranking
   const [tab, setTab] = useState("revisar");
   const [vista, setVista] = useState("lista");
   const [q, setQ] = useState("");
   const [filtros, setFiltros] = useState({});
   const [abierto, setAbierto] = useState(null);
+  const [evaluando, setEvaluando] = useState(null);
   const [nota, setNota] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -48,7 +54,12 @@ export function CVCandidatosView() {
     try { setRows(await sb.select("candidatos", "select=*&order=fecha_correo.desc")); } catch (e) { flash(e.message || "Error"); }
     setLoading(false);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  const loadEvals = useCallback(async () => {
+    try { setEvals(await sb.select("evaluaciones_candidato", "select=*")); } catch (e) { /* noop */ }
+  }, []);
+  useEffect(() => { load(); loadEvals(); }, [load, loadEvals]);
+
+  const evalsById = useMemo(() => { const m = {}; evals.forEach(e => { m[e.candidato_id] = e; }); return m; }, [evals]);
 
   const toggleF = (k) => setFiltros(p => { const n = { ...p }; if (n[k]) delete n[k]; else n[k] = true; return n; });
 
@@ -94,10 +105,31 @@ export function CVCandidatosView() {
     </div>;
   };
 
+  // Resumen de la evaluación para la ficha
+  const evalResumen = (c) => {
+    const ev = evalsById[c.id];
+    if (!ev) return null;
+    const calc = calcularEvaluacion(ev.puesto, ev.parte_a || {}, ev.parte_b || {});
+    return { ev, calc };
+  };
+
+  const abrirEval = (c) => { setEvaluando(c); };
+
   return (
     <div style={{ padding: "14px 14px 24px", maxWidth: 680, margin: "0 auto" }}>
       {msg && <div style={{ position: "sticky", top: 96, zIndex: 12, fontFamily: F, fontSize: 13, color: C.char, background: C.gold, padding: "8px 12px", borderRadius: 10, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
 
+      {/* Toggle Candidatas / Ranking */}
+      <div style={{ display: "flex", gap: 3, background: "#EFE9DD", borderRadius: 11, padding: 3, marginBottom: 12 }}>
+        {[["candidatas", "Candidatas"], ["ranking", "Ranking"]].map(([k, l]) => (
+          <button key={k} onClick={() => setPantalla(k)} style={{ flex: 1, padding: "9px 8px", borderRadius: 8, border: "none", background: pantalla === k ? "#fff" : "transparent", color: pantalla === k ? C.char : C.mut, fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: pantalla === k ? SHADOW.card : "none" }}>{l}</button>
+        ))}
+      </div>
+
+      {pantalla === "ranking" ? (
+        <RankingView candidatos={rows} evaluaciones={evals} onOpen={abrirEval} />
+      ) : (
+      <>
       <div style={{ display: "flex", gap: 3, background: "#EFE9DD", borderRadius: 11, padding: 3, marginBottom: 12, overflowX: "auto" }}>
         {TABS.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ flex: 1, whiteSpace: "nowrap", padding: "8px 8px", borderRadius: 8, border: "none", background: tab === k ? "#fff" : "transparent", color: tab === k ? C.char : C.mut, fontFamily: F, fontSize: 12, fontWeight: 700, cursor: "pointer", boxShadow: tab === k ? SHADOW.card : "none" }}>{l} <span style={{ color: tab === k ? C.goldDark : C.mutL }}>{conteo[k] || 0}</span></button>
@@ -128,7 +160,9 @@ export function CVCandidatosView() {
               ))}
             </div>
           ) : (
-            lista.map(c => (
+            lista.map(c => {
+              const er = tab === "entrevista" ? evalResumen(c) : null;
+              return (
               <div key={c.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 14, marginBottom: 10, boxShadow: SHADOW.card }}>
                 <div onClick={() => abrir(c)} style={{ display: "flex", gap: 12, cursor: "pointer" }}>
                   <Foto c={c} size={52} />
@@ -142,10 +176,22 @@ export function CVCandidatosView() {
                   </div>
                 </div>
                 <div style={{ fontFamily: F, fontSize: 13, color: C.char, lineHeight: 1.45, marginTop: 10 }}>{c.resumen}</div>
+                {tab === "entrevista" && (
+                  <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <button onClick={() => abrirEval(c)} style={{ background: C.char, color: C.gold, border: "none", borderRadius: 10, padding: "9px 16px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{er ? "Ver evaluación" : "Evaluar"}</button>
+                    {er && (er.calc.descartada
+                      ? <span style={{ fontFamily: F, fontSize: 11.5, color: "#B23A2C" }}>Descartada · {er.calc.motivoDescarte}</span>
+                      : er.calc.completa
+                        ? <span style={{ fontFamily: F, fontSize: 12.5, color: C.char }}>Nota <b>{er.calc.notaFinal}</b>{er.calc.etiqueta ? ` · ${er.calc.etiqueta.label}` : ""}</span>
+                        : <span style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Evaluación incompleta</span>)}
+                  </div>
+                )}
                 <div style={{ marginTop: 12 }}>{acciones(c, false)}</div>
               </div>
-            ))
+            ); })
           )}
+      </>
+      )}
 
       {abierto && (
         <div onClick={() => setAbierto(null)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -159,6 +205,20 @@ export function CVCandidatosView() {
                 <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 1 }}>Estado: {ESTADO_L[abierto.estado] || abierto.estado}</div>
               </div>
             </div>
+
+            {abierto.estado === "entrevista" && (() => {
+              const er = evalResumen(abierto);
+              return (
+                <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <button onClick={() => abrirEval(abierto)} style={{ background: C.char, color: C.gold, border: "none", borderRadius: 11, padding: "11px 18px", fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>{er ? "Ver / editar evaluación" : "Evaluar candidata"}</button>
+                  {er && (er.calc.descartada
+                    ? <span style={{ fontFamily: F, fontSize: 12, color: "#B23A2C" }}>Descartada · {er.calc.motivoDescarte}</span>
+                    : er.calc.completa
+                      ? <span style={{ fontFamily: F, fontSize: 13, color: C.char }}>Nota <b>{er.calc.notaFinal}</b>{er.calc.etiqueta ? ` · ${er.calc.etiqueta.label}` : ""}</span>
+                      : <span style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Incompleta · falta {er.calc.falta.join(", ")}</span>)}
+                </div>
+              );
+            })()}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px" }}>
               {abierto.telefono && <a href={`tel:${abierto.telefono.replace(/\s/g, "")}`} style={{ fontFamily: F, fontSize: 13.5, color: C.blu, textDecoration: "none" }}>📞 {abierto.telefono}</a>}
@@ -186,6 +246,16 @@ export function CVCandidatosView() {
             <button onClick={() => setAbierto(null)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cerrar</button>
           </div>
         </div>
+      )}
+
+      {evaluando && (
+        <EvaluacionSheet
+          candidato={evaluando}
+          evaluacion={evalsById[evaluando.id] || null}
+          currentUser={currentUser}
+          onClose={() => setEvaluando(null)}
+          onSaved={loadEvals}
+        />
       )}
     </div>
   );
