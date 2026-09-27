@@ -42,6 +42,7 @@ export function VacacionesAdminView() {
   const trabReg = useMemo(() => trab.filter(t => !t.eventual), [trab]);
   const nombreDe = useMemo(() => Object.fromEntries(trab.map(t => [t.id, t.nombre])), [trab]);
   const [sols, setSols] = useState([]);
+  const [conf, setConf] = useState({});
   const [saldos, setSaldos] = useState({});
   const [vacDias, setVacDias] = useState({});
   const [descansos, setDescansos] = useState({});
@@ -63,6 +64,7 @@ export function VacacionesAdminView() {
       const reg = tr.filter(u => !u.eventual);
       setNUid(prev => prev || (reg[0] ? reg[0].id : ""));
       setSols(await sb.select("vacaciones_solicitudes", "select=*&order=fecha_inicio.desc"));
+      try { const rc = await sb.fn("vacaciones", { action: "conflictos" }); setConf(rc.conflictos || {}); } catch (e) { setConf({}); }
       const sal = await sb.select("vacaciones_saldo", `select=usuario_id,dias_totales&anio=eq.${ANIO}`);
       const sm = {}; sal.forEach(x => { sm[x.usuario_id] = x.dias_totales; }); setSaldos(sm);
       const h = await sb.select("horarios", `select=usuario_id,fecha,turno&turno=in.(Vacaciones,Descanso)&fecha=gte.${ANIO}-01-01&fecha=lte.${ANIO}-12-31`);
@@ -80,9 +82,10 @@ export function VacacionesAdminView() {
   const calcularRango = async (uid, ini, fin) => { const rows = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${uid}&fecha=gte.${ini}&fecha=lte.${fin}`); const m = {}; rows.forEach(r => { m[r.fecha] = r.turno; }); return diasQueGastan(rangoFechas(ini, fin), m); };
   const borrarRango = async (uid, ini, fin) => { await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=gte.${ini}&fecha=lte.${fin}&turno=eq.Vacaciones`); };
 
-  const cambiarEstado = async (s, estado) => {
+  const cambiarEstado = async (s, estado, recargar = true) => {
     try {
       const patch = { estado, actualizado_en: new Date().toISOString() };
+      if (estado !== "pendiente") patch.sin_acuerdo = false;
       const fechas = Array.isArray(s.fechas) ? s.fechas : null;
       if (estado === "aceptado") {
         if (fechas) await escribirVacFechas(s.usuario_id, fechas);
@@ -92,9 +95,26 @@ export function VacacionesAdminView() {
         else await borrarRango(s.usuario_id, s.fecha_inicio, s.fecha_fin);
       }
       await sb.update("vacaciones_solicitudes", `id=eq.${s.id}`, patch);
+      if (recargar) await load();
+    } catch (e) { flash(e.message); }
+  };
+
+  // Override: acepta una en conflicto y rechaza las pendientes que se le solapan.
+  const aceptarConflicto = async (s) => {
+    const c = conf[s.id];
+    const nombres = c ? [...new Set(c.con.map(x => x.nombre))].join(", ") : "";
+    if (!window.confirm(`Vas a ACEPTAR esta solicitud y RECHAZAR la(s) de ${nombres}, que se solapan. ¿Seguro?`)) return;
+    try {
+      if (c) for (const x of c.con) {
+        const cs = sols.find(y => y.id === x.id);
+        if (cs && cs.estado === "pendiente") await cambiarEstado(cs, "rechazado", false);
+      }
+      await cambiarEstado(s, "aceptado", false);
+      flash("Aceptada; las solapadas se han rechazado");
       await load();
     } catch (e) { flash(e.message); }
   };
+
   const eliminar = async (s) => {
     if (!window.confirm("¿Eliminar esta solicitud? No se puede deshacer.")) return;
     try {
@@ -178,8 +198,13 @@ export function VacacionesAdminView() {
       <div style={secLbl}>Solicitudes ({sols.length})</div>
       {loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 20 }}>Cargando…</div>
         : sols.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>No hay solicitudes</div>
-        : sols.map(s => (
-          <div key={s.id} style={{ background: "#fff", border: s.estado === "pendiente" ? `1.5px solid ${C.gold}` : `1px solid ${C.brdL}`, borderRadius: 16, padding: 15, marginBottom: 10 }}>
+        : sols.map(s => {
+          const c = conf[s.id];
+          const enConflicto = s.estado === "pendiente" && !!c;
+          const nombresC = c ? [...new Set(c.con.map(x => x.nombre))].join(", ") : "";
+          const escalado = c && (c.sin_acuerdo || c.con.some(x => x.sin_acuerdo));
+          return (
+          <div key={s.id} style={{ background: "#fff", border: enConflicto ? "1.5px solid #E0A93C" : s.estado === "pendiente" ? `1.5px solid ${C.gold}` : `1px solid ${C.brdL}`, borderRadius: 16, padding: 15, marginBottom: 10 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
                 <Avatar name={nombreDe[s.usuario_id]} size={34} />
@@ -188,11 +213,25 @@ export function VacacionesAdminView() {
                   <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 1 }}>{s.dias} {s.dias === 1 ? "día" : "días"}{coberturaTxt(s)}</div>
                 </div>
               </div>
-              <span style={chipStyle(s.estado)}>{CHIP[s.estado].label}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {escalado && <span style={{ fontFamily: F, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", padding: "4px 9px", borderRadius: 999, background: "#FBEAE7", color: "#B23A2C" }}>Sin acuerdo</span>}
+                <span style={chipStyle(s.estado)}>{CHIP[s.estado].label}</span>
+              </div>
             </div>
+
+            {enConflicto && (
+              <div style={{ marginTop: 11, background: "#FBF3E2", border: "1px solid #F0DEB0", borderRadius: 11, padding: "10px 12px", fontFamily: F, fontSize: 12.5, color: "#7A5A12", lineHeight: 1.45 }}>
+                Se solapa (mismo rol) con <b>{nombresC}</b>. {escalado ? "Las trabajadoras no llegan a acuerdo: decides tú." : "No se puede aprobar hasta que lo resuelvan entre ellas, o puedes decidir tú."}
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-              {s.estado === "pendiente" && <>
+              {s.estado === "pendiente" && !enConflicto && <>
                 <button onClick={() => cambiarEstado(s, "aceptado")} style={{ ...btnSm, background: C.grn, color: "#fff" }}>Aceptar</button>
+                <button onClick={() => cambiarEstado(s, "rechazado")} style={{ ...btnSm, background: "#fff", color: "#B23A2C", border: "1.5px solid #EDC9C3" }}>Rechazar</button>
+              </>}
+              {s.estado === "pendiente" && enConflicto && <>
+                <button onClick={() => aceptarConflicto(s)} style={{ ...btnSm, background: "#fff", color: "#8a6a1e", border: "1.5px solid #E0A93C" }}>Aceptar de todas formas</button>
                 <button onClick={() => cambiarEstado(s, "rechazado")} style={{ ...btnSm, background: "#fff", color: "#B23A2C", border: "1.5px solid #EDC9C3" }}>Rechazar</button>
               </>}
               {s.estado === "aceptado" && <>
@@ -204,7 +243,8 @@ export function VacacionesAdminView() {
             </div>
             {s.estado === "aceptado" && <CoberturaEditor sol={s} trabajadoras={trabReg} onSave={(tipo, valor) => guardarCobertura(s, tipo, valor)} />}
           </div>
-        ))}
+          );
+        })}
 
       {histUid && (
         <div onClick={() => setHistUid(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 }}>

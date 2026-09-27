@@ -13,6 +13,7 @@ const secLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0
 
 export function MisVacacionesView({ user }) {
   const [sols, setSols] = useState([]);
+  const [conf, setConf] = useState({});
   const [total, setTotal] = useState(22);
   const [vacDias, setVacDias] = useState([]);
   const [descansos, setDescansos] = useState([]);
@@ -20,6 +21,7 @@ export function MisVacacionesView({ user }) {
   const [verNormas, setVerNormas] = useState(false);
   const [errs, setErrs] = useState([]);
   const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3200); };
   const load = useCallback(async () => {
@@ -30,6 +32,7 @@ export function MisVacacionesView({ user }) {
       const h = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${user.id}&turno=in.(Vacaciones,Descanso)&fecha=gte.${ANIO}-01-01&fecha=lte.${ANIO}-12-31`);
       setVacDias(h.filter(x => x.turno === "Vacaciones").map(x => x.fecha));
       setDescansos(h.filter(x => x.turno === "Descanso").map(x => x.fecha));
+      try { const rc = await sb.fn("vacaciones", { action: "conflictos" }); setConf(rc.conflictos || {}); } catch (e) { setConf({}); }
     } catch (e) { /* noop */ }
   }, [user.id]);
   useEffect(() => { load(); }, [load]);
@@ -51,6 +54,12 @@ export function MisVacacionesView({ user }) {
     }
   };
   const cancelar = async (s) => { try { await sb.delete("vacaciones_solicitudes", `id=eq.${s.id}`); await load(); } catch (e) { flash(e.message); } };
+  const sinAcuerdo = async (s) => {
+    if (busy) return; setBusy(true);
+    try { await sb.fn("vacaciones", { action: "sin_acuerdo", id: s.id }); flash("Dirección avisada de que no hay acuerdo"); await load(); }
+    catch (e) { flash(e.message || "No se pudo avisar"); }
+    setBusy(false);
+  };
 
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
@@ -85,18 +94,36 @@ export function MisVacacionesView({ user }) {
       <div style={secLbl}>Mis solicitudes</div>
       {sols.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>Aún no has solicitado vacaciones</div>
         : <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-          {sols.map(s => (
-            <div key={s.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 13, padding: "13px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div>
-                <div style={{ fontFamily: F, fontSize: 14, fontWeight: 600, color: C.char }}>{fmtF(s.fecha_inicio)} – {fmtF(s.fecha_fin)}</div>
-                <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 2 }}>{s.dias} {s.dias === 1 ? "día" : "días"}</div>
+          {sols.map(s => {
+            const c = conf[s.id];
+            const nombres = c ? [...new Set(c.con.map(x => x.nombre))].join(", ") : "";
+            return (
+              <div key={s.id} style={{ background: "#fff", border: c ? "1.5px solid #E0A93C" : `1px solid ${C.brdL}`, borderRadius: 13, padding: "13px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontFamily: F, fontSize: 14, fontWeight: 600, color: C.char }}>{fmtF(s.fecha_inicio)} – {fmtF(s.fecha_fin)}</div>
+                    <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 2 }}>{s.dias} {s.dias === 1 ? "día" : "días"}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={chipStyle(s.estado)}>{CHIP[s.estado].label}</span>
+                    {s.estado === "pendiente" && <button onClick={() => cancelar(s)} style={{ border: "none", background: "none", color: "#ccc", fontSize: 18, cursor: "pointer" }}>×</button>}
+                  </div>
+                </div>
+                {c && (
+                  <div style={{ marginTop: 11, background: "#FBF3E2", border: "1px solid #F0DEB0", borderRadius: 11, padding: "10px 12px" }}>
+                    <div style={{ fontFamily: F, fontSize: 12.5, color: "#7A5A12", lineHeight: 1.45 }}>
+                      Se solapa con <b>{nombres}</b> (tu mismo rol). Poneos de acuerdo entre vosotras: dirección no podrá aprobar ninguna hasta resolverlo.
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 9, flexWrap: "wrap" }}>
+                      {c.sin_acuerdo
+                        ? <span style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: "#8a6a1e" }}>✓ Dirección avisada</span>
+                        : <button onClick={() => sinAcuerdo(s)} disabled={busy} style={{ background: "#fff", border: "1.5px solid #E0A93C", color: "#7A5A12", borderRadius: 9, padding: "7px 13px", fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>No hay acuerdo · avisar a dirección</button>}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={chipStyle(s.estado)}>{CHIP[s.estado].label}</span>
-                {s.estado === "pendiente" && <button onClick={() => cancelar(s)} style={{ border: "none", background: "none", color: "#ccc", fontSize: 18, cursor: "pointer" }}>×</button>}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>}
 
       <div style={secLbl}>Histórico {ANIO}</div>
