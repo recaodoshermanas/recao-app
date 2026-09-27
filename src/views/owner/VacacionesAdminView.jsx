@@ -78,21 +78,39 @@ export function VacacionesAdminView() {
 
   const hoy = ymd(new Date());
   const escribirVacFechas = async (uid, fechas) => { if (fechas && fechas.length) await sb.upsert("horarios", fechas.map(f => ({ usuario_id: uid, fecha: f, turno: "Vacaciones" })), "usuario_id,fecha"); };
-  const borrarVacFechas = async (uid, fechas) => { if (fechas && fechas.length) await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=in.(${fechas.join(",")})&turno=eq.Vacaciones`); };
   const calcularRango = async (uid, ini, fin) => { const rows = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${uid}&fecha=gte.${ini}&fecha=lte.${fin}`); const m = {}; rows.forEach(r => { m[r.fecha] = r.turno; }); return diasQueGastan(rangoFechas(ini, fin), m); };
-  const borrarRango = async (uid, ini, fin) => { await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=gte.${ini}&fecha=lte.${fin}&turno=eq.Vacaciones`); };
+
+  // Guarda el turno original de cada día ANTES de marcarlo como Vacaciones (para poder restaurarlo).
+  const capturarPrev = async (uid, fechas) => {
+    if (!fechas || !fechas.length) return {};
+    try {
+      const rows = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${uid}&fecha=in.(${fechas.join(",")})`);
+      const m = {}; rows.forEach(r => { if (r.turno && r.turno !== "Vacaciones") m[r.fecha] = r.turno; }); return m;
+    } catch (e) { return {}; }
+  };
+  // Al revertir/rechazar/eliminar: devuelve cada día a su turno original; si no se guardó, quita el "Vacaciones".
+  const restaurarTurnos = async (uid, fechas, prev) => {
+    if (!fechas || !fechas.length) return;
+    const p = prev || {};
+    const restore = fechas.filter(f => p[f]).map(f => ({ usuario_id: uid, fecha: f, turno: p[f] }));
+    const borrar = fechas.filter(f => !p[f]);
+    if (restore.length) await sb.upsert("horarios", restore, "usuario_id,fecha");
+    if (borrar.length) await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=in.(${borrar.join(",")})&turno=eq.Vacaciones`);
+  };
 
   const cambiarEstado = async (s, estado, recargar = true) => {
     try {
       const patch = { estado, actualizado_en: new Date().toISOString() };
       if (estado !== "pendiente") patch.sin_acuerdo = false;
-      const fechas = Array.isArray(s.fechas) ? s.fechas : null;
+      let fechas = Array.isArray(s.fechas) ? s.fechas : null;
       if (estado === "aceptado") {
-        if (fechas) await escribirVacFechas(s.usuario_id, fechas);
-        else { const d = await calcularRango(s.usuario_id, s.fecha_inicio, s.fecha_fin); await escribirVacFechas(s.usuario_id, d); if (d.length) patch.dias = d.length; }
+        if (!fechas) { fechas = await calcularRango(s.usuario_id, s.fecha_inicio, s.fecha_fin); if (fechas.length) patch.dias = fechas.length; }
+        patch.turnos_prev = await capturarPrev(s.usuario_id, fechas);
+        await escribirVacFechas(s.usuario_id, fechas);
       } else if (s.estado === "aceptado") {
-        if (fechas) await borrarVacFechas(s.usuario_id, fechas);
-        else await borrarRango(s.usuario_id, s.fecha_inicio, s.fecha_fin);
+        const objetivo = fechas || rangoFechas(s.fecha_inicio, s.fecha_fin);
+        await restaurarTurnos(s.usuario_id, objetivo, s.turnos_prev);
+        patch.turnos_prev = null;
       }
       await sb.update("vacaciones_solicitudes", `id=eq.${s.id}`, patch);
       if (recargar) await load();
@@ -119,9 +137,8 @@ export function VacacionesAdminView() {
     if (!window.confirm("¿Eliminar esta solicitud? No se puede deshacer.")) return;
     try {
       if (s.estado === "aceptado") {
-        const fechas = Array.isArray(s.fechas) ? s.fechas : null;
-        if (fechas) await borrarVacFechas(s.usuario_id, fechas);
-        else await borrarRango(s.usuario_id, s.fecha_inicio, s.fecha_fin);
+        const fechas = Array.isArray(s.fechas) ? s.fechas : rangoFechas(s.fecha_inicio, s.fecha_fin);
+        await restaurarTurnos(s.usuario_id, fechas, s.turnos_prev);
       }
       await sb.delete("vacaciones_solicitudes", `id=eq.${s.id}`);
       flash("Solicitud eliminada"); await load();
@@ -130,8 +147,9 @@ export function VacacionesAdminView() {
   const crear = async (fechas) => {
     if (!nUid || !fechas.length) { flash("Elige días"); return; }
     try {
-      if (nEstado === "aceptado") await escribirVacFechas(nUid, fechas);
-      await sb.insert("vacaciones_solicitudes", { usuario_id: nUid, fecha_inicio: fechas[0], fecha_fin: fechas[fechas.length - 1], dias: fechas.length, fechas, estado: nEstado });
+      let prev = null;
+      if (nEstado === "aceptado") { prev = await capturarPrev(nUid, fechas); await escribirVacFechas(nUid, fechas); }
+      await sb.insert("vacaciones_solicitudes", { usuario_id: nUid, fecha_inicio: fechas[0], fecha_fin: fechas[fechas.length - 1], dias: fechas.length, fechas, estado: nEstado, turnos_prev: prev });
       setAbrir(false); flash("Periodo añadido"); await load();
     } catch (e) { flash(e.message); }
   };
