@@ -89,6 +89,13 @@ button, input { font: inherit; color: inherit; }
 .nav button[aria-current="page"] { background: var(--nav-on-bg); color: var(--nav-on-fg); }
 .nav button:disabled { cursor: default; opacity: .55; }
 .nav button small { font-weight: 500; font-size: 11px; margin-left: 4px; }
+.menu { display: flex; align-items: center; gap: 24px; flex: 1; min-width: 0; }
+.burger { display: none; margin-left: auto; width: 42px; height: 42px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; cursor: pointer; flex-direction: column; justify-content: center; align-items: center; gap: 4px; }
+.burger span { display: block; width: 18px; height: 2px; border-radius: 2px; background: var(--text); transition: transform .2s, opacity .2s; }
+.burger[aria-expanded="true"] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.burger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+.burger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+@media (prefers-reduced-motion: reduce) { .burger span { transition: none; } }
 .user { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); flex-shrink: 0; }
 .user button { border: 1px solid var(--line); background: var(--card); padding: 6px 12px; border-radius: 999px; cursor: pointer; font-weight: 600; font-size: 13px; }
 
@@ -210,8 +217,14 @@ svg text { font-family: var(--ui); }
 }
 @media (max-width: 640px) {
   .wrap { padding: 0 14px 48px; }
-  .top { flex-wrap: wrap; gap: 10px; padding: 14px 0; }
-  .nav { order: 3; flex-basis: 100%; }
+  .top { gap: 10px; padding: 14px 0; position: relative; }
+  .burger { display: flex; }
+  .menu { display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 30; flex-direction: column; align-items: stretch; gap: 6px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 10px; box-shadow: 0 14px 34px rgba(0,0,0,.14); }
+  .menu.open { display: flex; }
+  .nav { flex-direction: column; gap: 2px; overflow: visible; }
+  .nav button { text-align: left; padding: 12px 14px; border-radius: 12px; font-size: 15px; }
+  .user { margin: 4px 0 0; padding: 10px 6px 2px 14px; border-top: 1px solid var(--line); justify-content: space-between; }
   .brand span { display: none; }
   .hero { border-radius: 22px; }
   .hero-chart { min-height: 220px; }
@@ -232,3 +245,4 @@ svg text { font-family: var(--ui); }
 .prods .pv { justify-content: flex-end; }
 
 .demo-note { margin: 0 0 12px; font-size: 13px; color: var(--text-2); }
+.user:empty { display: none; }

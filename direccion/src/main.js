@@ -22,15 +22,28 @@ function shell(user) {
   <div class="wrap">
     <header class="top">
       <a class="brand" href="./" aria-label="Recao Dirección, inicio">${logoTag()}<b>Recao</b><span>Dirección</span></a>
+      <button class="burger" id="burger" aria-label="Abrir menú" aria-expanded="false" aria-controls="menu"><span></span><span></span><span></span></button>
+      <div class="menu" id="menu">
       <nav class="nav" aria-label="Áreas">
         ${AREAS.map((a) => `<button ${a.id === "pulso" ? 'aria-current="page"' : ""} ${a.soon ? 'disabled title="En construcción"' : ""}>${a.label}${a.soon ? "<small>pronto</small>" : ""}</button>`).join("")}
       </nav>
       <div class="user">${user ? `<span>${user.nombre || ""}</span><button id="salir">Salir</button>` : ""}</div>
+      </div>
     </header>
     ${window.__RECAO_DEMO__ ? `<p class="demo-note">Vista previa con una foto fija de los datos de hoy a las ${String(window.__RECAO_DEMO__.ahora).slice(11, 16)}. La versión real se actualiza sola y pide login de dirección.</p>` : ""}
     <main id="main"><div class="state">Cargando…</div></main>
   </div>`;
   if (!tipsOn) { initTips(app); tipsOn = true; }
+  // menú hamburguesa (móvil)
+  const burger = document.getElementById("burger"), menu = document.getElementById("menu");
+  const cerrar = () => { menu.classList.remove("open"); burger.setAttribute("aria-expanded", "false"); burger.setAttribute("aria-label", "Abrir menú"); };
+  burger.addEventListener("click", () => {
+    const abierto = menu.classList.toggle("open");
+    burger.setAttribute("aria-expanded", String(abierto));
+    burger.setAttribute("aria-label", abierto ? "Cerrar menú" : "Abrir menú");
+  });
+  menu.querySelectorAll(".nav button").forEach((b) => b.addEventListener("click", cerrar));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrar(); });
 }
 
 window.addEventListener("resize", () => {
