@@ -246,3 +246,22 @@ svg text { font-family: var(--ui); }
 
 .demo-note { margin: 0 0 12px; font-size: 13px; color: var(--text-2); }
 .user:empty { display: none; }
+
+/* tickets y ticket medio: variación frente a la semana pasada */
+.hero-stats em { font-style: normal; font-weight: 800; margin-left: 4px; }
+.hero-stats em.up { color: #1F5A27; } .hero-stats em.down { color: #8E2A16; } .hero-stats em.flat { color: rgba(30,39,46,.7); }
+
+/* lo más vendido hoy */
+.ranking { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+.ranking th { font-size: 12px; font-weight: 600; color: var(--muted); text-align: left; padding: 0 10px 8px; border-bottom: 1px solid var(--line); }
+.ranking td { padding: 9px 10px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+.ranking tr:last-child td { border-bottom: 0; }
+.ranking .i { width: 32px; color: var(--muted); padding-left: 0; }
+.ranking .r { text-align: right; white-space: nowrap; }
+.ranking .b { font-weight: 800; }
+.ranking .pn { display: block; font-weight: 600; }
+.ranking .pf { display: block; font-size: 12px; color: var(--muted); }
+@media (max-width: 640px) {
+  .ranking th:nth-child(4), .ranking td:nth-child(4) { display: none; }
+  .ranking td, .ranking th { padding-left: 6px; padding-right: 6px; }
+}

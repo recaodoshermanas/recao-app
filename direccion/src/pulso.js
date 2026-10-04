@@ -5,6 +5,9 @@ import { hoursChart, weekChart, monthsChart } from "./charts.js";
 export function renderPulso(el, d) {
   const hoy = d.hoy, sem = d.semana, mes = d.mes;
   const dHoy = delta(hoy.venta, hoy.semana_pasada_misma_hora);
+  const tAntes = hoy.tickets_semana_pasada_misma_hora;
+  const dTic = delta(hoy.tickets, tAntes);
+  const dTm = delta(hoy.ticket_medio, tAntes ? hoy.semana_pasada_misma_hora / tAntes : null);
   const dSem = delta(sem.venta, sem.anterior);
   const dMes = delta(mes.venta, mes.anterior_mismo_dia);
   const dAnio = delta(mes.venta, mes.anio_pasado_mismo_dia);
@@ -27,8 +30,8 @@ export function renderPulso(el, d) {
       <div class="big">${num(hoy.venta)}<small>€</small></div>
       ${hoy.semana_pasada_misma_hora > 0 ? `<div class="delta-pill ${dHoy.cls}"><b>${arrow(dHoy.cls)} ${dHoy.txt}</b><span>que el ${dia} pasado a esta hora</span></div>` : ""}
       <div class="hero-stats">
-        <div><b>${num(hoy.tickets)}</b><span>tickets</span></div>
-        <div><b>${eur(hoy.ticket_medio, 2)}</b><span>ticket medio</span></div>
+        <div><b>${num(hoy.tickets)}</b><span>tickets${tAntes ? ` <em class="${dTic.cls}">${dTic.txt}</em>` : ""}</span></div>
+        <div><b>${eur(hoy.ticket_medio, 2)}</b><span>ticket medio${tAntes ? ` <em class="${dTm.cls}">${dTm.txt}</em>` : ""}</span></div>
         <div><b>≈ ${eur(hoy.proyeccion)}</b><span>cierre previsto</span></div>
       </div>
     </div>
@@ -63,6 +66,11 @@ export function renderPulso(el, d) {
         <dt>Margen bruto</dt><dd>${pct(mes.margen_pct)}<em>${mesAnt}: ${pct(mes.margen_pct_anterior)}</em></dd>
         <dt>Ticket medio</dt><dd>${eur(mes.tickets ? mes.venta / mes.tickets : null, 2)}<em>${num(mes.tickets)} tickets</em></dd>
       </dl>
+    </section>
+
+    <section class="card c12" aria-labelledby="h-top">
+      <div class="head"><div><h2 id="h-top">Lo más vendido hoy</h2><p class="sub">Por unidades. El cambio compara con el mismo día de la semana pasada hasta esta misma hora</p></div></div>
+      ${topHoy(d.top_hoy || [])}
     </section>
 
     <section class="card c7" aria-labelledby="h-meses">
@@ -120,6 +128,22 @@ function monthBar(mes) {
     ${ref ? `<div class="ref" style="left:${p(ref)}" title="Cierre del mes anterior"></div>` : ""}
   </div>
   <div class="month-scale"><span>Llevamos ${eur(mes.venta)}</span><span>La raya: cierre del mes anterior, ${eur(ref)}</span></div>`;
+}
+
+function topHoy(rows) {
+  if (!rows.length) return `<p class="empty">Todavía no hay ventas hoy.</p>`;
+  return `<table class="ranking">
+    <thead><tr><th class="i">#</th><th>Producto</th><th class="r">Uds.</th><th class="r">Importe</th><th class="r">vs hace 7 días</th></tr></thead>
+    <tbody>${rows.map((p, i) => {
+      const dd = p.uds_antes ? delta(p.uds, p.uds_antes) : null;
+      return `<tr>
+        <td class="i">${i + 1}</td>
+        <td><span class="pn">${esc(bonito(p.nombre))}</span><span class="pf">${esc(p.familia)}</span></td>
+        <td class="r b">${num(p.uds)}</td>
+        <td class="r">${eur(p.importe, 2)}</td>
+        <td class="r">${dd ? `<span class="delta ${dd.cls}">${arrow(dd.cls)} ${dd.txt}</span>` : `<span class="delta up">nuevo</span>`}</td>
+      </tr>`; }).join("")}</tbody>
+  </table>`;
 }
 
 function prodList(title, color, rows, emptyTxt) {
