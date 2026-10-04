@@ -84,19 +84,25 @@ export function hoursChart(width, d) {
 
 // ---------- 2. Semana: día a día frente a la semana pasada ----------
 export function weekChart(width, dias, hoyFecha) {
-  const H = 190, m = { t: 22, r: 4, b: 26, l: 4 };
+  const H = 190, m = { t: 16, r: 14, b: 26, l: 14 };
   const iw = width - m.l - m.r, ih = H - m.t - m.b;
-  const max = Math.max(...dias.map((d) => Math.max(d.venta, d.anterior)), 1) * 1.08;
-  const gw = iw / 7, bw = Math.min(22, gw * 0.3), gap = 3;
+  const max = Math.max(...dias.map((d) => Math.max(d.venta, d.anterior)), 1) * 1.1;
+  const gw = iw / 7;
+  const xc = (i) => m.l + gw * i + gw / 2;
   const y = (v) => m.t + ih - v / max * ih;
-  let g = `<defs><pattern id="rayas" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#F1BE49"/><rect width="2" height="6" fill="#E3A92A"/></pattern></defs>`;
-  g += `<line x1="${m.l}" x2="${width - m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line)" />`;
+  let g = `<line x1="${m.l}" x2="${width - m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line)" />`;
+  const antPts = dias.map((d, i) => [xc(i), y(d.anterior)]);
+  // días cerrados en línea continua; hoy (aún abierto) en discontinua
+  const estaPts = []; let hoyPt = null;
+  dias.forEach((d, i) => { if (d.fecha < hoyFecha) estaPts.push([xc(i), y(d.venta)]); else if (d.fecha === hoyFecha) hoyPt = [xc(i), y(d.venta)]; });
+  g += `<path d="${path(antPts)}" fill="none" stroke="var(--ghost)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`;
+  if (estaPts.length > 1) g += `<path d="${path(estaPts)}" fill="none" stroke="var(--mark)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />`;
+  if (hoyPt && estaPts.length) g += `<path d="${path([estaPts[estaPts.length - 1], hoyPt])}" fill="none" stroke="var(--mark)" stroke-width="2" stroke-dasharray="4 4" stroke-linecap="round" />`;
+  estaPts.forEach(([px, py]) => { g += `<circle cx="${px}" cy="${py}" r="3" fill="var(--mark)" stroke="var(--card)" stroke-width="2" />`; });
+  if (hoyPt) g += `<circle cx="${hoyPt[0]}" cy="${hoyPt[1]}" r="5" fill="var(--card)" stroke="var(--mark)" stroke-width="2.5" />`;
   dias.forEach((d, i) => {
-    const cx = m.l + gw * i + gw / 2;
+    const cx = xc(i);
     const futuro = d.fecha > hoyFecha, esHoy = d.fecha === hoyFecha;
-    const x1 = cx - bw - gap / 2, x2 = cx + gap / 2;
-    g += `<path d="${bar(x1, y(d.anterior), bw, y(0) - y(d.anterior))}" fill="var(--ghost)" />`;
-    if (!futuro) g += `<path d="${bar(x2, y(d.venta), bw, y(0) - y(d.venta))}" fill="${esHoy ? "url(#rayas)" : "var(--mark)"}" ${esHoy ? `stroke="#E3A92A" stroke-width="1"` : ""} />`;
     g += `<text x="${cx}" y="${H - 6}" text-anchor="middle" class="axis" ${esHoy ? 'font-weight="800" fill="var(--text)"' : ""}>${letraDia(i)}</text>`;
     const tip = `<b>${nombreDia(d.fecha).replace(/^./, (c) => c.toUpperCase())} ${parseDate(d.fecha).getDate()}</b><br>` +
       (futuro ? "Aún no ha llegado<br>" : `${esHoy ? "Hoy, de momento" : "Esta semana"}: <b>${eur(d.venta)}</b><br>`) +
