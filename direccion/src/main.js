@@ -14,7 +14,7 @@ const AREAS = [
   { id: "clientes", label: "Clientes", soon: true },
   { id: "plan", label: "Plan", soon: true },
 ];
-const REFRESCO_MS = 2 * 60 * 1000;
+const REFRESCO_MS = 60 * 1000;
 let data = null, timer = null, resizeT = null, tipsOn = false;
 
 function shell(user) {

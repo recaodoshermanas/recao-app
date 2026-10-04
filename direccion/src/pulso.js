@@ -1,5 +1,5 @@
 import { eur, num, pct, delta, arrow, diaLargo, nombreDia, nombreMes, cap, hora, esc, bonito } from "./fmt.js";
-import { raceChart, weekChart, monthsChart } from "./charts.js";
+import { hoursChart, weekChart, monthsChart } from "./charts.js";
 
 // Pinta la home ("Pulso") a partir del JSON de dash_pulso()
 export function renderPulso(el, d) {
@@ -21,7 +21,6 @@ export function renderPulso(el, d) {
 
   el.innerHTML = `
   <section class="hero" aria-labelledby="h-hoy">
-    <span class="hero-r" aria-hidden="true">R</span>
     <div>
       <h1 id="h-hoy">${diaLargo(hoy.fecha)}</h1>
       <div class="live ${stale ? "stale" : ""}"><i></i>${stale ? `Sin datos nuevos desde las ${horaAct}` : `En directo, actualizado a las ${horaAct}`}</div>
@@ -35,9 +34,8 @@ export function renderPulso(el, d) {
     </div>
     <div class="hero-chart">
       <div class="legend">
-        <span><i></i>Hoy</span>
-        <span><i class="dash"></i>Previsión</span>
-        <span><i class="soft"></i>El ${dia} pasado</span>
+        <span><i class="box"></i>Hoy, por horas</span>
+        <span><i class="box soft"></i>El ${dia} pasado</span>
       </div>
       <div data-chart="race" style="flex:1"></div>
     </div>
@@ -96,7 +94,7 @@ export function renderPulso(el, d) {
     </section>
   </div>
   <footer class="foot">
-    <span>Datos de la caja (Epos), se actualizan cada 10 minutos. Margen bruto = venta sin IVA menos coste del producto.</span>
+    <span>Datos de la caja (Epos), se actualizan cada 2 minutos. Margen bruto = venta sin IVA menos coste del producto.</span>
     <span>Último ticket: ${hora(hoy.ultimo_ticket)}</span>
   </footer>`;
 
@@ -106,7 +104,7 @@ export function renderPulso(el, d) {
 export function drawCharts(el, d) {
   const w = (name) => el.querySelector(`[data-chart="${name}"]`);
   const r = w("race"), wk = w("week"), mo = w("months");
-  if (r) r.innerHTML = raceChart(r.clientWidth || 600, d);
+  if (r) r.innerHTML = hoursChart(r.clientWidth || 600, d);
   if (wk) wk.innerHTML = weekChart(wk.clientWidth || 400, d.semana.dias, d.hoy.fecha);
   if (mo) mo.innerHTML = monthsChart(mo.clientWidth || 600, d.meses, d.mes.proyeccion, window.innerWidth > 980 ? 340 : 230);
 }

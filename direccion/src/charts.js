@@ -40,80 +40,39 @@ function bar(x, y, w, h, r = 4) {
   return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
 }
 
-// ---------- 1. Carrera del día (acumulado por horas) ----------
-export function raceChart(width, d) {
+// ---------- 1. Hoy por horas frente al mismo día de la semana pasada ----------
+export function hoursChart(width, d) {
   const H = width < 520 ? 210 : 250;
-  const m = { t: 18, r: 64, b: 26, l: 46 };
+  const m = { t: 22, r: 8, b: 26, l: 46 };
   const W = width, iw = W - m.l - m.r, ih = H - m.t - m.b;
-  const horas = d.curva.horas; const h0 = horas[0], h1 = horas[horas.length - 1] + 1;
-  const ahora = d.ahora; const hAct = Number(ahora.slice(11, 13)) + Number(ahora.slice(14, 16)) / 60;
+  const horas = d.curva.horas, n = horas.length;
+  const ahora = d.ahora; const hAct = Number(ahora.slice(11, 13));
   const esHoy = d.hoy.fecha === ahora.slice(0, 10);
-
-  // acumulados
-  const cum = (arr) => { let s = 0; const out = [[h0, 0]]; arr.forEach((v, i) => { s += v || 0; out.push([horas[i] + 1, s]); }); return out; };
-  const lw = cum(d.curva.semana_pasada);
-  const hoyPts = [[h0, 0]]; let s = 0;
-  d.curva.hoy.forEach((v, i) => {
-    const h = horas[i]; if (v == null) return;
-    s += v; const xEnd = Math.min(h + 1, hAct); if (xEnd > h0) hoyPts.push([xEnd, s]);
-  });
-  const total = d.hoy.venta;
-  if (hoyPts.length) hoyPts[hoyPts.length - 1][1] = total;
-  // previsión: lo que queda del día con el ritmo típico (media de los últimos 4 mismos días)
-  const fc = [];
-  if (esHoy && hAct < h1) {
-    let acc = total; const start = Math.max(hAct, h0); fc.push([start, acc]);
-    horas.forEach((h, i) => {
-      const t = d.curva.tipico[i] || 0;
-      if (h + 1 <= start) return;
-      const part = h < start ? (h + 1 - start) : 1;
-      acc += t * part; fc.push([h + 1, acc]);
-    });
-  }
-  const fcEnd = fc.length ? fc[fc.length - 1][1] : total;
-  const max = niceMax(Math.max(lw[lw.length - 1][1], fcEnd, total, 1) * 1.04, 3);
-
-  const x = (h) => m.l + (h - h0) / (h1 - h0) * iw;
+  const hoy = d.curva.hoy, lw = d.curva.semana_pasada;
+  const max = niceMax(Math.max(...hoy.map((v) => v || 0), ...lw.map((v) => v || 0), 1) * 1.05, 3);
+  const gw = iw / n, bw = Math.max(4, Math.min(16, gw * 0.34)), gap = 2;
   const y = (v) => m.t + ih - v / max * ih;
-  const P = (pts) => path(pts.map(([a, b]) => [x(a), y(b)]));
-
-  let g = "";
+  let g = `<defs><pattern id="rayas-h" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="${INK}" fill-opacity=".35"/><rect width="2" height="5" fill="${INK}"/></pattern></defs>`;
   for (let i = 0; i <= 3; i++) {
     const v = max / 3 * i, yy = y(v);
     g += `<line x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}" stroke="${INK}" stroke-opacity="${i ? 0.12 : 0.35}" />`;
     g += `<text x="${m.l - 8}" y="${yy + 4}" text-anchor="end" fill="${INK}" fill-opacity=".7" font-size="12">${i ? eurK(v) : "0"}</text>`;
   }
-  const paso = iw < 340 ? 4 : 2;
-  for (let h = h0 + 1; h <= h1; h += paso) g += `<text x="${x(h)}" y="${H - 6}" text-anchor="middle" fill="${INK}" fill-opacity=".7" font-size="12">${h}h</text>`;
-
-  // semana pasada (fino, translúcido), previsión (discontinua), hoy (grueso)
-  g += `<path d="${P(lw)}" fill="none" stroke="${INK}" stroke-opacity=".38" stroke-width="2" stroke-linejoin="round" />`;
-  if (fc.length > 1) g += `<path d="${P(fc)}" fill="none" stroke="${INK}" stroke-width="2" stroke-dasharray="5 5" stroke-linecap="round" />`;
-  if (hoyPts.length > 1) {
-    const area = P(hoyPts) + `L${x(hoyPts[hoyPts.length - 1][0])},${y(0)}L${x(h0)},${y(0)}Z`;
-    g += `<path d="${area}" fill="${INK}" fill-opacity=".08" />`;
-    g += `<path d="${P(hoyPts)}" fill="none" stroke="${INK}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />`;
-    const [lx, ly] = hoyPts[hoyPts.length - 1];
-    if (esHoy) g += `<circle cx="${x(lx)}" cy="${y(ly)}" r="5.5" fill="${INK}" stroke="#F1BE49" stroke-width="2.5" />`;
-  }
-  // etiquetas directas al final de cada línea (evitando que se pisen)
-  const lwEnd = lw[lw.length - 1][1];
-  let yF = y(fcEnd), yL = y(lwEnd);
-  if (fc.length > 1 && Math.abs(yF - yL) < 36) { const mid = (yF + yL) / 2; if (yF <= yL) { yF = mid - 18; yL = mid + 18; } else { yF = mid + 18; yL = mid - 18; } }
-  if (fc.length > 1) g += `<text x="${W - m.r + 8}" y="${yF - 2}" fill="${INK}" font-size="13" font-weight="800">≈ ${num(fcEnd)} €</text><text x="${W - m.r + 8}" y="${yF + 12}" fill="${INK}" fill-opacity=".7" font-size="11">previsto</text>`;
-  g += `<text x="${W - m.r + 8}" y="${yL - 2}" fill="${INK}" fill-opacity=".65" font-size="13" font-weight="700">${num(lwEnd)} €</text><text x="${W - m.r + 8}" y="${yL + 12}" fill="${INK}" fill-opacity=".55" font-size="11">hace 7 días</text>`;
-
-  // zonas de hover por hora
+  const paso = iw < 340 ? 3 : 2;
   horas.forEach((h, i) => {
-    const xa = x(h), xb = x(h + 1);
-    const hv = d.curva.hoy[i], lv = d.curva.semana_pasada[i], tv = d.curva.tipico[i];
-    const tip = `<b>De ${h} a ${h + 1} h</b><br>` +
-      (hv != null ? `Hoy: <b>${eur(hv)}</b><br>` : "") +
-      `Hace 7 días: ${eur(lv)}<br><span class="t">Lo normal: ${eur(tv)}</span>`;
-    g += `<rect x="${xa}" y="${m.t}" width="${xb - xa}" height="${ih}" fill="transparent" data-tip="${tip.replace(/"/g, "&quot;")}" data-hl="h${h}" />`;
-    g += `<line data-g="h${h}" class="xh" x1="${(xa + xb) / 2}" x2="${(xa + xb) / 2}" y1="${m.t}" y2="${m.t + ih}" stroke="${INK}" stroke-opacity="0" stroke-width="1" pointer-events="none" />`;
+    const cx = m.l + gw * i + gw / 2;
+    const enCurso = esHoy && h === hAct;
+    const lv = lw[i] || 0, hv = hoy[i];
+    g += `<path d="${bar(cx - bw - gap / 2, y(lv), bw, y(0) - y(lv))}" fill="${INK}" fill-opacity=".28" />`;
+    if (hv != null) g += `<path d="${bar(cx + gap / 2, y(hv), bw, y(0) - y(hv))}" fill="${enCurso ? "url(#rayas-h)" : INK}" />`;
+    const cerca = esHoy && Math.abs(h - hAct) === 1;
+    if (enCurso || ((h - horas[0]) % paso === 0 && !cerca)) g += `<text x="${cx}" y="${H - 6}" text-anchor="middle" fill="${INK}" fill-opacity="${enCurso ? 1 : 0.7}" font-size="12"${enCurso ? ' font-weight="800"' : ""}>${h}h</text>`;
+    const tip = `<b>De ${h} a ${h + 1} h${enCurso ? " (en curso)" : ""}</b><br>` +
+      (hv != null ? `Hoy: <b>${eur(hv)}</b><br>` : "Aún no ha llegado<br>") +
+      `Hace 7 días: ${eur(lv)}`;
+    g += `<rect x="${m.l + gw * i}" y="${m.t}" width="${gw}" height="${ih + m.b}" fill="transparent" data-tip="${tip.replace(/"/g, "&quot;")}" />`;
   });
-  return `<svg class="chart race" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Venta acumulada de hoy por horas frente a hace 7 días y previsión de cierre">${g}</svg>`;
+  return `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Venta de cada hora de hoy frente a la misma hora de hace 7 días">${g}</svg>`;
 }
 
 // ---------- 2. Semana: día a día frente a la semana pasada ----------
