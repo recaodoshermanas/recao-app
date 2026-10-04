@@ -44,7 +44,7 @@ export function renderPulso(el, d) {
   <div class="grid">
     <section class="card c5" aria-labelledby="h-sem">
       <div class="head">
-        <div><h2 id="h-sem">Esta semana</h2><p class="sub">De lunes a ahora</p></div>
+        <div><h2 id="h-sem">Esta semana</h2><p class="sub">De lunes a ahora, venta diaria en euros</p></div>
         <div class="legend" style="color:var(--text-2)"><span><i style="color:var(--mark)"></i>Esta</span><span><i style="color:var(--ghost)"></i>Pasada</span></div>
       </div>
       <div class="num">${eur(sem.venta)}</div>

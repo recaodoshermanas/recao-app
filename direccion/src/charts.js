@@ -84,13 +84,18 @@ export function hoursChart(width, d) {
 
 // ---------- 2. Semana: día a día frente a la semana pasada ----------
 export function weekChart(width, dias, hoyFecha) {
-  const H = 190, m = { t: 16, r: 14, b: 26, l: 14 };
+  const H = 210, m = { t: 22, r: 10, b: 26, l: 44 };
   const iw = width - m.l - m.r, ih = H - m.t - m.b;
-  const max = Math.max(...dias.map((d) => Math.max(d.venta, d.anterior)), 1) * 1.1;
+  const max = niceMax(Math.max(...dias.map((d) => Math.max(d.venta, d.anterior)), 1) * 1.08, 3);
   const gw = iw / 7;
   const xc = (i) => m.l + gw * i + gw / 2;
   const y = (v) => m.t + ih - v / max * ih;
-  let g = `<line x1="${m.l}" x2="${width - m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line)" />`;
+  let g = "";
+  for (let i = 0; i <= 3; i++) {
+    const v = max / 3 * i, yy = y(v);
+    g += `<line x1="${m.l}" x2="${width - m.r}" y1="${yy}" y2="${yy}" stroke="var(--${i ? "grid" : "line"})" />`;
+    g += `<text x="${m.l - 8}" y="${yy + 4}" text-anchor="end" class="axis">${i ? eurK(v) : "0"}</text>`;
+  }
   const antPts = dias.map((d, i) => [xc(i), y(d.anterior)]);
   // días cerrados en línea continua; hoy (aún abierto) en discontinua
   const estaPts = []; let hoyPt = null;
@@ -100,6 +105,12 @@ export function weekChart(width, dias, hoyFecha) {
   if (hoyPt && estaPts.length) g += `<path d="${path([estaPts[estaPts.length - 1], hoyPt])}" fill="none" stroke="var(--mark)" stroke-width="2" stroke-dasharray="4 4" stroke-linecap="round" />`;
   estaPts.forEach(([px, py]) => { g += `<circle cx="${px}" cy="${py}" r="3" fill="var(--mark)" stroke="var(--card)" stroke-width="2" />`; });
   if (hoyPt) g += `<circle cx="${hoyPt[0]}" cy="${hoyPt[1]}" r="5" fill="var(--card)" stroke="var(--mark)" stroke-width="2.5" />`;
+  // venta de cada día escrita encima de su punto
+  dias.forEach((d, i) => {
+    if (d.fecha > hoyFecha) return;
+    const ly = (d.fecha === hoyFecha ? y(d.venta) : Math.min(y(d.venta), y(d.anterior))) - 10;
+    g += `<text x="${xc(i)}" y="${Math.max(ly, 11)}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text)">${num(d.venta)}</text>`;
+  });
   dias.forEach((d, i) => {
     const cx = xc(i);
     const futuro = d.fecha > hoyFecha, esHoy = d.fecha === hoyFecha;
