@@ -34,8 +34,8 @@ export function renderPulso(el, d) {
     </div>
     <div class="hero-chart">
       <div class="legend">
-        <span><i class="box"></i>Hoy, por horas</span>
-        <span><i class="box soft"></i>El ${dia} pasado</span>
+        <span><i></i>Hoy, por horas</span>
+        <span><i class="soft"></i>El ${dia} pasado</span>
       </div>
       <div data-chart="race" style="flex:1"></div>
     </div>
