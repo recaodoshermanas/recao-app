@@ -118,12 +118,6 @@ export default function App() {
     if (user && user.rol !== "admin") { setAviso("Esta zona es solo para dirección."); logout(); }
   }, [user, logout]);
 
-  // Las pantallas de la app están pensadas en claro: mientras se ven, el panel va en claro
-  useEffect(() => {
-    const raiz = document.documentElement;
-    if (sub && sub.legado) raiz.dataset.theme = "light"; else delete raiz.dataset.theme;
-  }, [sub]);
-
   // Notificaciones: llevan a la pantalla que toca
   useEffect(() => {
     const h = (e) => { const d = e.detail && DESTINOS[e.detail.destino]; if (d) ir(d); };

@@ -5,13 +5,26 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
+// Las pantallas que vienen de la app importan src/lib/styles.js; en el panel se les da el tema de dirección.
+const TEMA = fileURLToPath(new URL("./direccion/src/tema-app.js", import.meta.url));
+const temaDireccion = {
+  name: "tema-direccion",
+  enforce: "pre",
+  async resolveId(source, importer) {
+    if (!importer || !/styles\.js$/.test(source)) return null;
+    const r = await this.resolve(source, importer, { skipSelf: true });
+    if (r && r.id.replace(/\\/g, "/").endsWith("/src/lib/styles.js")) return TEMA;
+    return null;
+  },
+};
+
 // Valores públicos (URL del proyecto y clave publicable). Si Vercel define las variables, mandan esas.
 const URL_PUBLICA = "https://fbkqkcvfiwlnknbconwb.supabase.co";
 const CLAVE_PUBLICA = "sb_publishable_V0mVZ18Pr3Z8ikDeaeSpIw_cfrkdxO2";
 
 export default defineConfig({
   root: fileURLToPath(new URL("./direccion", import.meta.url)),
-  plugins: [react()],
+  plugins: [temaDireccion, react()],
   define: {
     "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(process.env.VITE_SUPABASE_URL || URL_PUBLICA),
     "import.meta.env.VITE_SUPABASE_KEY": JSON.stringify(process.env.VITE_SUPABASE_KEY || CLAVE_PUBLICA),

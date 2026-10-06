@@ -18,8 +18,8 @@
 .pills-movil { display: none; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* pantallas que vienen de la app: se respetan tal cual, sobre su crema de siempre */
-.legado { background: #FAF7F2; color: #2C2C2C; border-radius: var(--r-m); border: 1px solid var(--line); overflow: clip; min-height: 50vh; font-family: "DM Sans", system-ui, sans-serif; font-feature-settings: normal; font-size: 16px; line-height: normal; color-scheme: light; }
+/* pantallas que vienen de la app: llevan el tema de dirección (tema-app.js) */
+.legado { min-height: 50vh; font-feature-settings: normal; line-height: normal; }
 .legado * { box-sizing: revert; }
 .legado button, .legado input, .legado select, .legado textarea { font: revert; color: revert; }
 
@@ -48,6 +48,6 @@
   .pills { display: none; }
   .pills-movil { display: block; margin-top: 12px; }
   .pills-movil select { width: 100%; font: inherit; font-weight: 700; font-size: 15px; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; }
-  .legado { border-radius: 14px; margin: 0 -6px; }
+  .legado { margin: 0 -14px; }
   .user { flex-wrap: wrap; }
 }
