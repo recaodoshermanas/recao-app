@@ -1,0 +1,107 @@
+/* ---------- Producto ---------- */
+.delta { font-weight: 700; font-size: 12.5px; white-space: nowrap; color: var(--muted); }
+.delta.up { color: var(--up); }
+.delta.down { color: var(--down); }
+.ranking td.down { color: var(--down); font-weight: 700; }
+.ranking tr.clic { cursor: pointer; }
+.ranking tr.clic:hover td { background: color-mix(in srgb, var(--amarillo) 10%, transparent); }
+.ranking tr.sel td { background: color-mix(in srgb, var(--amarillo) 18%, transparent); }
+.ranking td small.pf, .ranking td small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 500; }
+.pto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; flex: none; }
+.mt { margin-top: 16px; }
+
+/* tabla de familias */
+.fam-t td:first-child { font-weight: 600; white-space: nowrap; }
+.bar-th { width: 26%; }
+.bar-td { white-space: nowrap; min-width: 100px; }
+.barra-h { display: inline-block; vertical-align: middle; width: calc(100% - 44px); min-width: 46px; height: 8px; background: var(--grid); border-radius: 99px; overflow: hidden; }
+.barra-h i { display: block; height: 100%; border-radius: 99px; }
+.ranking .bar-td small { display: inline-block; vertical-align: middle; font-size: 11.5px; color: var(--muted); width: 38px; text-align: right; }
+
+/* 80/20 */
+.abc { display: grid; gap: 8px; margin-top: 14px; }
+.abc-f { display: grid; grid-template-columns: 38px 1fr 34%; gap: 12px; align-items: center; text-align: left; background: none; border: 1px solid var(--line); border-radius: 14px; padding: 9px 12px; cursor: pointer; font: inherit; color: inherit; }
+.abc-f:hover { border-color: var(--tinta); }
+.abc-l { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: 19px; }
+.abc-t { display: grid; }
+.abc-t b { font-size: 14.5px; }
+.abc-t small { font-size: 12px; color: var(--muted); }
+.abc-b { height: 8px; background: var(--grid); border-radius: 99px; overflow: hidden; }
+.abc-b i { display: block; height: 100%; border-radius: 99px; outline: 1px solid var(--line); }
+
+/* leyenda del gráfico de familias */
+.leyenda-fam { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 6px; }
+.leyenda-fam button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--card); color: var(--text-2, var(--text)); border-radius: 99px; padding: 4px 11px; font: 600 12.5px var(--ui); cursor: pointer; }
+.leyenda-fam button i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.leyenda-fam button.on { background: var(--tinta); color: #fff; border-color: var(--tinta); }
+
+/* lo que sube / cae */
+.movers { list-style: none; margin: 12px 0 0; padding: 0; display: grid; }
+.movers li + li { border-top: 1px solid var(--grid); }
+.movers button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: none; border: 0; padding: 9px 4px; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 8px; }
+.movers button:hover { background: color-mix(in srgb, var(--amarillo) 10%, transparent); }
+.mv-n { display: grid; min-width: 0; }
+.mv-n b { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-n small { font-size: 12px; color: var(--muted); }
+.mv-d { font-weight: 800; white-space: nowrap; font-size: 14px; }
+.mv-d.up { color: var(--up); }
+.mv-d.down { color: var(--down); }
+
+/* catálogo */
+.catalogo td:first-child { display: grid; grid-template-columns: 24px 1fr; column-gap: 8px; align-items: center; min-width: 220px; }
+.catalogo td:first-child .pn, .catalogo td:first-child .pf { grid-column: 2; }
+.catalogo td:first-child .abc-mini { grid-row: span 2; }
+.abc-mini { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font: 800 11.5px var(--ui); }
+.abc-mini.c-A { background: var(--tinta); color: #fff; }
+.abc-mini.c-B { background: #7C868D; color: #fff; }
+.abc-mini.c-C { background: #CFCCC3; color: var(--tinta); }
+.abc-mini.c-D { background: #EEECE6; color: var(--muted); }
+th.ordenable button { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+th.ordenable.on button { color: var(--text); }
+.senal { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 99px; padding: 2px 8px; margin: 1px 4px 1px 0; white-space: nowrap; }
+.senal.mal { background: color-mix(in srgb, var(--down) 14%, transparent); color: var(--down); }
+.senal.aviso { background: color-mix(in srgb, var(--amarillo) 32%, transparent); color: #7A5600; }
+.btn-l.mas { margin-top: 12px; width: 100%; }
+
+/* ficha */
+.senales { display: grid; gap: 6px; margin-bottom: 14px; }
+.senales .senal { display: grid; white-space: normal; border-radius: 12px; padding: 8px 12px; font-size: 13px; }
+.senales .senal small { font-weight: 500; font-size: 12px; opacity: .85; }
+.ficha-kpis.cuatro { grid-template-columns: repeat(2, 1fr); }
+.ficha-kpis.cuatro .delta { font-size: 11.5px; }
+.fila-graf { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ficha-sec h3 small { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: 6px; }
+
+/* familias */
+.fam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+.fam-card { border-top: 4px solid var(--c); display: flex; flex-direction: column; }
+.fam-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.fam-cab h2 { display: flex; align-items: center; }
+.fam-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 10px; }
+.fam-nums div { display: grid; }
+.fam-nums b { font-family: var(--display); font-variation-settings: "SOFT" 100, "opsz" 72; font-weight: 800; font-size: 21px; }
+.fam-nums b.mal { color: var(--down); }
+.fam-nums small { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+.mini-serie { display: flex; align-items: flex-end; gap: 3px; height: 46px; margin: 4px 0 12px; }
+.mini-serie i { flex: 1; background: var(--c); opacity: .75; border-radius: 3px 3px 0 0; min-height: 2px; }
+.mini-serie i:last-child { opacity: .35; }
+.mini-serie i:hover { opacity: 1; }
+.top-fam { list-style: none; margin: 0; padding: 0; }
+.top-fam li + li { border-top: 1px solid var(--grid); }
+.top-fam button { width: 100%; display: flex; justify-content: space-between; gap: 10px; background: none; border: 0; padding: 7px 2px; font: inherit; font-size: 13.5px; color: inherit; cursor: pointer; text-align: left; }
+.top-fam button:hover span { text-decoration: underline; }
+.top-fam b { white-space: nowrap; }
+
+.salud-sec .seg { flex-wrap: wrap; flex-shrink: 1; height: auto; }
+
+@media (max-width: 760px) {
+  .ranking.fam-t th:nth-child(4), .ranking.fam-t td:nth-child(4) { display: table-cell; }
+  .ranking.fam-t th:nth-child(5), .ranking.fam-t td:nth-child(5) { display: none; }
+  .fila-graf, .ficha-kpis.cuatro { grid-template-columns: 1fr; }
+  .abc-f { grid-template-columns: 38px 1fr; }
+  .abc-b { display: none; }
+  .fam-grid { grid-template-columns: 1fr; }
+  .bar-th, .bar-td { display: none; }
+  .catalogo td:first-child { min-width: 170px; }
+}
+.fam-t td, .fam-t th { padding-left: 7px; padding-right: 7px; }

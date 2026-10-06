@@ -4,6 +4,7 @@ import "./style.css";
 import "./shell.css";
 import "./finanzas.css";
 import "./modulos.css";
+import "./producto.css";
 import App from "./App.jsx";
 
 ReactDOM.createRoot(document.getElementById("app")).render(

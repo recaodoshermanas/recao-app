@@ -28,7 +28,11 @@ export const AREAS = [
   {
     id: "producto", label: "Producto", quien: "Javi",
     subs: [
-      { id: "analitica", label: "Analítica", legado: true },
+      { id: "resumen", label: "Resumen" },
+      { id: "catalogo", label: "Catálogo" },
+      { id: "familias", label: "Familias" },
+      { id: "proveedores", label: "Proveedores" },
+      { id: "salud", label: "Salud del catálogo" },
     ],
   },
   {
