@@ -1,0 +1,53 @@
+/* Estructura del panel: cabecera, áreas, subpáginas y pantallas heredadas de la app */
+
+.top .menu { order: 2; }
+.top .campana { order: 3; display: flex; align-items: center; flex-shrink: 0; }
+.top .burger { order: 4; }
+.campana svg { stroke: var(--muted); }
+.user button[aria-current="page"] { background: var(--nav-on-bg); color: var(--nav-on-fg); border-color: transparent; }
+
+/* subpáginas */
+.subnav { margin: 4px 0 18px; }
+.subnav-t { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.subnav h1 { margin: 0; font-family: var(--display); font-variation-settings: "SOFT" 100, "opsz" 72; font-weight: 800; font-size: 40px; letter-spacing: -0.03em; line-height: 1.05; }
+.subnav-t span { color: var(--muted); font-size: 13px; font-weight: 600; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.pills a { text-decoration: none; color: var(--text-2); font-weight: 600; font-size: 13.5px; padding: 7px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); }
+.pills a:hover { border-color: var(--ghost); }
+.pills a[aria-current="page"] { background: var(--amarillo); border-color: var(--amarillo); color: var(--tinta); }
+.pills-movil { display: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* pantallas que vienen de la app: se respetan tal cual, sobre su crema de siempre */
+.legado { background: #FAF7F2; color: #2C2C2C; border-radius: var(--r-m); border: 1px solid var(--line); overflow: clip; min-height: 50vh; font-family: "DM Sans", system-ui, sans-serif; font-feature-settings: normal; font-size: 16px; line-height: normal; color-scheme: light; }
+.legado * { box-sizing: revert; }
+.legado button, .legado input, .legado select, .legado textarea { font: revert; color: revert; }
+
+.btn { margin-top: 12px; border: 0; background: var(--tinta); color: #fff; border-radius: 12px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
+
+/* Personas · resumen */
+.avisos { display: grid; gap: 10px; }
+.aviso { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: var(--r-m); background: var(--tinta); color: #fff; text-decoration: none; font-weight: 600; }
+.aviso b { width: 36px; height: 36px; border-radius: 50%; background: var(--amarillo); color: var(--tinta); display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: 18px; flex-shrink: 0; }
+.aviso span { flex: 1; }
+.aviso i { font-style: normal; color: var(--amarillo); font-size: 18px; }
+.aviso.ok { background: var(--card); color: var(--text-2); border: 1px solid var(--line); }
+.aviso.ok b { background: var(--up); color: #fff; font-family: var(--ui); font-size: 16px; }
+.turnos { list-style: none; margin: 14px 0 0; padding: 0; }
+.turnos li { display: grid; grid-template-columns: 92px 1fr auto; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--grid); font-size: 14px; }
+.turnos li:last-child { border-bottom: 0; }
+.turnos .chip { font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 999px; text-align: center; }
+.turnos .h { color: var(--muted); font-size: 13px; }
+.sub.fuera { margin-top: 12px; }
+.sub.proximo { margin-top: 16px; }
+
+@media (max-width: 640px) {
+  .top .campana { margin-left: auto; }
+  .top .burger { margin-left: 4px; }
+  .subnav h1 { font-size: 32px; }
+  .pills { display: none; }
+  .pills-movil { display: block; margin-top: 12px; }
+  .pills-movil select { width: 100%; font: inherit; font-weight: 700; font-size: 15px; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; }
+  .legado { border-radius: 14px; margin: 0 -6px; }
+  .user { flex-wrap: wrap; }
+}

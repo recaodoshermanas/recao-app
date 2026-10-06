@@ -1,29 +1,30 @@
 # Recao Dirección
 
-Dashboard de dirección de Recao. Web estática, sin dependencias ni paso de build, que lee la misma base de datos (Supabase) que la app.
+Panel de dirección de Recao (direccion.elrecao.com). Lee y escribe en la misma base de datos (Supabase) que la app, con las mismas cuentas. Solo entran usuarios con rol `admin`.
 
-- **Acceso:** con las mismas cuentas de la app. Solo entran usuarios con rol `admin`.
-- **Datos:** la función `public.dash_pulso()` de Supabase devuelve todo lo que necesita la home en una sola llamada. Las ventas llegan de Epos cada 2 minutos (función `epos-v4`).
-- **Refresco:** la página vuelve a pedir datos cada minuto y al volver a la pestaña.
+## Cómo está montado
+
+- React + Vite, con las mismas dependencias que la app (`package.json` de la raíz).
+- Build propio: `vite build --config vite.direccion.config.js` → `dist-direccion/`. La app (`vite.config.js`) no se toca.
+- Reutiliza las pantallas de administración de la app (`src/views/owner/…`) tal cual: lo que se arregla en un sitio se arregla en el otro. Mientras se ven, el panel se pinta en claro.
 
 ## Estructura
 
 ```
-index.html        página
-src/main.js       login (Supabase Auth por REST) y arranque
-src/pulso.js      home "Pulso"
-src/charts.js     gráficos SVG (hoy por horas, semana, 13 meses)
-src/fmt.js        formatos en español
-src/config.js     URL y clave publicable de Supabase
-src/style.css     estilos (marca Recao, modo claro y oscuro)
+index.html               entrada
+public/                  icono y manifest (app de escritorio/móvil)
+src/main.jsx             arranque
+src/App.jsx              login, cabecera, áreas y subpáginas (rutas #/area/subpagina)
+src/areas.js             mapa de áreas y subpáginas
+src/Pulso.jsx            home: carga dash_pulso cada minuto y la pinta con pulso.js
+src/PersonasResumen.jsx  Personas · Resumen (avisos, turnos de hoy y mañana, vacaciones)
+src/Legado.jsx           pantallas que vienen de la app
+src/pulso.js, charts.js, fmt.js   home "Pulso" y gráficos SVG
+src/style.css, shell.css         estilos (marca Recao, modo claro y oscuro)
 ```
 
-## Publicar en un subdominio (Vercel)
+`src/main.js` y `src/config.js` son de la versión anterior sin build y ya no se usan.
 
-1. En Vercel: Add New, Project, importar `recaodoshermanas/recao-app`.
-2. Root Directory: `direccion`. Framework Preset: Other. Sin build command ni output directory.
-3. Deploy. Después, en Settings, Domains, añadir `direccion.elrecao.com` y crear en el DNS el registro CNAME que indique Vercel.
+## Vercel
 
-## Probar en local
-
-Cualquier servidor estático en esta carpeta, por ejemplo `npx serve .` o `python3 -m http.server`.
+Proyecto con Root Directory vacío (raíz del repo), Build Command `vite build --config vite.direccion.config.js`, Output Directory `dist-direccion`.
