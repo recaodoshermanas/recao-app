@@ -1,4 +1,4 @@
-import { eur, num, pct, delta, arrow, diaLargo, nombreDia, nombreMes, cap, hora, esc, bonito } from "./fmt.js";
+import { eur, num, pct, delta, arrow, diaLargo, nombreDia, nombreMes, cap, hora, esc, bonito, parseDate } from "./fmt.js";
 import { hoursChart, weekChart, monthsChart } from "./charts.js";
 
 // Pinta la home ("Pulso") a partir del JSON de dash_pulso()
@@ -45,6 +45,8 @@ export function renderPulso(el, d) {
   </section>
 
   <div class="grid">
+    ${porQue(d.por_que)}
+
     <section class="card c5" aria-labelledby="h-sem">
       <div class="head">
         <div><h2 id="h-sem">Esta semana</h2><p class="sub">De lunes a ahora, venta diaria en euros</p></div>
@@ -107,6 +109,7 @@ export function renderPulso(el, d) {
   </footer>`;
 
   drawCharts(el, d);
+  enlazarPq(el, d.por_que || {});
 }
 
 export function drawCharts(el, d) {
@@ -128,6 +131,72 @@ function monthBar(mes) {
     ${ref ? `<div class="ref" style="left:${p(ref)}" title="Cierre del mes anterior"></div>` : ""}
   </div>
   <div class="month-scale"><span>Llevamos ${eur(mes.venta)}</span><span>La raya: cierre del mes anterior, ${eur(ref)}</span></div>`;
+}
+
+// ---------- ¿Por qué vamos así? (hoy o ayer frente al mismo día de la semana pasada) ----------
+let pqSel = "hoy";
+const signo = (n, f) => (n > 0 ? "+" : n < 0 ? "−" : "±") + f(Math.abs(n));
+
+function pqBody(c) {
+  if (!c) return `<p class="empty">Sin datos para comparar.</p>`;
+  const dif = c.venta - c.venta_ref, dd = delta(c.venta, c.venta_ref);
+  const refTxt = `el ${nombreDia(c.referencia)} ${parseDate(c.referencia).getDate()}`;
+  const tm1 = c.tickets ? c.venta / c.tickets : 0, tm0 = c.tickets_ref ? c.venta_ref / c.tickets_ref : 0;
+  const efTickets = (c.tickets - c.tickets_ref) * tm0, efGasto = c.tickets * (tm1 - tm0);
+  const causa = Math.abs(dif) < 20 ? "Prácticamente igual que la semana pasada."
+    : Math.abs(efGasto) >= Math.abs(efTickets)
+      ? `La diferencia viene sobre todo de <b>lo que gasta cada cliente</b> (${signo(efGasto, eur)}), no de cuántos entran.`
+      : `La diferencia viene sobre todo de <b>cuántos clientes entran</b> (${signo(efTickets, eur)}), más que de lo que gasta cada uno.`;
+  const maxFam = Math.max(...c.familias.map((f) => Math.abs(f.dif)), 1);
+  const sin = c.sin_ventas || [];
+  return `
+  <p class="pq-titular"><b class="delta ${dd.cls}">${signo(dif, eur)} (${dd.txt})</b> frente a ${refTxt}${c.hasta ? ` a las ${c.hasta}` : ""}: ${eur(c.venta)} contra ${eur(c.venta_ref)}.</p>
+  <p class="pq-causa">${num(c.tickets)} tickets (antes ${num(c.tickets_ref)}) y ${eur(tm1, 2)} de ticket medio (antes ${eur(tm0, 2)}). ${causa}</p>
+  ${sin.length ? `<div class="pq-alerta" role="note"><b>Sin ni una venta${c.hasta ? " todavía" : ""}, y ${refTxt} sí se vendían:</b> ${sin.map((p) => `${esc(bonito(p.nombre))} (${num(p.uds_ref)} uds, ${eur(p.ref)})`).join(", ")}. ¿Se acabaron o no llegaron?</div>` : ""}
+  <div class="pq-cols">
+    <div>
+      <h3 class="pq-h">Por familias</h3>
+      <ul class="dv">${c.familias.map((f) => {
+        const w = (Math.abs(f.dif) / maxFam * 50).toFixed(1);
+        return `<li data-tip="${esc(`<b>${esc(f.familia)}</b><br>${eur(f.venta)} frente a ${eur(f.ref)}`)}"><span class="n">${esc(f.familia)}</span>
+          <span class="dv-bar"><i class="${f.dif < 0 ? "neg" : "pos"}" style="${f.dif < 0 ? `right:50%` : `left:50%`};width:${w}%"></i></span>
+          <span class="delta ${f.dif < 0 ? "down" : "up"}">${signo(f.dif, eur)}</span></li>`; }).join("")}</ul>
+    </div>
+    <div>
+      <h3 class="pq-h">Productos que más restan</h3>
+      ${pqLista(c.bajan, "down")}
+      <h3 class="pq-h" style="margin-top:14px">Productos que más suman</h3>
+      ${pqLista(c.suben, "up")}
+    </div>
+  </div>`;
+}
+
+function pqLista(rows, cls) {
+  if (!rows || !rows.length) return `<p class="empty">Nada destacable.</p>`;
+  return `<ul class="pq-l">${rows.map((p) => `<li><span class="pn">${esc(bonito(p.nombre))}<span class="pf">${num(p.uds)} uds, antes ${num(p.uds_ref)}</span></span><span class="delta ${cls}">${signo(p.dif, eur)}</span></li>`).join("")}</ul>`;
+}
+
+function porQue(pq) {
+  if (!pq) return "";
+  return `
+    <section class="card c12" aria-labelledby="h-pq">
+      <div class="head">
+        <div><h2 id="h-pq">¿Por qué vamos así?</h2><p class="sub">Frente al mismo día de la semana pasada</p></div>
+        <div class="seg" role="group" aria-label="Día a analizar">
+          <button type="button" data-pq="hoy" aria-pressed="${pqSel === "hoy"}">Hoy</button>
+          <button type="button" data-pq="ayer" aria-pressed="${pqSel === "ayer"}">Ayer</button>
+        </div>
+      </div>
+      <div data-pq-body>${pqBody(pq[pqSel])}</div>
+    </section>`;
+}
+
+function enlazarPq(el, pq) {
+  el.querySelectorAll("[data-pq]").forEach((b) => b.addEventListener("click", () => {
+    pqSel = b.dataset.pq;
+    el.querySelectorAll("[data-pq]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.pq === pqSel)));
+    el.querySelector("[data-pq-body]").innerHTML = pqBody(pq[pqSel]);
+  }));
 }
 
 function topHoy(rows) {
