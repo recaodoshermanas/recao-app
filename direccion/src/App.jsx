@@ -6,6 +6,7 @@ import { AREAS, DESTINOS, leerRuta } from "./areas.js";
 import { Pulso } from "./Pulso.jsx";
 import { PersonasResumen } from "./PersonasResumen.jsx";
 import { Legado } from "./Legado.jsx";
+import { FinanzasResumen, FinanzasResultados, FinanzasCaja, FinanzasCompras } from "./Finanzas.jsx";
 
 const ICONO = "/icono.png";
 
@@ -125,7 +126,7 @@ export default function App() {
     return () => window.removeEventListener("recao-nav", h);
   }, []);
 
-  const editarMes = useCallback((mk) => { setMesFoco(mk); ir("finanzas/mes"); }, []);
+  const editarMes = useCallback((mk) => { setMesFoco(mk); ir("finanzas/cierre"); }, []);
 
   if (checking) return <div className="state">Cargando…</div>;
   if (!esAdmin) return <Login onLogin={async (e, p) => { setAviso(""); return login(e, p); }} aviso={aviso} />;
@@ -133,6 +134,10 @@ export default function App() {
   let contenido;
   if (area.id === "pulso") contenido = <Pulso />;
   else if (area.id === "personas" && sub.id === "resumen") contenido = <PersonasResumen />;
+  else if (area.id === "finanzas" && sub.id === "resumen") contenido = <FinanzasResumen />;
+  else if (area.id === "finanzas" && sub.id === "resultados") contenido = <FinanzasResultados onEditMonth={editarMes} />;
+  else if (area.id === "finanzas" && sub.id === "caja") contenido = <FinanzasCaja />;
+  else if (area.id === "finanzas" && sub.id === "compras") contenido = <FinanzasCompras />;
   else contenido = <Legado area={area.id} sub={sub.id} datos={datos} user={user} mesFoco={mesFoco} onEditMonth={editarMes} />;
 
   return (

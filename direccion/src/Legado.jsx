@@ -1,8 +1,6 @@
 // Pantallas que vienen tal cual de la app (src/views/owner). Es el mismo código:
 // lo que se arregle allí se arregla aquí, y al revés.
-import { EvolucionView } from "../../src/views/owner/EvolucionView.jsx";
 import { DatosMesView } from "../../src/views/owner/DatosMesView.jsx";
-import { PLView } from "../../src/views/owner/PLView.jsx";
 import { TesoreriaView } from "../../src/views/owner/TesoreriaView.jsx";
 import { AjustesView } from "../../src/views/owner/AjustesView.jsx";
 import { AnalyticaView } from "../../src/views/owner/AnalyticaView.jsx";
@@ -48,10 +46,8 @@ export function Legado({ area, sub, datos, user, mesFoco, onEditMonth }) {
     case "personas/horas": vista = <HorasExtrasView />; break;
     case "personas/equipo": vista = <UsuariosView currentUser={user} />; break;
     case "personas/seleccion": vista = <CVCandidatosView currentUser={user} />; break;
-    case "finanzas/evolucion": vista = <EvolucionView facturas={facturas} monthlyData={monthlyData} />; break;
-    case "finanzas/resultados": vista = <PLView facturas={facturas} monthlyData={monthlyData} onEditMonth={onEditMonth} />; break;
     case "finanzas/tesoreria": vista = <TesoreriaView facturas={facturas} monthlyData={monthlyData} config={config} onReload={reload} />; break;
-    case "finanzas/mes": vista = <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={reload} initialMonth={mesFoco} />; break;
+    case "finanzas/cierre": vista = <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={reload} initialMonth={mesFoco} />; break;
     case "finanzas/facturas": vista = <WorkerView facturas={facturas} proveedores={proveedores} onReload={reload} user={user} />; break;
     case "producto/analitica": vista = <AnalyticaView />; break;
     case "plan/tareas": vista = <TareasAdminView />; break;

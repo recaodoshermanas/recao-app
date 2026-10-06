@@ -1,0 +1,81 @@
+/* Finanzas */
+.fhero { background: var(--tinta); color: #fff; border-radius: var(--r-l); padding: 28px 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 22px 32px; }
+.fhero-t { grid-column: 1 / -1; }
+.fhero h1 { margin: 0; font-size: 17px; font-weight: 700; color: #fff; }
+.fhero-s { margin: 6px 0 0; font-size: 13.5px; color: rgba(255,255,255,.72); max-width: 70ch; }
+.fhero-k { margin: 0; font-size: 14px; font-weight: 700; color: var(--amarillo); }
+.fhero .big { color: #fff; margin: 8px 0 10px; font-size: clamp(48px, 6.4vw, 88px); }
+.fhero-n { margin: 0; font-size: 13px; color: rgba(255,255,255,.66); max-width: 46ch; }
+.fhero-dl { grid-column: 1 / -1; margin: 6px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.fhero-dl div { background: rgba(255,255,255,.07); border-radius: 14px; padding: 12px 16px; }
+.fhero-dl dt { font-size: 13px; color: rgba(255,255,255,.75); }
+.fhero-dl dd { margin: 4px 0 0; font-family: var(--display); font-variation-settings: "SOFT" 100, "opsz" 72; font-weight: 800; font-size: 28px; letter-spacing: -0.02em; }
+.fhero-dl span { display: block; margin-top: 4px; font-size: 12.5px; color: rgba(255,255,255,.6); }
+
+.favisos { margin-top: 16px; }
+.favisos .aviso { background: var(--card); color: var(--text); border: 1px solid var(--line); font-weight: 500; font-size: 14px; }
+.favisos .aviso b { background: var(--amarillo); color: var(--tinta); font-family: var(--ui); font-size: 16px; width: 30px; height: 30px; }
+.favisos .aviso i { color: var(--text-2); }
+
+.fkpi { grid-column: span 3; }
+.fkpi .num { font-size: 34px; }
+.num.mal { color: var(--down); }
+.enlace { color: var(--text); font-weight: 700; font-size: 13.5px; text-decoration: none; white-space: nowrap; }
+.enlace:hover { text-decoration: underline; }
+
+/* a dónde va cada 100 € */
+.fbarras { list-style: none; margin: 16px 0 0; padding: 0; }
+.fbarras li { display: grid; grid-template-columns: 220px 1fr 90px 70px; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--grid); font-size: 14px; }
+.fbarras li:last-child { border-bottom: 0; }
+.fbarras .n { font-weight: 600; }
+.fbarras .bar-cell { height: 12px; }
+.fbarras .bar { display: block; height: 12px; border-radius: 0 4px 4px 0; background: var(--mark); }
+.fbarras .bar.pos { background: var(--up); } .fbarras .bar.neg { background: var(--down); }
+.fbarras .v { text-align: right; font-weight: 700; }
+.fbarras .m { text-align: right; color: var(--text-2); }
+.fbarras .total .n { font-weight: 800; }
+
+/* tablas */
+.tabla-scroll { overflow-x: auto; margin: 14px -4px 0; padding: 0 4px; }
+.fpl { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.fpl th, .fpl td { padding: 7px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+.fpl thead th { font-weight: 600; color: var(--muted); font-size: 12px; text-align: right; }
+.fpl thead th button { border: 0; background: none; cursor: pointer; font: inherit; color: inherit; padding: 4px 6px; border-radius: 8px; }
+.fpl thead th button small { margin-left: 2px; opacity: .7; }
+.fpl thead th.sel button { background: var(--amarillo); color: var(--tinta); font-weight: 800; }
+.fpl tbody th { text-align: left; font-weight: 500; color: var(--text-2); position: sticky; left: 0; background: var(--card); }
+.fpl td { text-align: right; }
+.fpl td.sel { background: rgba(241,190,73,.12); }
+.fpl tr.b th, .fpl tr.b td { font-weight: 800; color: var(--text); }
+.fpl tr.r td.up { color: var(--up); } .fpl tr.r td.down, .fpl td.down { color: var(--down); }
+.fpl tr.sep th { padding-top: 20px; font-size: 12px; font-weight: 700; color: var(--muted); border-bottom: 1px solid var(--line); }
+.btn-l { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 7px 14px; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.fh3 { margin: 18px 0 4px; font-size: 13px; font-weight: 700; color: var(--text-2); }
+.pq-l li.nota { color: var(--muted); font-size: 13px; }
+.flineas { list-style: none; margin: 12px 0 0; padding: 0; }
+.flineas li { display: grid; grid-template-columns: 1fr 190px 96px; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 14px; }
+.flineas li:last-child { border-bottom: 0; }
+.flineas .n { font-weight: 600; }
+.flineas .v { text-align: right; font-weight: 700; }
+.flineas select { font: inherit; font-size: 13px; border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; background: var(--card); color: var(--text); }
+
+.fcaja td, .fcaja th { white-space: nowrap; }
+.fcaja tr.falta td { background: rgba(178,65,42,.06); }
+.ranking .down { color: var(--down); }
+.ranking tr.tot td { border-top: 2px solid var(--line); font-weight: 700; }
+.chip-mal { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(178,65,42,.12); color: var(--down); }
+.aviso-txt { color: var(--down) !important; }
+
+@media (max-width: 980px) {
+  .fhero { grid-template-columns: 1fr; }
+  .fhero-dl { grid-template-columns: 1fr; }
+  .fkpi { grid-column: span 6; }
+}
+@media (max-width: 640px) {
+  .fhero { padding: 22px 20px; border-radius: 22px; }
+  .fkpi { grid-column: span 12; }
+  .fbarras li { grid-template-columns: 1fr 80px 56px; }
+  .fbarras .bar-cell { display: none; }
+  .flineas li { grid-template-columns: 1fr 96px; }
+  .flineas select { grid-column: 1 / -1; grid-row: 2; }
+}

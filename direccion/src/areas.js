@@ -22,11 +22,13 @@ export const AREAS = [
   {
     id: "finanzas", label: "Finanzas", quien: "Miguel",
     subs: [
-      { id: "evolucion", label: "Evolución", legado: true },
-      { id: "resultados", label: "Cuenta de resultados", legado: true },
-      { id: "tesoreria", label: "Tesorería", legado: true },
-      { id: "mes", label: "Datos del mes", legado: true },
+      { id: "resumen", label: "Resumen" },
+      { id: "resultados", label: "Cuenta de resultados" },
+      { id: "caja", label: "Caja" },
+      { id: "compras", label: "Compras" },
       { id: "facturas", label: "Facturas", legado: true },
+      { id: "cierre", label: "Cierre de mes", legado: true },
+      { id: "tesoreria", label: "Tesorería", legado: true },
     ],
   },
   {

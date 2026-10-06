@@ -5,6 +5,7 @@ const INK = "#1E272E";
 // ---------- tooltip compartido ----------
 let tipEl;
 export function initTips(root) {
+  if (tipEl) return; // una sola vez para todo el panel
   tipEl = document.createElement("div");
   tipEl.className = "tip"; tipEl.setAttribute("role", "status");
   document.body.appendChild(tipEl);
