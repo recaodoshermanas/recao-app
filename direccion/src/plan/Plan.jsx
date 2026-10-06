@@ -8,6 +8,7 @@ import {
 import {
   ChipArea, Responsables, FilaTarea, AltaRapida, ListaAgrupada, Tablero, TareaPanel, useFiltros, BarraFiltros, defaultsDeFiltros, resumenProyecto,
 } from "./Tareas.jsx";
+import { Roadmap } from "./Roadmap.jsx";
 
 const masDiasISO = (f, n) => { const d = new Date(`${f}T12:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
@@ -33,6 +34,7 @@ export function PlanResumen({ user }) {
         <Pestanas valor={quien} onChange={setQuien} etiqueta="Ver como" opciones={[{ id: "", label: "Todos" }, ...SOCIOS.map((s) => ({ id: s.id, label: s.label }))]} />
         <div className="acciones"><button className="btn-l" onClick={() => ir("plan/tareas")}>Todas las tareas →</button></div>
       </div>
+      <Roadmap tareas={tareas} proyectos={proyectos} onAbrirTarea={setAbierta} quien={quien} />
       <div className="grid sin-margen">
         <div className={`card c3 fkpi2 ${atras.length ? "mal" : ""}`}><h2>Atrasadas</h2><p className="num">{atras.length}</p><p className="sub">con la fecha límite pasada</p></div>
         <div className="card c3 fkpi2"><h2>Esta semana</h2><p className="num">{semana.length}</p><p className="sub">vencen en los próximos 7 días</p></div>
