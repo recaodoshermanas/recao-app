@@ -9,7 +9,8 @@ import { n0, r0, margenPct, varPct, margenUnit, senales, ESTADOS, guardarCambios
 const signo = (v, dec = 0) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${num(Math.abs(v), dec)} %`);
 const tono = (v) => (v == null ? "" : v > 2 ? "up" : v < -2 ? "down" : "flat");
 export function Delta({ v, dec = 0 }) { return <span className={`delta ${tono(v)}`}>{v == null ? "–" : `${v > 0 ? "↑" : v < 0 ? "↓" : "→"} ${signo(v, dec)}`}</span>; }
-const dec = (s) => (s === "" || s == null ? null : Number(String(s).replace(",", ".")));
+// importes: acepta "2,27" y "2.27" (Epos guarda con punto) y también "1.234,56"; NaN si no es un número
+const dec = (s) => { if (s === "" || s == null) return null; let t = String(s).trim().replace(/[€ ]/g, ""); if (t.includes(",") && t.includes(".")) t = t.lastIndexOf(",") > t.lastIndexOf(".") ? t.split(".").join("").replace(",", ".") : t.split(",").join(""); else t = t.replace(",", "."); const n = Number(t); return Number.isFinite(n) ? n : NaN; };
 
 // ---------- selectores con "crear nuevo" ----------
 export function SelectCat({ valor, onChange, categorias, vacio = "Sin categoría", sugerido }) {
@@ -204,6 +205,8 @@ function Editar({ p, C, onClose }) {
     const c = camposEpos();
     if (!f.nombre.trim()) return avisar("El nombre no puede quedar vacío", "error");
     if (codRepetido) return avisar(`Ese código ya lo tiene «${codRepetido.n}»`, "error");
+    if ([f.coste, f.pvp, f.cc].some((v) => Number.isNaN(dec(v)))) return avisar("Revisa los importes: usa coma o punto para los decimales (por ejemplo 2,27 o 2.27)", "error");
+    if (!(dec(f.pvp) > 0)) return avisar("El precio de venta no puede quedar vacío", "error");
     if (c.pvp != null && !(await confirmar(`Vas a cambiar el precio en caja de ${eur(p.pvp, 2)} a ${eur(c.pvp, 2)}. Se aplica en la tienda al momento. ¿Seguimos?`))) return;
     if (c.iva_id !== undefined && p.iva_id != null && !(await confirmar("Vas a cambiar el IVA de un producto que ya lo tenía. El precio en caja no cambia, pero sí el IVA que se declara. ¿Seguimos?"))) return;
     setGuardando(true);

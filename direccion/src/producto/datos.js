@@ -95,7 +95,7 @@ export async function crearProveedor(nombre) {
 }
 // Datos propios del panel (Epos no los tiene)
 export async function guardarFicha(id, x) {
-  const fila = { product_id: id, unidades_caja: x.uc ? Number(x.uc) : null, coste_caja: x.cc ? Number(String(x.cc).replace(",", ".")) : null, ubicacion: x.ub || null, stock_minimo: x.sm ? Number(x.sm) : null, estado: x.es || null, notas: x.no || null, actualizado_en: new Date().toISOString() };
+  const fila = { product_id: id, unidades_caja: x.uc ? Number(x.uc) : null, coste_caja: x.cc ? (String(x.cc).includes(",") ? Number(String(x.cc).split(".").join("").replace(",", ".")) : Number(x.cc)) || null : null, ubicacion: x.ub || null, stock_minimo: x.sm ? Number(x.sm) : null, estado: x.es || null, notas: x.no || null, actualizado_en: new Date().toISOString() };
   await sb.upsert("producto_ficha", fila, "product_id");
   const C = store.catalogo.d; const p = C?.productos.find((q) => q.id === id);
   if (p) { const lim = Object.fromEntries(Object.entries({ uc: fila.unidades_caja, cc: fila.coste_caja, ub: fila.ubicacion, sm: fila.stock_minimo, es: fila.estado, no: fila.notas }).filter(([, v]) => v != null)); p.x = Object.keys(lim).length ? lim : undefined; C.productos = [...C.productos]; avisarCambio(); }

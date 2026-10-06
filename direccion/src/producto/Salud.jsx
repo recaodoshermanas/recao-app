@@ -7,7 +7,8 @@ import { Pestanas, Cargando, fechaCorta, hace, avisar, confirmar } from "../ui.j
 import { n0, r0, margenPct, margenUnit, tiene, useDatos, cargar, guardarCambios, deshacer, sugeridor } from "./datos.js";
 import { FichaProducto, SelectCat, SelectProv, SelectIva, BarraDeshacer } from "./Ficha.jsx";
 
-const dec = (s) => (s === "" || s == null ? null : Number(String(s).replace(",", ".")));
+// importes: acepta "2,27" y "2.27" (Epos guarda con punto) y también "1.234,56"; NaN si no es un número
+const dec = (s) => { if (s === "" || s == null) return null; let t = String(s).trim().replace(/[€ ]/g, ""); if (t.includes(",") && t.includes(".")) t = t.lastIndexOf(",") > t.lastIndexOf(".") ? t.split(".").join("").replace(",", ".") : t.split(",").join(""); else t = t.replace(",", "."); const n = Number(t); return Number.isFinite(n) ? n : NaN; };
 export const SECCIONES = [
   { id: "rotura", t: "Posibles roturas", d: "Se venden casi a diario (al menos 20 de los últimos 28 días) y no se han vendido ni ayer, ni anteayer, ni hoy. Lo más probable es que falten en la tienda." },
   { id: "siniva", t: "Sin IVA", d: "No tienen grupo de IVA en Epos, así que la caja los cobra sin separar IVA: el IVA que sale de Epos es menor del real y el margen aparece inflado. El precio en caja no cambia al asignarlo. Ojo: el tipo correcto (4, 10 o 21 %) lo marca la ley para cada producto; ante la duda, confírmalo con la gestoría.", lote: "iva_id" },
@@ -155,7 +156,7 @@ function Lista({ S, lista: lista0, C, onFicha }) {
                       <label className="mini-l">Coste<input className="mini-in" inputMode="decimal" value={co} onChange={(e) => editar(p, "coste", e.target.value)} /></label>
                       <label className="mini-l">PVP<input className="mini-in" inputMode="decimal" value={pv} onChange={(e) => editar(p, "pvp", e.target.value)} /></label>
                       <small className={`por ${m != null && m < 15 ? "mal" : ""}`}>{m != null ? `margen ${num(m, 1)} %` : "–"}{m30 != null ? ` (vendido: ${num(m30, 1)} %)` : ""}</small>
-                      <button className="btn-p" disabled={!Object.keys(campos).length || guardando === p.id} onClick={async () => { if (campos.pvp != null && !(await confirmar(`Cambia el precio en caja de «${p.n}» de ${eur(p.pvp, 2)} a ${eur(campos.pvp, 2)}. ¿Seguimos?`))) return; guardarFila(p, campos); }}>Guardar</button>
+                      <button className="btn-p" disabled={!Object.keys(campos).length || Number.isNaN(dec(co)) || !(dec(pv) > 0) || guardando === p.id} onClick={async () => { if (campos.pvp != null && !(await confirmar(`Cambia el precio en caja de «${p.n}» de ${eur(p.pvp, 2)} a ${eur(campos.pvp, 2)}. ¿Seguimos?`))) return; guardarFila(p, campos); }}>Guardar</button>
                     </div></td>;
                   })()}
                   {sec === "sinprov" && <td className="arreglo"><div className="arr">
