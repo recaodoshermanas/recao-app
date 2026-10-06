@@ -1,52 +1,18 @@
 // Producto: el corazón de Recao. Todo sale de Epos (ventas línea a línea, catálogo y costes)
 // y de las facturas de proveedores. Periodo de referencia: últimos 30 días completos frente a los 30 anteriores.
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { supabase } from "../../../src/lib/supabase.js";
-import { initTips } from "../charts.js";
+// Los datos de producto se pueden cambiar desde aquí: se escriben en Epos al momento (ver datos.js y Ficha.jsx).
+import { useMemo, useState } from "react";
 import { eur, eurK, pct, num, mesCorto, mesAnio } from "../fmt.js";
-import { Panel, Pestanas, Cargando, fechaCorta, ir } from "../ui.jsx";
+import { Cargando, ir, avisar, confirmar } from "../ui.jsx";
+import { FAMILIAS, COLOR_FAM, ESTADOS, n0, r0, margenPct, varPct, senales, tiene, useDatos, guardarCambios } from "./datos.js";
+import { FichaProducto, NuevoProducto, SelectCat, SelectProv, SelectIva, BarraDeshacer, Delta } from "./Ficha.jsx";
+import { salud } from "./Salud.jsx";
+export { Salud } from "./Salud.jsx";
 
-const FAMILIAS = ["Bollería", "Bebidas", "Snacks y chuches", "Tabaco y vapers", "Bocatas y frío", "Pan", "Alimentación y hogar", "Helados", "Cromos y papelería", "Sin clasificar"];
-const COLOR_FAM = { "Bollería": "#D9822B", "Bebidas": "#3D6E9E", "Snacks y chuches": "#B2412A", "Tabaco y vapers": "#5C6670", "Bocatas y frío": "#317039", "Pan": "#C59A3D", "Alimentación y hogar": "#7A5E9E", "Helados": "#2E8C8C", "Cromos y papelería": "#9E5E7A", "Sin clasificar": "#A9AFB4" };
-const n0 = (v) => Number(v) || 0;
-const r0 = (v) => Math.round(n0(v));
-const margenPct = (vs, c) => (n0(vs) > 0 ? ((n0(vs) - n0(c)) / n0(vs)) * 100 : null);
-const varPct = (a, b) => (n0(b) > 0 ? ((n0(a) - n0(b)) / n0(b)) * 100 : null);
-const signo = (v, dec = 0) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : "±"}${num(Math.abs(v), dec)} %`);
-const tono = (v) => (v == null ? "" : v > 2 ? "up" : v < -2 ? "down" : "flat");
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-
-// ---------- datos (compartidos entre subpáginas) ----------
-const cache = { resumen: null, catalogo: null };
-function useRpc(clave, fn, cadaMs = 10 * 60 * 1000) {
-  const [d, setD] = useState(cache[clave]);
-  const [fallo, setFallo] = useState(false);
-  const cargar = useCallback(async () => {
-    const { data, error } = await supabase.rpc(fn);
-    if (error) { if (!cache[clave]) setFallo(true); return; }
-    cache[clave] = data; setD(data);
-  }, [clave, fn]);
-  useEffect(() => { initTips(document.body); cargar(); const t = setInterval(() => { if (!document.hidden) cargar(); }, cadaMs); return () => clearInterval(t); }, [cargar, cadaMs]);
-  return { d, fallo };
-}
-const useResumen = () => useRpc("resumen", "dash_producto");
-const useCatalogo = () => useRpc("catalogo", "dash_catalogo");
-
-// Señales de cada producto (las mismas en resumen, catálogo y salud)
-function senales(p) {
-  const s = [];
-  if (p.d28 >= 20 && n0(p.u2) === 0 && n0(p.uh) === 0) s.push({ id: "rotura", t: "Posible rotura", tono: "mal", tip: `Se vendía casi a diario (${p.d28} de 28 días) y no se ha vendido ni ayer, ni anteayer, ni hoy` });
-  if (n0(p.v) > 0 && n0(p.cost) === 0) s.push({ id: "sincoste", t: "Sin coste", tono: "mal", tip: "Sin precio de coste en Epos: su margen no se puede calcular" });
-  const m = margenPct(p.vs, p.c);
-  if (m != null && n0(p.c) > 0 && m < 0) s.push({ id: "negativo", t: "Pierde dinero", tono: "mal", tip: `Margen ${num(m, 1)} %` });
-  else if (m != null && n0(p.c) > 0 && m < 15) s.push({ id: "margen", t: "Margen bajo", tono: "aviso", tip: `Margen ${num(m, 1)} %` });
-  if (n0(p.v) > 0 && !p.prov) s.push({ id: "sinprov", t: "Sin proveedor", tono: "aviso", tip: "Sin proveedor asignado en Epos" });
-  if ((p.abc === "A" || p.abc === "B") && !p.bc) s.push({ id: "sinbc", t: "Sin código", tono: "aviso", tip: "Sin código de barras: se cobra a mano y es más fácil equivocarse" });
-  return s;
-}
-
+const useResumen = () => useDatos("resumen");
+const useCatalogo = () => useDatos("catalogo");
 function Estado({ fallo }) { return <Cargando texto={fallo ? "No se han podido cargar los datos de Epos. Recarga en un momento." : "Cargando datos de Epos…"} />; }
-function Delta({ v, dec = 0 }) { return <span className={`delta ${tono(v)}`}>{v == null ? "–" : `${v > 0 ? "↑" : v < 0 ? "↓" : "→"} ${signo(v, dec)}`}</span>; }
 
 // ---------- 1. Resumen ----------
 export function ProductoResumen() {
@@ -69,12 +35,16 @@ export function ProductoResumen() {
   const suben = [...movers].sort((x, y) => y.dif - x.dif).slice(0, 7);
   const bajan = [...movers].sort((x, y) => x.dif - y.dif).slice(0, 7);
   const claseA = cat.filter((p) => p.abc === "A");
-  const conteo = (id) => cat.filter((p) => senales(p).some((s) => s.id === id)).length;
+  const conteo = (id) => cat.filter((p) => tiene(p, id)).length;
+  const ventaDe = (id) => r0(cat.filter((p) => tiene(p, id)).reduce((s, p) => s + n0(p.v), 0));
+  const sana = cat.length ? salud(cat) : null;
   const alertas = [
     { id: "rotura", n: conteo("rotura"), t: "posibles roturas: productos que se venden casi a diario y llevan desde anteayer sin venderse" },
-    { id: "sincoste", n: conteo("sincoste"), t: `productos vendidos sin precio de coste en Epos (${eur(r0(cat.filter((p) => n0(p.v) > 0 && n0(p.cost) === 0).reduce((s, p) => s + n0(p.v), 0)))} de venta sin margen conocido)` },
+    { id: "siniva", n: conteo("siniva"), t: `productos sin IVA en Epos: ${eur(ventaDe("siniva"))} vendidos en 30 días sin repercutir IVA` },
+    { id: "sincoste", n: conteo("sincoste"), t: `productos vendidos sin precio de coste en Epos (${eur(ventaDe("sincoste"))} de venta sin margen conocido)` },
     { id: "margen", n: conteo("margen") + conteo("negativo"), t: "productos con margen por debajo del 15 %" },
     { id: "sinprov", n: conteo("sinprov"), t: "productos vendidos sin proveedor en Epos" },
+    { id: "sincat", n: conteo("sincat"), t: "productos vendidos sin categoría en Epos" },
   ].filter((x) => x.n > 0);
 
   return (
@@ -88,6 +58,7 @@ export function ProductoResumen() {
 
       {alertas.length > 0 && (
         <section className="avisos favisos" aria-label="Avisos de catálogo">
+          {sana != null && <a className="aviso salud-aviso" href="#/producto/salud"><b>{num(sana, 0)} %</b><span>catálogo sano: parte de la venta en productos con IVA, coste, proveedor y categoría bien puestos. Se arregla desde Salud del catálogo.</span><i aria-hidden="true">→</i></a>}
           {alertas.map((x) => <a key={x.id} className="aviso" href={`#/producto/salud/${x.id}`}><b>{x.n}</b><span>{x.t}</span><i aria-hidden="true">→</i></a>)}
         </section>
       )}
@@ -149,6 +120,7 @@ export function ProductoResumen() {
         </div>
       )}
       {ficha && <FichaProducto p={ficha} onClose={() => setFicha(null)} />}
+      <BarraDeshacer />
     </>
   );
 }
@@ -209,54 +181,86 @@ const ORDENES = [
   { id: "mpct", label: "Margen %", f: (p) => margenPct(p.vs, p.c) ?? -999 }, { id: "u", label: "Unidades", f: (p) => n0(p.u) },
   { id: "var", label: "Variación", f: (p) => n0(p.v) - n0(p.v0) }, { id: "n", label: "Nombre", f: (p) => p.n },
 ];
+const ACCIONES_LOTE = [{ id: "categoria_id", t: "Mover a categoría" }, { id: "proveedor_id", t: "Asignar proveedor" }, { id: "iva_id", t: "Cambiar IVA" }, { id: "archivado", t: "Archivar" }];
 export function Catalogo({ extra }) {
   const C = useCatalogo();
   const [q, setQ] = useState("");
   const [fam, setFam] = useState("");
   const [prov, setProv] = useState("");
   const [abc, setAbc] = useState(["A", "B", "C", "D"].includes(extra) ? extra : "");
+  const [estado, setEstado] = useState("");
   const [orden, setOrden] = useState("v");
   const [asc, setAsc] = useState(false);
   const [limite, setLimite] = useState(80);
   const [ficha, setFicha] = useState(null);
+  const [nuevo, setNuevo] = useState(false);
+  const [sel, setSel] = useState(() => new Set());
+  const [accion, setAccion] = useState("categoria_id");
+  const [valor, setValor] = useState(null);
+  const [guardando, setGuardando] = useState(false);
   const lista = useMemo(() => {
     const ps = C.d?.productos || [];
     const qq = q.trim().toLowerCase();
     const o = ORDENES.find((x) => x.id === orden);
-    return ps.filter((p) => (!qq || `${p.n} ${p.cat || ""} ${p.prov || ""}`.toLowerCase().includes(qq)) && (!fam || p.fam === fam) && (!prov || (prov === "-" ? !p.prov : p.prov === prov)) && (!abc || p.abc === abc))
+    return ps.filter((p) => (!qq || `${p.n} ${p.cat || ""} ${p.prov || ""} ${p.cod || ""}`.toLowerCase().includes(qq)) && (!fam || p.fam === fam) && (!prov || (prov === "-" ? !p.prov_id : String(p.prov_id) === prov)) && (!abc || p.abc === abc) && (!estado || (estado === "-" ? !p.x?.es : p.x?.es === estado)))
       .sort((x, y) => { const a = o.f(x), b = o.f(y); const r = typeof a === "string" ? a.localeCompare(b) : a - b; return asc ? r : -r; });
-  }, [C.d, q, fam, prov, abc, orden, asc]);
+  }, [C.d, q, fam, prov, abc, estado, orden, asc]);
   if (!C.d) return <Estado fallo={C.fallo} />;
-  const provs = [...new Set(C.d.productos.map((p) => p.prov).filter(Boolean))].sort();
   const tot = lista.reduce((s, p) => s + n0(p.v), 0);
   const ordenar = (id) => { if (orden === id) setAsc(!asc); else { setOrden(id); setAsc(id === "n"); } };
   const Th = ({ id, children, r = true }) => <th className={`${r ? "r" : ""} ordenable ${orden === id ? "on" : ""}`}><button onClick={() => ordenar(id)}>{children}{orden === id ? (asc ? " ↑" : " ↓") : ""}</button></th>;
+  const visibles = lista.slice(0, limite);
+  const todos = visibles.length > 0 && visibles.every((p) => sel.has(p.id));
+  const marcar = (id) => setSel((s) => (s.has(id) ? new Set([...s].filter((x) => x !== id)) : new Set([...s, id])));
+  async function aplicar() {
+    const ids = [...sel];
+    const txt = accion === "archivado" ? `¿Archivar ${ids.length} productos en Epos? Dejan de salir en la caja. Se puede deshacer.` : `Se van a cambiar ${ids.length} productos en Epos. ¿Seguimos?`;
+    if ((accion === "archivado" || ids.length > 10) && !(await confirmar(txt))) return;
+    setGuardando(true);
+    try { await guardarCambios(ids.map((id) => ({ id, campos: { [accion]: accion === "archivado" ? true : valor } })), `${ids.length} producto${ids.length > 1 ? "s" : ""} ${accion === "archivado" ? "archivados" : "actualizados"} en Epos`); setSel(new Set()); setValor(null); }
+    catch (e) { avisar(e.message, "error"); }
+    setGuardando(false);
+  }
   return (
     <>
       <div className="filtros-t">
-        <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setLimite(80); }} placeholder="Buscar producto, categoría o proveedor…" aria-label="Buscar productos" />
+        <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setLimite(80); }} placeholder="Buscar producto, categoría, proveedor o código…" aria-label="Buscar productos" />
         <select value={fam} onChange={(e) => setFam(e.target.value)} aria-label="Familia"><option value="">Todas las familias</option>{FAMILIAS.map((f) => <option key={f} value={f}>{f}</option>)}</select>
-        <select value={prov} onChange={(e) => setProv(e.target.value)} aria-label="Proveedor"><option value="">Todos los proveedores</option>{provs.map((p) => <option key={p} value={p}>{p}</option>)}<option value="-">Sin proveedor</option></select>
+        <select value={prov} onChange={(e) => setProv(e.target.value)} aria-label="Proveedor"><option value="">Todos los proveedores</option>{(C.d.proveedores || []).map((p) => <option key={p.id} value={p.id}>{p.n}</option>)}<option value="-">Sin proveedor</option></select>
         <select value={abc} onChange={(e) => setAbc(e.target.value)} aria-label="Clase"><option value="">Todas las clases</option><option value="A">A · el 80 % de la venta</option><option value="B">B · el siguiente 15 %</option><option value="C">C · el último 5 %</option><option value="D">D · sin ventas en 90 días</option></select>
+        <select value={estado} onChange={(e) => setEstado(e.target.value)} aria-label="Estado"><option value="">Cualquier estado</option>{ESTADOS.map((e) => <option key={e.id} value={e.id}>{e.t}</option>)}<option value="-">Sin estado</option></select>
+        <button className="btn-p nuevo-p" onClick={() => setNuevo(true)}>+ Nuevo producto</button>
       </div>
+      {sel.size > 0 && (
+        <div className="lote-barra fija">
+          <b>{sel.size} seleccionado{sel.size > 1 ? "s" : ""}</b>
+          <select value={accion} onChange={(e) => { setAccion(e.target.value); setValor(null); }} aria-label="Qué hacer">{ACCIONES_LOTE.map((a) => <option key={a.id} value={a.id}>{a.t}</option>)}</select>
+          {accion === "categoria_id" && <SelectCat valor={valor} onChange={setValor} categorias={C.d.categorias} vacio="Elige categoría…" />}
+          {accion === "proveedor_id" && <SelectProv valor={valor} onChange={setValor} proveedores={C.d.proveedores} vacio="Elige proveedor…" />}
+          {accion === "iva_id" && <SelectIva valor={valor} onChange={setValor} iva={C.d.iva} vacio="Elige IVA…" />}
+          <button className="btn-p" disabled={guardando || (accion !== "archivado" && !valor)} onClick={aplicar}>{guardando ? "Guardando…" : accion === "archivado" ? "Archivar en Epos" : "Aplicar en Epos"}</button>
+          <button className="btn-txt" onClick={() => setSel(new Set())}>Quitar selección</button>
+        </div>
+      )}
       <div className="card">
-        <div className="head"><div><h2>{num(lista.length)} productos</h2><p className="sub">{eur(r0(tot))} de venta en los últimos 30 días · pulsa un producto para ver su ficha</p></div></div>
+        <div className="head"><div><h2>{num(lista.length)} productos</h2><p className="sub">{eur(r0(tot))} de venta en los últimos 30 días · pulsa un producto para ver su ficha y editarlo · marca varios para cambiarlos a la vez</p></div></div>
         <div className="tabla-scroll">
           <table className="ranking catalogo">
-            <thead><tr><Th id="n" r={false}>Producto</Th><th className="r">PVP</th><Th id="u">Uds.</Th><Th id="v">Venta 30 d</Th><Th id="var">vs ant.</Th><Th id="mpct">Margen</Th><Th id="margen">Deja</Th><th>Avisos</th></tr></thead>
+            <thead><tr><th className="chk-c"><input type="checkbox" checked={todos} onChange={() => setSel(todos ? new Set() : new Set(visibles.map((p) => p.id)))} aria-label="Seleccionar todos los visibles" /></th><Th id="n" r={false}>Producto</Th><th className="r">PVP</th><Th id="u">Uds.</Th><Th id="v">Venta 30 d</Th><Th id="var">vs ant.</Th><Th id="mpct">Margen</Th><Th id="margen">Deja</Th><th>Avisos</th></tr></thead>
             <tbody>
-              {lista.slice(0, limite).map((p) => {
-                const m = margenPct(p.vs, p.c); const s = senales(p);
+              {visibles.map((p) => {
+                const m = margenPct(p.vs, p.c); const s = senales(p).filter((x) => x.id !== "sinbc");
                 return (
-                  <tr key={p.id} onClick={() => setFicha(p)} className="clic">
-                    <td><span className={`abc-mini c-${p.abc}`}>{p.abc}</span><span className="pn">{p.n}</span><span className="pf">{p.fam}{p.prov ? ` · ${p.prov}` : ""}</span></td>
+                  <tr key={p.id} onClick={() => setFicha(p)} className={`clic ${sel.has(p.id) ? "sel" : ""}`}>
+                    <td className="chk-c" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={sel.has(p.id)} onChange={() => marcar(p.id)} aria-label={`Seleccionar ${p.n}`} /></td>
+                    <td><span className={`abc-mini c-${p.abc}`}>{p.abc}</span><span className="pn">{p.n}{p.x?.es && <span className={`estado-p e-${p.x.es}`}>{ESTADOS.find((e) => e.id === p.x.es)?.t}</span>}</span><span className="pf">{p.fam}{p.prov ? ` · ${p.prov}` : ""}</span></td>
                     <td className="r">{p.pvp != null ? eur(p.pvp, 2) : "–"}</td>
                     <td className="r">{num(p.u)}</td>
                     <td className="r b">{eur(r0(p.v))}</td>
                     <td className="r"><Delta v={varPct(p.v, p.v0)} /></td>
                     <td className={`r ${m != null && n0(p.c) > 0 && m < 15 ? "down" : ""}`}>{n0(p.c) > 0 ? pct(m, 1) : "–"}</td>
                     <td className="r">{n0(p.c) > 0 ? eur(r0(n0(p.vs) - n0(p.c))) : "–"}</td>
-                    <td>{s.filter((x) => x.id !== "sinbc").map((x) => <span key={x.id} className={`senal ${x.tono}`} title={x.tip}>{x.t}</span>)}</td>
+                    <td>{s.map((x) => <span key={x.id} className={`senal ${x.tono}`} title={x.tip}>{x.t}</span>)}</td>
                   </tr>
                 );
               })}
@@ -266,84 +270,9 @@ export function Catalogo({ extra }) {
         {lista.length > limite && <button className="btn-l mas" onClick={() => setLimite(limite + 120)}>Ver más ({num(lista.length - limite)} restantes)</button>}
       </div>
       {ficha && <FichaProducto p={ficha} onClose={() => setFicha(null)} />}
+      {nuevo && <NuevoProducto onClose={() => setNuevo(false)} />}
+      <BarraDeshacer />
     </>
-  );
-}
-
-// ---------- ficha de producto ----------
-function Barras({ datos, etiqueta, valor, alto = 120, fmt = (v) => num(v), color = "var(--mark)", resaltar }) {
-  const W = 520, H = alto, mb = 18, max = Math.max(...datos.map(valor), 1) * 1.1, gw = W / datos.length, bw = Math.max(3, gw * 0.7);
-  return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img">
-      <line x1="0" x2={W} y1={H - mb} y2={H - mb} stroke="var(--line)" />
-      {datos.map((d, i) => {
-        const v = valor(d), h = (v / max) * (H - mb - 6);
-        return (
-          <g key={i}>
-            <rect x={gw * i + (gw - bw) / 2} y={H - mb - h} width={bw} height={h} rx="2" fill={resaltar && resaltar(d) ? "var(--amarillo-hondo)" : color} />
-            {etiqueta(d, i) && <text x={gw * i + gw / 2} y={H - 4} textAnchor="middle" className="axis" style={{ fontSize: 10 }}>{etiqueta(d, i)}</text>}
-            <rect x={gw * i} y="0" width={gw} height={H - mb} fill="transparent" data-tip={`${etiqueta(d, i, true) || ""}: <b>${fmt(v)}</b>`} />
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-export function FichaProducto({ p, onClose }) {
-  const [f, setF] = useState(null);
-  useEffect(() => { supabase.rpc("dash_producto_ficha", { p_id: p.id }).then(({ data }) => setF(data || {})); }, [p.id]);
-  const m = margenPct(p.vs, p.c);
-  const s = senales(p);
-  const DOW = ["", "L", "M", "X", "J", "V", "S", "D"];
-  return (
-    <Panel titulo={p.n} sub={`${p.fam}${p.cat ? ` · ${p.cat}` : ""}${p.prov ? ` · ${p.prov}` : ""}`} onClose={onClose} ancho="620px">
-      {s.length > 0 && <div className="senales">{s.map((x) => <span key={x.id} className={`senal ${x.tono}`}>{x.t}<small>{x.tip}</small></span>)}</div>}
-      <div className="ficha-kpis cuatro">
-        <div><span>Venta 30 días</span><b>{eur(r0(p.v))}</b><small><Delta v={varPct(p.v, p.v0)} /></small></div>
-        <div><span>Unidades</span><b>{num(p.u)}</b><small>{p.dv} de 30 días con venta</small></div>
-        <div className={m != null && n0(p.c) > 0 && m < 15 ? "mal" : ""}><span>Margen</span><b>{n0(p.c) > 0 ? pct(m, 1) : "–"}</b><small>{n0(p.c) > 0 ? `${eur(r0(n0(p.vs) - n0(p.c)))} en 30 días` : "sin coste en Epos"}</small></div>
-        <div><span>Precio y coste</span><b>{p.pvp != null ? eur(p.pvp, 2) : "–"}</b><small>coste {p.cost ? eur(p.cost, 2) : "–"} · clase {p.abc}</small></div>
-      </div>
-      {!f ? <p className="empty">Cargando historial…</p> : (
-        <>
-          <section className="ficha-sec">
-            <h3>Unidades por semana <small>últimas 26</small></h3>
-            <Barras datos={f.semanas || []} valor={(d) => n0(d.u)} etiqueta={(d, i, largo) => (largo ? `Semana del ${fechaCorta(d.semana)}` : i % 4 === 0 ? fechaCorta(d.semana).split(" ").slice(1).join(" ") : "")} />
-          </section>
-          <section className="ficha-sec">
-            <h3>Últimos 21 días <small>los días a cero en amarillo: ¿rotura?</small></h3>
-            <Barras alto={90} datos={f.dias || []} valor={(d) => n0(d.u)} resaltar={(d) => n0(d.u) === 0} color="var(--up)" etiqueta={(d, i, largo) => (largo ? fechaCorta(d.fecha) : i % 3 === 0 ? String(Number(d.fecha.slice(8))) : "")} />
-          </section>
-          <div className="fila-graf">
-            <section className="ficha-sec">
-              <h3>Por día de la semana <small>media de unidades</small></h3>
-              <Barras alto={90} datos={f.dow || []} valor={(d) => n0(d.u)} fmt={(v) => num(v, 1)} etiqueta={(d, i, largo) => (largo ? ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][d.dow] : DOW[d.dow])} />
-            </section>
-            <section className="ficha-sec">
-              <h3>Por hora <small>12 semanas</small></h3>
-              <Barras alto={90} datos={f.horas || []} valor={(d) => n0(d.u)} etiqueta={(d, i, largo) => (largo ? `${d.h}:00` : d.h % 3 === 0 ? String(d.h) : "")} />
-            </section>
-          </div>
-          <section className="ficha-sec">
-            <h3>Precio, coste y margen por mes</h3>
-            <div className="tabla-scroll">
-              <table className="ranking">
-                <thead><tr><th>Mes</th><th className="r">Uds.</th><th className="r">Venta</th><th className="r">Precio medio</th><th className="r">Coste medio</th><th className="r">Margen</th></tr></thead>
-                <tbody>{[...(f.meses || [])].reverse().slice(0, 8).map((x) => <tr key={x.mes}><td>{mesAnio(x.mes)}</td><td className="r">{num(x.u)}</td><td className="r">{eur(r0(x.v))}</td><td className="r">{x.pm != null ? eur(x.pm, 2) : "–"}</td><td className="r">{x.cm ? eur(x.cm, 2) : "–"}</td><td className="r">{x.margen != null && x.cm ? pct(x.margen, 1) : "–"}</td></tr>)}</tbody>
-              </table>
-            </div>
-          </section>
-          {(f.precios || []).length > 1 && (
-            <section className="ficha-sec">
-              <h3>Cambios de precio <small>últimos 6 meses</small></h3>
-              <ul className="pq-l">{f.precios.map((x) => <li key={`${x.precio}-${x.desde}`}><span>{eur(x.precio, 2)}<span className="pf">{fechaCorta(x.desde)} → {fechaCorta(x.hasta)}</span></span><b>{num(x.u)} uds.</b></li>)}</ul>
-            </section>
-          )}
-          <p className="sub fuera">Última venta: {p.ult ? fechaCorta(p.ult) : "nunca"}{p.bc ? "" : " · sin código de barras"}. Para cambiar precio, coste, categoría o proveedor, dímelo y lo cambio en Epos.</p>
-        </>
-      )}
-    </Panel>
   );
 }
 
@@ -450,54 +379,3 @@ export function Proveedores() {
   );
 }
 
-// ---------- 5. Salud del catálogo ----------
-const SECCIONES = [
-  { id: "rotura", t: "Posibles roturas", d: "Se venden casi a diario (al menos 20 de los últimos 28 días) y no se han vendido ni ayer, ni anteayer, ni hoy. Lo más probable es que falten en la tienda." },
-  { id: "sincoste", t: "Vendidos sin coste", d: "No tienen precio de coste en Epos, así que no sabemos cuánto dejan. Hay que darlo de alta." },
-  { id: "negativo", t: "Pierden dinero", d: "Se venden por debajo de lo que cuestan." },
-  { id: "margen", t: "Margen bajo (<15 %)", d: "Revisar precio de venta o de compra." },
-  { id: "sinprov", t: "Sin proveedor", d: "Productos vendidos que no tienen proveedor en Epos: sin él no se pueden preparar pedidos ni cuadrar compras." },
-  { id: "sinbc", t: "Sin código de barras", d: "Clase A o B sin código: se cobran a mano y es fácil equivocarse." },
-  { id: "dormidos", t: "Sin ventas en 90 días", d: "Dados de alta pero sin vender: candidatos a archivar en Epos para limpiar el catálogo antes del inventario." },
-];
-export function Salud({ extra }) {
-  const C = useCatalogo();
-  const [sec, setSec] = useState(SECCIONES.some((s) => s.id === extra) ? extra : "rotura");
-  const [ficha, setFicha] = useState(null);
-  if (!C.d) return <Estado fallo={C.fallo} />;
-  const cat = C.d.productos;
-  const de = (id) => (id === "dormidos" ? cat.filter((p) => p.abc === "D") : cat.filter((p) => senales(p).some((s) => s.id === id)));
-  const S = SECCIONES.find((s) => s.id === sec);
-  const lista = de(sec).sort((a, b) => (sec === "dormidos" ? String(b.ult || "").localeCompare(String(a.ult || "")) : n0(b.v) - n0(a.v)));
-  return (
-    <>
-      <div className="barra-sec salud-sec"><Pestanas valor={sec} onChange={setSec} etiqueta="Revisión" opciones={SECCIONES.map((s) => ({ id: s.id, label: s.t, n: de(s.id).length }))} /></div>
-      <div className="card">
-        <h2>{S.t} · {num(lista.length)}</h2>
-        <p className="sub">{S.d}</p>
-        {lista.length === 0 ? <p className="empty">Nada por aquí ✓</p> : (
-          <div className="tabla-scroll">
-            <table className="ranking">
-              <thead><tr><th>Producto</th><th className="r">Clase</th><th className="r">Venta 30 d</th><th className="r">{sec === "rotura" ? "Días con venta (28)" : "Margen"}</th><th className="r">{sec === "rotura" ? "Hoy" : "Coste / PVP"}</th><th className="r">Última venta</th></tr></thead>
-              <tbody>
-                {lista.slice(0, 200).map((p) => (
-                  <tr key={p.id} className="clic" onClick={() => setFicha(p)}>
-                    <td><span className="pn">{p.n}</span><span className="pf">{p.fam}{p.prov ? ` · ${p.prov}` : ""}</span></td>
-                    <td className="r">{p.abc}</td>
-                    <td className="r b">{eur(r0(p.v))}</td>
-                    <td className="r">{sec === "rotura" ? p.d28 : n0(p.c) > 0 ? pct(margenPct(p.vs, p.c), 1) : "–"}</td>
-                    <td className="r">{sec === "rotura" ? `${num(p.uh)} uds.` : `${p.cost ? eur(p.cost, 2) : "–"} / ${p.pvp != null ? eur(p.pvp, 2) : "–"}`}</td>
-                    <td className="r">{p.ult ? fechaCorta(p.ult) : "nunca"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {lista.length > 200 && <p className="sub fuera">Se muestran los 200 primeros de {num(lista.length)}.</p>}
-          </div>
-        )}
-        <p className="sub fuera">Los cambios en Epos (costes, proveedores, códigos, archivar) puedo hacerlos yo: dime cuáles y los aplico.</p>
-      </div>
-      {ficha && <FichaProducto p={ficha} onClose={() => setFicha(null)} />}
-    </>
-  );
-}
