@@ -53,7 +53,10 @@ window.addEventListener("resize", () => {
 
 function pintar(d) {
   data = { ...d, __logo: LOGO };
-  renderPulso(document.getElementById("main"), data);
+  const opts = window.__RECAO_DEMO__
+    ? { demo: () => { const a = d.por_que && d.por_que.ayer; return a && { ...a, desde: a.fecha, hasta_fecha: a.fecha, ref_desde: a.referencia, ref_hasta: a.referencia, h1: 0, h2: 24 }; } }
+    : { comparar: (r) => api("/rest/v1/rpc/dash_comparar", { method: "POST", body: JSON.stringify(r) }) };
+  renderPulso(document.getElementById("main"), data, opts);
 }
 
 // ---------- sesión de Supabase (mismas cuentas que la app), sin librerías ----------
