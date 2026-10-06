@@ -83,9 +83,9 @@ export function PersonasResumen() {
   if (!d) return <div className="state">Cargando…</div>;
 
   const avisos = [
-    d.vac > 0 && { n: d.vac, t: `solicitud${d.vac > 1 ? "es" : ""} de vacaciones por revisar`, ruta: "personas/vacaciones" },
-    d.diasSinCubrir > 0 && { n: d.diasSinCubrir, t: `día${d.diasSinCubrir > 1 ? "s" : ""} con turnos sin cubrir${d.primerHueco ? `, el primero el ${diaCorto(d.primerHueco)}` : ""}`, ruta: "personas/cobertura" },
-    d.cambios > 0 && { n: d.cambios, t: `cambio${d.cambios > 1 ? "s" : ""} de turno por revisar`, ruta: "personas/cambios" },
+    d.vac > 0 && { n: d.vac, t: `solicitud${d.vac > 1 ? "es" : ""} de vacaciones por revisar`, ruta: "personas/solicitudes" },
+    d.diasSinCubrir > 0 && { n: d.diasSinCubrir, t: `día${d.diasSinCubrir > 1 ? "s" : ""} con turnos sin cubrir${d.primerHueco ? `, el primero el ${diaCorto(d.primerHueco)}` : ""}`, ruta: "personas/horarios" },
+    d.cambios > 0 && { n: d.cambios, t: `cambio${d.cambios > 1 ? "s" : ""} de turno por revisar`, ruta: "personas/solicitudes" },
   ].filter(Boolean);
 
   return (

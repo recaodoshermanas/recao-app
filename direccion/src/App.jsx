@@ -7,6 +7,12 @@ import { Pulso } from "./Pulso.jsx";
 import { PersonasResumen } from "./PersonasResumen.jsx";
 import { Legado } from "./Legado.jsx";
 import { FinanzasResumen, FinanzasResultados, FinanzasCaja, FinanzasCompras } from "./Finanzas.jsx";
+import { Horarios } from "./personas/Horarios.jsx";
+import { Solicitudes } from "./personas/Solicitudes.jsx";
+import { Seguimiento } from "./personas/Seguimiento.jsx";
+import { Equipo } from "./personas/Equipo.jsx";
+import { PlanResumen, Proyectos, PlanTareas, PlanCalendario } from "./plan/Plan.jsx";
+import { Avisos } from "./ui.jsx";
 
 const ICONO = "/icono.png";
 
@@ -110,7 +116,7 @@ export default function App() {
   const { user, checking, login, logout } = useAuth();
   const esAdmin = user && user.rol === "admin";
   const datos = useRecaoData(esAdmin ? user : null);
-  const { area, sub } = usarRuta();
+  const { area, sub, extra } = usarRuta();
   const [aviso, setAviso] = useState("");
   const [mesFoco, setMesFoco] = useState(null);
 
@@ -134,6 +140,14 @@ export default function App() {
   let contenido;
   if (area.id === "pulso") contenido = <Pulso />;
   else if (area.id === "personas" && sub.id === "resumen") contenido = <PersonasResumen />;
+  else if (area.id === "personas" && sub.id === "horarios") contenido = <Horarios />;
+  else if (area.id === "personas" && sub.id === "solicitudes") contenido = <Solicitudes />;
+  else if (area.id === "personas" && sub.id === "seguimiento") contenido = <Seguimiento sub={extra} />;
+  else if (area.id === "personas" && sub.id === "equipo") contenido = <Equipo user={user} />;
+  else if (area.id === "plan" && sub.id === "resumen") contenido = <PlanResumen user={user} />;
+  else if (area.id === "plan" && sub.id === "proyectos") contenido = <Proyectos user={user} extra={extra} />;
+  else if (area.id === "plan" && sub.id === "tareas") contenido = <PlanTareas user={user} />;
+  else if (area.id === "plan" && sub.id === "calendario") contenido = <PlanCalendario user={user} />;
   else if (area.id === "finanzas" && sub.id === "resumen") contenido = <FinanzasResumen />;
   else if (area.id === "finanzas" && sub.id === "resultados") contenido = <FinanzasResultados onEditMonth={editarMes} />;
   else if (area.id === "finanzas" && sub.id === "caja") contenido = <FinanzasCaja />;
@@ -144,7 +158,8 @@ export default function App() {
     <div className="wrap">
       <Cabecera user={user} area={area} onSalir={logout} />
       <Subnav area={area} sub={sub} />
-      <main id="main" key={`${area.id}/${sub ? sub.id : ""}`}>{contenido}</main>
+      <main id="main" key={`${area.id}/${sub ? sub.id : ""}/${extra || ""}`}>{contenido}</main>
+      <Avisos />
     </div>
   );
 }

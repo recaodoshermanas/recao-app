@@ -1,21 +1,15 @@
-// Mapa del panel: áreas y sus subpáginas. La URL es #/area/subpagina.
-// "legado" = pantalla que viene tal cual de la app (se pinta en claro, con su estilo de siempre).
+// Mapa del panel: áreas y sus subpáginas. La URL es #/area/subpagina[/detalle].
+// "legado" = pantalla que viene tal cual de la app (con el tema del panel).
 export const AREAS = [
   { id: "pulso", label: "Pulso" },
   {
     id: "personas", label: "Personas", quien: "Pablo",
     subs: [
       { id: "resumen", label: "Resumen" },
-      { id: "horarios", label: "Horarios", legado: true },
-      { id: "cobertura", label: "Cobertura", legado: true },
-      { id: "vacaciones", label: "Vacaciones", legado: true },
-      { id: "cambios", label: "Cambios de turno", legado: true },
-      { id: "cierres", label: "Cierres", legado: true },
-      { id: "incidencias", label: "Incidencias", legado: true },
-      { id: "disciplina", label: "Disciplina", legado: true },
-      { id: "plus", label: "Plus del mes", legado: true },
-      { id: "horas", label: "Horas extras", legado: true },
-      { id: "equipo", label: "Equipo", legado: true },
+      { id: "horarios", label: "Horarios" },
+      { id: "solicitudes", label: "Vacaciones y cambios" },
+      { id: "seguimiento", label: "Seguimiento" },
+      { id: "equipo", label: "Equipo" },
       { id: "seleccion", label: "Selección", legado: true },
     ],
   },
@@ -40,7 +34,10 @@ export const AREAS = [
   {
     id: "plan", label: "Plan",
     subs: [
-      { id: "tareas", label: "Tareas", legado: true },
+      { id: "resumen", label: "Resumen" },
+      { id: "proyectos", label: "Proyectos" },
+      { id: "tareas", label: "Tareas" },
+      { id: "calendario", label: "Calendario" },
     ],
   },
   { id: "marketing", label: "Marketing", pronto: true },
@@ -50,15 +47,20 @@ export const AREAS = [
 
 // Lo que mandan las notificaciones de la app (evento "recao-nav") → dónde se abre aquí
 export const DESTINOS = {
-  horarios: "personas/horarios", cobertura: "personas/cobertura", vacaciones: "personas/vacaciones",
-  cambios: "personas/cambios", cierres: "personas/cierres", incidencias: "personas/incidencias",
-  disciplina: "personas/disciplina", horas: "personas/horas", usuarios: "personas/equipo",
-  candidatos: "personas/seleccion", plus: "personas/plus",
+  horarios: "personas/horarios", cobertura: "personas/horarios", vacaciones: "personas/solicitudes",
+  cambios: "personas/solicitudes", cierres: "personas/seguimiento", incidencias: "personas/seguimiento",
+  disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
+  candidatos: "personas/seleccion", plus: "personas/equipo",
 };
 
+// Enlaces antiguos de Personas → secciones nuevas
+const ANTIGUAS = { cobertura: "horarios", vacaciones: "solicitudes", cambios: "solicitudes", cierres: "seguimiento", incidencias: "seguimiento", disciplina: "seguimiento", plus: "equipo", horas: "equipo" };
+
 export function leerRuta(hash) {
-  const [a, s] = String(hash || "").replace(/^#\/?/, "").split("/");
+  const [a, s0, extra] = String(hash || "").replace(/^#\/?/, "").split("/");
   const area = AREAS.find((x) => x.id === a && !x.pronto) || AREAS[0];
+  const s = area.id === "personas" && ANTIGUAS[s0] ? ANTIGUAS[s0] : s0;
   const sub = area.subs ? (area.subs.find((x) => x.id === s) || area.subs[0]) : null;
-  return { area, sub };
+  const extraFinal = extra || (area.id === "personas" && ["cierres", "incidencias", "disciplina"].includes(s0) ? (s0 === "incidencias" ? "incidencias" : s0) : undefined);
+  return { area, sub, extra: extraFinal ? decodeURIComponent(extraFinal) : undefined };
 }
