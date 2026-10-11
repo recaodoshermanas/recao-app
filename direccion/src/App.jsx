@@ -13,6 +13,7 @@ import { Seguimiento } from "./personas/Seguimiento.jsx";
 import { Equipo } from "./personas/Equipo.jsx";
 import { PlanResumen, Proyectos, PlanTareas, PlanCalendario } from "./plan/Plan.jsx";
 import { ProductoResumen, Catalogo, Familias, Proveedores, Salud } from "./producto/Producto.jsx";
+import { MarketingResumen, MarketingClientes, MarketingCaptacion, MarketingCampanas, MarketingReputacion } from "./marketing/Marketing.jsx";
 import { Avisos } from "./ui.jsx";
 
 const ICONO = "/icono.png";
@@ -150,6 +151,11 @@ export default function App() {
   else if (area.id === "producto" && sub.id === "familias") contenido = <Familias />;
   else if (area.id === "producto" && sub.id === "proveedores") contenido = <Proveedores />;
   else if (area.id === "producto" && sub.id === "salud") contenido = <Salud extra={extra} />;
+  else if (area.id === "marketing" && sub.id === "resumen") contenido = <MarketingResumen />;
+  else if (area.id === "marketing" && sub.id === "clientes") contenido = <MarketingClientes />;
+  else if (area.id === "marketing" && sub.id === "captacion") contenido = <MarketingCaptacion />;
+  else if (area.id === "marketing" && sub.id === "campanas") contenido = <MarketingCampanas />;
+  else if (area.id === "marketing" && sub.id === "reputacion") contenido = <MarketingReputacion />;
   else if (area.id === "plan" && sub.id === "resumen") contenido = <PlanResumen user={user} />;
   else if (area.id === "plan" && sub.id === "proyectos") contenido = <Proyectos user={user} extra={extra} />;
   else if (area.id === "plan" && sub.id === "tareas") contenido = <PlanTareas user={user} />;

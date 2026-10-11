@@ -44,7 +44,16 @@ export const AREAS = [
       { id: "calendario", label: "Calendario" },
     ],
   },
-  { id: "marketing", label: "Marketing", pronto: true },
+  {
+    id: "marketing", label: "Marketing", quien: "Adrián",
+    subs: [
+      { id: "resumen", label: "Resumen" },
+      { id: "clientes", label: "Clientes" },
+      { id: "captacion", label: "Captación" },
+      { id: "campanas", label: "Campañas y calendario" },
+      { id: "reputacion", label: "Reputación" },
+    ],
+  },
   // fuera del menú principal: se abre desde el usuario
   { id: "ajustes", label: "Ajustes", oculto: true, subs: [{ id: "general", label: "Ajustes", legado: true }] },
 ];
