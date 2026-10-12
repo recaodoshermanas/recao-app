@@ -6,7 +6,7 @@ import { TURNOS, ymd } from "./turnos.js";
 // false → la bolsa no aparece en ningún sitio. true → activa.
 // Antes de ponerlo a true: migración SQL + edge function (ver LEEME.md).
 // ─────────────────────────────────────────────────────────────────────
-export const BOLSA_ACTIVA = false;
+export const BOLSA_ACTIVA = true;
 
 // Teléfono de dirección que ven las trabajadoras para avisar
 export const TELEFONO_DIRECCION = "646 683 216";
