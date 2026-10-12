@@ -84,6 +84,7 @@ function BarrasH({ filas, etiqueta, valor, total, fmt = (v) => num(v), sub }) {
 export function MarketingResumen() {
   const M = useRpc("dash_marketing");
   const K = useRpc("dash_mkt_campanas");
+  const G = useRpc("dash_resenas");
   if (!M.d) return <Estado fallo={M.fallo} />;
   const d = M.d, s = d.socios || {}, p = d.periodo || {};
   const pen = pc(p.s30, p.t30), pen0 = pc(p.s0, p.t0);
@@ -137,13 +138,17 @@ export function MarketingResumen() {
           <p className="sub fuera">{num(s.canjeables)} socios tienen puntos para canjear algo y no lo han hecho. Un aviso a su tarjeta del móvil ({num(d.pase)} la tienen guardada) puede traerlos de vuelta.</p>
         </div>
         <div className="card c6">
-          <h2>Reputación en Google</h2>
-          <p className="sub">Nota, reseñas y respuestas</p>
-          <div className="pendiente-g">
-            <b>Pendiente de conectar</b>
-            <span>En cuanto haya acceso a Google aquí saldrán la nota, el número de reseñas y su evolución, las reseñas sin responder y el avance del proyecto «Generación de reseñas».</span>
-            <button className="btn-l" onClick={() => ir("marketing/reputacion")}>Ver qué hace falta</button>
-          </div>
+          <div className="head"><div><h2>Reputación en Google</h2><p className="sub">Nota, reseñas y respuestas</p></div><button className="enlace" onClick={() => ir("marketing/reputacion")}>Reseñas →</button></div>
+          {!G.d ? <p className="empty">Cargando…</p> : (() => { const nt = G.d.nota, pend = (G.d.resenas || []).filter((r) => r.fuente !== "places_dup" && !r.respuesta && !r.descartada); return (
+            <>
+              <div className="nuevos">
+                <div><b>{nt ? num(nt.nota, 1) : "–"} ★</b><small>nota media en Google</small></div>
+                <div><b>{num(nt?.total)}</b><small>reseñas en total</small></div>
+                <div><b className={pend.length ? "down" : ""}>{num(pend.length)}</b><small>por responder{G.d.conectado_gbp ? "" : " (de las 5 visibles)"}</small></div>
+              </div>
+              {pend.length > 0 && <p className="sub fuera">Cada una tiene ya una propuesta de respuesta lista para revisar.</p>}
+            </>
+          ); })()}
         </div>
       </div>
       <p className="sub fuera">Datos de LoyaltyDog actualizados {d.ultima_sync ? fechaCorta(d.ultima_sync) + " " + new Date(d.ultima_sync).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "–"} (cada hora). Las compras de socios se enlazan con su ticket de Epos por importe y hora.</p>
@@ -420,16 +425,140 @@ function NuevaFecha({ onClose, onGuardado }) {
 }
 
 // ---------- 5. Reputación ----------
-export function MarketingReputacion() {
+const CASO_GOOGLE = "7-2880000042307";
+const Estrellas = ({ n }) => <span className="estrellas" aria-label={`${n} de 5 estrellas`}>{[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= n ? "on" : ""}>★</i>)}</span>;
+const fechaLarga = (ts) => (ts ? new Date(ts).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "–");
+const ORIGEN = { claude: "Propuesta de Claude", ia: "Propuesta automática (IA)", plantilla: "Propuesta automática" };
+
+function NotaSerie({ serie }) {
+  if (!serie || serie.length < 2) return <p className="empty">La evolución se irá dibujando día a día desde hoy.</p>;
+  const W = 900, H = 160, ml = 34, mr = 12, mt = 10, mb = 22, iw = W - ml - mr, ih = H - mt - mb;
+  const ns = serie.map((s) => n0(s.n)); const lo = Math.max(1, Math.floor((Math.min(...ns) - 0.2) * 10) / 10), hi = Math.min(5, Math.ceil((Math.max(...ns) + 0.2) * 10) / 10);
+  const x = (i) => ml + (iw * i) / (serie.length - 1), y = (v) => mt + ih - ((v - lo) / (hi - lo || 1)) * ih;
   return (
-    <div className="card">
-      <h2>Reputación en Google</h2>
-      <p className="sub">Falta conectar la ficha de Google del Recao. Hay dos formas:</p>
-      <div className="opciones-g">
-        <div><b>Rápida · datos públicos</b><span>Nota, número de reseñas y las 5 últimas. Hace falta una clave de Google Maps (Google Cloud, unos 10 minutos).</span></div>
-        <div><b>Completa · perfil de empresa</b><span>Todas las reseñas, responderlas desde aquí y métricas de la ficha: visitas, llamadas y cómo llegar. Hay que pedir acceso a Google (tarda unos días) y entrar con la cuenta que gestiona la ficha.</span></div>
+    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Evolución de la nota en Google">
+      {[lo, (lo + hi) / 2, hi].map((t) => <g key={t}><line x1={ml} x2={W - mr} y1={y(t)} y2={y(t)} stroke="var(--grid)" /><text x={ml - 6} y={y(t) + 4} textAnchor="end" className="axis">{num(t, 1)}</text></g>)}
+      <path d={serie.map((s, i) => `${i ? "L" : "M"}${x(i)},${y(n0(s.n))}`).join(" ")} fill="none" stroke="var(--mark)" strokeWidth="2.5" />
+      {serie.map((s, i) => <circle key={s.f} cx={x(i)} cy={y(n0(s.n))} r="3" fill="var(--mark)" data-tip={`<b>${esc(fechaCorta(s.f))}</b><br>${num(s.n, 1)} ★ · ${num(s.t)} reseñas`} />)}
+      <text x={ml} y={H - 6} className="axis">{fechaCorta(serie[0].f)}</text><text x={W - mr} y={H - 6} textAnchor="end" className="axis">{fechaCorta(serie[serie.length - 1].f)}</text>
+    </svg>
+  );
+}
+
+function Resena({ r, conectado, mapsUrl, onCambio }) {
+  const [txt, setTxt] = useState(r.propuesta || "");
+  const [busy, setBusy] = useState("");
+  const [abierta, setAbierta] = useState(false);
+  useEffect(() => { setTxt(r.propuesta || ""); }, [r.propuesta]);
+  const sucia = txt.trim() !== (r.propuesta || "").trim();
+  const largo = (r.texto || "").length > 380;
+  async function hacer(accion, extra, ok) {
+    setBusy(accion);
+    try { const out = await sb.fn("google-resenas", { accion, id: r.id, ...extra }); if (ok) avisar(ok); await onCambio(); return out; }
+    catch (e) { avisar(e.message, "mal"); }
+    finally { setBusy(""); }
+  }
+  async function copiarYAbrir() {
+    try { await navigator.clipboard.writeText(txt.trim()); avisar("Respuesta copiada: pégala en Google"); } catch { avisar("No se ha podido copiar, selecciónala a mano", "mal"); }
+    if (sucia) hacer("guardar_propuesta", { texto: txt });
+    if (mapsUrl) window.open(mapsUrl, "_blank", "noopener");
+  }
+  async function publicar() {
+    if (!txt.trim()) return avisar("La respuesta está vacía", "mal");
+    if (!window.confirm(`Se publicará en Google como respuesta pública del Recao a ${r.autor || "esta reseña"}. ¿Publicar?`)) return;
+    await hacer("responder", { texto: txt.trim() }, "Respuesta publicada en Google");
+  }
+  const puedePublicar = conectado && r.gbp_name;
+  return (
+    <article className={`resena e${r.estrellas}${r.respuesta ? " respondida" : ""}${r.descartada ? " descartada" : ""}`}>
+      <header>
+        {r.autor_foto ? <img src={r.autor_foto} alt="" referrerPolicy="no-referrer" /> : <span className="r-ini">{(r.autor || "?")[0]}</span>}
+        <div><b>{r.autor || "Anónimo"}</b><small><Estrellas n={r.estrellas} /> · {fechaLarga(r.publicada)}</small></div>
+        {r.respuesta ? <span className="est e-terminada">Respondida</span> : r.descartada ? <span className="est">Sin respuesta</span> : <span className="est e-en-marcha">Por responder</span>}
+      </header>
+      {r.texto ? <p className={`r-txt${largo && !abierta ? " corto" : ""}`}>{r.texto}</p> : <p className="r-txt vacio">Solo puntuación, sin comentario.</p>}
+      {largo && <button className="enlace" onClick={() => setAbierta(!abierta)}>{abierta ? "Ver menos" : "Leer entera"}</button>}
+      {r.respuesta ? (
+        <div className="r-resp"><span>Respuesta del Recao · {fechaLarga(r.respondida)}{r.respondida_desde_panel ? " · desde el panel" : ""}</span><p>{r.respuesta}</p></div>
+      ) : !r.descartada && (
+        <div className="r-prop">
+          <label><span>{r.propuesta_editada ? "Tu respuesta (editada)" : ORIGEN[r.propuesta_origen] || "Propuesta de respuesta"}</span>
+            <textarea rows={Math.min(9, Math.max(4, Math.ceil(txt.length / 80)))} value={txt} onChange={(e) => setTxt(e.target.value)} placeholder="Escribe la respuesta…" />
+          </label>
+          <div className="r-acc">
+            {puedePublicar
+              ? <button className="btn-p" disabled={!!busy} onClick={publicar}>{busy === "responder" ? "Publicando…" : "Publicar en Google"}</button>
+              : <button className="btn-p" disabled={!txt.trim()} onClick={copiarYAbrir} title="Copia la respuesta y abre la ficha en Google para pegarla">Copiar y abrir en Google</button>}
+            {sucia && <button className="btn-l" disabled={!!busy} onClick={() => hacer("guardar_propuesta", { texto: txt }, "Guardada")}>Guardar</button>}
+            <button className="btn-txt" disabled={!!busy} onClick={() => hacer("proponer", {}, "Nueva propuesta")}>{busy === "proponer" ? "Pensando…" : "Otra propuesta"}</button>
+            <button className="btn-txt" disabled={!!busy} onClick={() => hacer("descartar", { valor: true }, "Marcada como sin respuesta")}>No responder</button>
+          </div>
+        </div>
+      )}
+      {r.descartada && !r.respuesta && <button className="btn-txt" onClick={() => hacer("descartar", { valor: false })}>Volver a «por responder»</button>}
+    </article>
+  );
+}
+
+export function MarketingReputacion() {
+  const R = useRpc("dash_resenas");
+  const [tab, setTab] = useState("pendientes");
+  const [sync, setSync] = useState(false);
+  useEffect(() => {
+    const m = window.location.search.match(/google=([a-z_]+)/);
+    if (m) { avisar(m[1] === "ok" ? "Ficha de Google conectada" : "No se ha podido conectar con Google", m[1] === "ok" ? "ok" : "mal"); window.history.replaceState(null, "", window.location.pathname + "#/marketing/reputacion"); }
+  }, []);
+  if (!R.d) return <Estado fallo={R.fallo} />;
+  const d = R.d, todas = (d.resenas || []).filter((r) => r.fuente !== "places_dup");
+  const pend = todas.filter((r) => !r.respuesta && !r.descartada), resp = todas.filter((r) => r.respuesta);
+  const lista = tab === "pendientes" ? pend : tab === "respondidas" ? resp : todas;
+  const nota = d.nota, ant = d.nota_30;
+  const dist = [5, 4, 3, 2, 1].map((e) => ({ e, n: todas.filter((r) => r.estrellas === e).length }));
+  async function actualizar() {
+    setSync(true);
+    try { const o = await sb.fn("google-resenas", { accion: "sync" }); if (o.places_error || o.gbp_error) avisar(o.gbp_error || o.places_error, "mal"); else avisar("Reseñas actualizadas"); await R.recargar(); }
+    catch (e) { avisar(e.message, "mal"); } finally { setSync(false); }
+  }
+  async function conectar() {
+    try { const o = await sb.fn("google-resenas", { accion: "conectar" }); window.location.href = o.url; } catch (e) { avisar(e.message, "mal"); }
+  }
+  return (
+    <>
+      <div className="grid sin-margen">
+        <div className="card c3 fkpi2"><h2>Nota en Google</h2><p className="num">{nota ? num(nota.nota, 1) : "–"} <small className="de5">/ 5</small></p><p className="sub">{ant ? <>hace 30 días {num(ant.nota, 1)} · <Delta a={n0(nota?.nota)} b={n0(ant.nota)} dec={1} puntos /></> : "la evolución empieza hoy"}</p></div>
+        <div className="card c3 fkpi2"><h2>Reseñas</h2><p className="num">{num(nota?.total)}</p><p className="sub">{ant ? `+${num(n0(nota?.total) - n0(ant.total))} en 30 días` : "total en la ficha"}</p></div>
+        <div className="card c3 fkpi2"><h2>Por responder</h2><p className="num">{num(pend.length)}</p><p className="sub">de las {num(todas.length)} cargadas en el panel</p></div>
+        <div className="card c3 fkpi2"><h2>Ficha de Google</h2><p className="num pq">{d.conectado_gbp ? "Conectada" : "Lectura"}</p><p className="sub">{d.conectado_gbp ? "todas las reseñas y publicar respuestas" : "5 reseñas visibles · publicar pendiente"}</p></div>
       </div>
-      <p className="sub fuera">Cuando esté conectado, aquí se verá la evolución de la nota y las reseñas, las que faltan por responder y cómo avanza el proyecto «Generación de reseñas» del roadmap.</p>
-    </div>
+
+      {!d.conectado_gbp && (
+        <div className="card nota-c g-pend">
+          <b>Ahora mismo vemos las 5 reseñas que Google muestra como más relevantes.</b>
+          <span>Cuando Google apruebe el acceso a la ficha (caso {CASO_GOOGLE}, de 7 a 10 días hábiles) se cargarán todas y podréis publicar la respuesta desde aquí con un clic. Mientras, «Copiar y abrir en Google» copia la respuesta y abre la ficha para pegarla.</span>
+          <button className="btn-l" onClick={conectar}>Conectar ficha de Google (cuando Google apruebe)</button>
+        </div>
+      )}
+
+      <div className="grid arriba">
+        <div className="card c8">
+          <div className="head"><div><h2>Evolución de la nota</h2><p className="sub">Nota media en Google y número de reseñas, una foto al día</p></div><button className="btn-l" disabled={sync} onClick={actualizar}>{sync ? "Actualizando…" : "Actualizar"}</button></div>
+          <NotaSerie serie={d.serie} />
+        </div>
+        <div className="card c4">
+          <h2>Reseñas en el panel</h2>
+          <p className="sub">Por estrellas{d.conectado_gbp ? "" : " (solo las cargadas)"}</p>
+          <BarrasH filas={dist} etiqueta={(f) => `${f.e} ★`} valor={(f) => f.n} />
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="head"><div><h2>Reseñas</h2><p className="sub">Con propuesta de respuesta: edítala, y publícala o cópiala a Google</p></div>
+          <Pestanas valor={tab} onChange={setTab} etiqueta="Filtrar reseñas" opciones={[{ id: "pendientes", label: "Por responder", n: pend.length }, { id: "respondidas", label: "Respondidas" }, { id: "todas", label: "Todas" }]} />
+        </div>
+        {lista.length === 0 ? <p className="empty">{tab === "pendientes" ? "No hay reseñas por responder. 🎉" : "Nada por aquí todavía."}</p>
+          : <div className="resenas">{lista.map((r) => <Resena key={r.id} r={r} conectado={d.conectado_gbp} mapsUrl={d.maps_url} onCambio={R.recargar} />)}</div>}
+        <p className="sub fuera">Se actualiza solo cada 3 horas de 8:00 a 23:00{d.ultima_sync ? ` · última vez ${fechaCorta(d.ultima_sync)} ${new Date(d.ultima_sync).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}` : ""}.</p>
+      </div>
+    </>
   );
 }

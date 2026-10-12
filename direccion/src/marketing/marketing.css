@@ -89,3 +89,38 @@ td.down { color: var(--down); font-weight: 700; }
 .chips-p { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 14px; }
 .chips-p span { display: inline-flex; align-items: center; gap: 4px; background: var(--grid); border-radius: 99px; padding: 3px 4px 3px 10px; font-size: 12.5px; font-weight: 600; }
 .chips-p button { border: 0; background: none; font-size: 15px; cursor: pointer; color: var(--muted); padding: 0 4px; }
+
+/* reputación */
+.de5 { font-size: .45em; color: var(--muted); font-weight: 700; }
+.num.pq { font-size: 26px; }
+.g-pend { display: grid; gap: 8px; margin-bottom: 16px; }
+.g-pend .btn-l { justify-self: start; white-space: normal; max-width: 100%; text-align: left; }
+.estrellas { letter-spacing: 1px; white-space: nowrap; }
+.estrellas i { font-style: normal; color: var(--grid); }
+.estrellas i.on { color: #E8A317; }
+.resenas { display: grid; gap: 14px; margin-top: 14px; }
+.resena { border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 10px; background: var(--card); }
+.resena.e1, .resena.e2 { border-left: 4px solid var(--down); }
+.resena.e3 { border-left: 4px solid var(--amarillo-hondo, var(--amarillo)); }
+.resena.respondida, .resena.descartada { border-left-width: 1px; border-left-color: var(--line); }
+.resena.descartada { opacity: .7; }
+.resena header { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; }
+.resena header img, .r-ini { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+.r-ini { display: grid; place-items: center; background: var(--grid); font-weight: 800; text-transform: uppercase; }
+.resena header div { display: grid; gap: 1px; min-width: 0; }
+.resena header b { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resena header small { font-size: 12px; color: var(--muted); }
+.r-txt { margin: 0; font-size: 14px; line-height: 1.5; white-space: pre-line; }
+.r-txt.corto { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.r-txt.vacio { color: var(--muted); font-style: italic; }
+.resena > .enlace { justify-self: start; margin-top: -6px; }
+.r-resp { background: var(--bg); border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; }
+.r-resp span { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.r-resp p { margin: 0; font-size: 13.5px; line-height: 1.5; white-space: pre-line; }
+.r-prop { display: grid; gap: 8px; background: color-mix(in srgb, var(--amarillo) 10%, var(--card)); border-radius: 12px; padding: 10px 12px; }
+.r-prop label { display: grid; gap: 6px; }
+.r-prop label span { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.r-prop textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13.5px; line-height: 1.5; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--card); color: var(--text); resize: vertical; }
+.r-acc { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+@media (max-width: 760px) { .resena header { grid-template-columns: 36px 1fr; } .resena header .est { grid-column: 2; justify-self: start; } }
+@media (max-width: 760px) { .card .head .seg { flex-wrap: wrap; flex-shrink: 1; } }
