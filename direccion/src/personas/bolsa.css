@@ -1,0 +1,68 @@
+/* Personas · Bolsa de turnos */
+.num.down { color: var(--down); }
+.b-dest { display: inline-block; flex: none; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.b-dest.pl { background: color-mix(in srgb, #7A5E9E 16%, transparent); color: #5a4a7a; }
+.b-dest.ev { background: color-mix(in srgb, #2E8C8C 16%, transparent); color: #0a5757; }
+.b-dest.neutro { background: var(--grid); color: var(--text-2, var(--text)); }
+.b-plazo { flex: none; align-self: flex-start; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--grid); color: var(--muted); white-space: nowrap; }
+.b-plazo.urg { background: color-mix(in srgb, var(--down) 13%, transparent); color: var(--down); }
+
+.b-reglas ul { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.b-reglas li { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; line-height: 1.45; color: var(--text-2, var(--text)); }
+.b-reglas li .b-dest { margin-top: 1px; min-width: 86px; text-align: center; }
+
+.b-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; margin-top: 14px; }
+.b-oferta { border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; background: var(--card); }
+.b-oferta.urg { border-color: color-mix(in srgb, var(--down) 45%, var(--line)); box-shadow: inset 4px 0 0 var(--down); }
+.b-oferta header { display: flex; justify-content: space-between; gap: 10px; }
+.b-f { font-size: 15.5px; }
+.b-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.b-chips small { color: var(--muted); font-size: 12.5px; }
+.b-origen { margin: 0; font-size: 12.5px; font-weight: 700; color: #8A6410; }
+.b-nota { margin: 0; font-size: 12.5px; color: var(--muted); }
+.b-alerta { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--down); }
+.b-resp { margin: 4px 0 0; padding-top: 10px; border-top: 1px solid var(--grid); display: grid; gap: 5px; }
+.b-resp div { display: grid; grid-template-columns: 104px 1fr; gap: 8px; font-size: 13px; }
+.b-resp dt { color: var(--muted); }
+.b-resp dd { margin: 0; font-weight: 600; }
+.b-oferta footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; }
+
+.b-sec { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+.b-cadenas { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.b-cadenas li { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px; }
+.b-paso { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13.5px; }
+.b-paso > span { color: var(--muted); }
+.b-paso.hijo { margin-left: 11px; padding-left: 14px; border-left: 2px solid var(--line); }
+.b-est { font-size: 11.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
+.b-est.ok { background: color-mix(in srgb, var(--up) 14%, transparent); color: var(--up); }
+.b-est.mal { background: color-mix(in srgb, var(--down) 13%, transparent); color: var(--down); }
+.b-tabla td { vertical-align: middle; }
+.b-cap { text-transform: capitalize; font-weight: 700; white-space: nowrap; }
+.b-quien { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
+.b-como { color: var(--muted); font-size: 13px; }
+
+.b-evs { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.b-evs li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.b-evs li > div { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.b-evs small { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.b-evs small.ok { color: var(--up); }
+
+.b-va { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: -4px 0 12px; }
+.b-aviso { font-size: 13px; color: #8A6410; background: color-mix(in srgb, var(--amarillo) 22%, var(--card)); border-radius: 10px; padding: 8px 11px; margin: 0 0 12px; }
+
+/* Horarios: bolsa en la fila Cobertura y descanso pendiente */
+.cuadrante .en-bolsa { display: block; width: 100%; margin-bottom: 4px; border: 1px dashed color-mix(in srgb, var(--amarillo-hondo, #B08421) 70%, transparent); border-radius: 8px; padding: 3px 6px; background: color-mix(in srgb, var(--amarillo) 18%, transparent); color: #6a4a00; font-weight: 800; font-size: 11px; cursor: pointer; }
+.cuadrante .falta.publicar { background: color-mix(in srgb, var(--down) 20%, transparent); }
+.celda.pend { box-shadow: inset 0 0 0 2px #E0B94A; outline: 2px dashed #E0B94A; outline-offset: -2px; }
+.b-leyenda-pend { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #6a4a00; background: color-mix(in srgb, var(--amarillo) 12%, var(--card)); border: 2px dashed #E0B94A; border-radius: 12px; padding: 8px 12px; margin: 0 0 12px; }
+.huecos .b-dest { margin-left: auto; }
+.huecos .en-b { display: block; font-size: 12px; font-weight: 700; color: #8A6410; text-transform: none; }
+.huecos .en-b.toca { color: var(--down); }
+.hueco-acc { display: grid; gap: 8px; margin: 0 0 16px; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--amarillo) 12%, var(--card)); font-size: 13px; }
+.hueco-acc .btn-p, .hueco-acc .btn-l { justify-self: start; }
+
+@media (max-width: 760px) {
+  .b-lista { grid-template-columns: 1fr; }
+  .b-resp div { grid-template-columns: 92px 1fr; }
+  .b-reglas li { flex-direction: column; gap: 4px; }
+}

@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { F, SF, C, SHADOW } from "../../lib/styles.js";
-import { IcoCheck, IcoRight, IcoLeft, IcoCalendar, IcoSun, IcoReceipt, IcoUser, IcoSwap, IcoBars } from "../../lib/icons.jsx";
+import { IcoCheck, IcoRight, IcoLeft, IcoCalendar, IcoSun, IcoReceipt, IcoUser, IcoSwap, IcoBars, IcoUsers } from "../../lib/icons.jsx";
+import { sb } from "../../lib/supabase.js"; // BOLSA
+import { BOLSA_ACTIVA } from "../../lib/bolsa.js"; // BOLSA
 import { CerrarTurnoView } from "./CerrarTurnoView.jsx";
 import { MiHorarioView } from "./MiHorarioView.jsx";
 import { MisVacacionesView } from "./MisVacacionesView.jsx";
@@ -9,9 +11,11 @@ import { CambioTurnoView } from "./CambioTurnoView.jsx";
 import { RevisarTurnoView } from "./RevisarTurnoView.jsx";
 import { MiSeguimientoView } from "./MiSeguimientoView.jsx";
 import { MisAvisosView } from "./MisAvisosView.jsx";
+import { CubrirTurnosView } from "./CubrirTurnosView.jsx"; // BOLSA
 import { WorkerView } from "../WorkerView.jsx";
 
 const TILES = [
+  ...(BOLSA_ACTIVA ? [{ id: "cubrir", label: "Turnos para cubrir", sub: "Mañana y Tarde", Ico: IcoUsers, iconBg: "#FBF0DA", iconFg: "#B08421" }] : []), // BOLSA
   { id: "horario", label: "Mis horarios", sub: "Tu calendario", Ico: IcoCalendar, iconBg: "#EAF4EE", iconFg: "#2D8B4E" },
   { id: "revisar", label: "Turno anterior", sub: "Revisar y reportar", Ico: IcoCheck, iconBg: "#FBEDE9", iconFg: "#C44D3F" },
   { id: "seguimiento", label: "Mi seguimiento", sub: "Plus y faltas", Ico: IcoBars, iconBg: "#EAF0F8", iconFg: "#4A7AB5" },
@@ -21,16 +25,23 @@ const TILES = [
   { id: "facturas", label: "Facturas", sub: "Registrar", Ico: IcoReceipt, iconBg: "#F0EEF6", iconFg: "#8B6DAF" },
   { id: "cuenta", label: "Mi cuenta", sub: "Contraseña", Ico: IcoUser, iconBg: "#F0ECE2", iconFg: "#8A7A54" },
 ];
-const TITULOS = { cerrar: "Mi turno", horario: "Mis horarios", revisar: "Turno anterior", seguimiento: "Mi seguimiento", avisos: "Avisos", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { cerrar: "Mi turno", cubrir: "Turnos para cubrir", horario: "Mis horarios", revisar: "Turno anterior", seguimiento: "Mi seguimiento", avisos: "Avisos", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [screen, setScreen] = useState("home");
+  const [porCubrir, setPorCubrir] = useState(0); // BOLSA
 
   useEffect(() => {
-    const h = (e) => { const d = e.detail && e.detail.destino; if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); };
+    const h = (e) => { const d = e.detail && e.detail.destino; if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); else if (d === "cubrir" && BOLSA_ACTIVA) setScreen("cubrir"); };
     window.addEventListener("recao-nav", h);
     return () => window.removeEventListener("recao-nav", h);
   }, []);
+
+  // BOLSA: cuántos turnos puede cubrir ahora mismo (sin contar los que ya rechazó)
+  useEffect(() => {
+    if (!BOLSA_ACTIVA || screen !== "home") return;
+    sb.rpc("bolsa_disponibles").then(r => setPorCubrir((r || []).filter(x => x.destino === "plantilla" && !x.rechazado).length)).catch(() => {});
+  }, [screen]);
 
   if (screen === "home") {
     const hoy = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
@@ -47,10 +58,19 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
           <IcoRight size={20} color={C.goldSub} sw={2.4} />
         </button>
 
+        {BOLSA_ACTIVA && porCubrir > 0 && ( // BOLSA
+          <button onClick={() => setScreen("cubrir")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", marginTop: 12, background: C.char, border: "none", borderRadius: 15, padding: "15px 18px", display: "flex", alignItems: "center", gap: 13, textAlign: "left" }}>
+            <span style={{ width: 34, height: 34, borderRadius: "999px", background: C.gold, color: C.goldDark, fontFamily: SF, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{porCubrir}</span>
+            <span style={{ flex: 1, fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.gold }}>turno{porCubrir > 1 ? "s" : ""} de Mañana o Tarde por cubrir en tus días libres</span>
+            <IcoRight size={18} color={C.gold} sw={2.4} />
+          </button>
+        )}
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
           {TILES.map(t => { const Ico = t.Ico; return (
-            <button key={t.id} onClick={() => setScreen(t.id)} style={{ textAlign: "left", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 18, padding: 16, cursor: "pointer", boxShadow: SHADOW.card }}>
+            <button key={t.id} onClick={() => setScreen(t.id)} style={{ position: "relative", textAlign: "left", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 18, padding: 16, cursor: "pointer", boxShadow: SHADOW.card }}>
               <span style={{ width: 38, height: 38, borderRadius: 11, background: t.iconBg, display: "flex", alignItems: "center", justifyContent: "center" }}><Ico size={20} color={t.iconFg} /></span>
+              {t.id === "cubrir" && porCubrir > 0 && <span style={{ position: "absolute", top: 12, right: 12, minWidth: 22, height: 22, padding: "0 6px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{porCubrir}</span>}
               <div style={{ fontFamily: SF, fontSize: 16, color: C.char, marginTop: 12 }}>{t.label}</div>
               <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 2 }}>{t.sub}</div>
             </button>
@@ -67,6 +87,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
         <div style={{ fontFamily: SF, fontSize: 18, color: C.char }}>{TITULOS[screen]}</div>
       </div>
       {screen === "cerrar" && <CerrarTurnoView user={user} />}
+      {screen === "cubrir" && <CubrirTurnosView user={user} />}
       {screen === "horario" && <MiHorarioView user={user} />}
       {screen === "revisar" && <RevisarTurnoView user={user} />}
       {screen === "seguimiento" && <MiSeguimientoView user={user} />}

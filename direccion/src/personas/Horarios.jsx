@@ -4,6 +4,8 @@ import { sb } from "../../../src/lib/supabase.js";
 import { TURNOS, TURNO_OPCIONES } from "../../../src/lib/turnos.js";
 import { TURNOS_REQUERIDOS } from "../../../src/lib/cobertura.js";
 import { Panel, useEquipo, avisar, hoyStr, masDias, lunesDe, fechaCorta, Cargando, Avatar } from "../ui.jsx";
+import { BOLSA_ACTIVA, DIAS_ANTELACION, destinoDe, diasHasta } from "../../../src/lib/bolsa.js"; // BOLSA
+import "./bolsa.css"; // BOLSA
 
 const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P" };
 const LIBRES = new Set(["Descanso", "Vacaciones", "Baja", "Permiso"]);
@@ -26,6 +28,7 @@ export function Horarios() {
   const [celda, setCelda] = useState(null); // {persona, fecha}
   const [hueco, setHueco] = useState(null); // {fecha, turno}
   const [nuevoEv, setNuevoEv] = useState(null); // {fecha?, turno?}
+  const [bolsa, setBolsa] = useState({}); // BOLSA: "fecha|turno" → oferta abierta (próximos 60 días)
 
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => masDias(lunes, i)), [lunes]);
 
@@ -39,6 +42,14 @@ export function Horarios() {
   }, [hoy]);
   useEffect(() => { setMapa(null); cargarSemana().catch(() => setMapa({})); }, [cargarSemana]);
   useEffect(() => { cargarProx().catch(() => setProx([])); }, [cargarProx]);
+  // BOLSA: turnos abiertos en la bolsa (huecos publicados y descansos compensatorios pendientes)
+  const cargarBolsa = useCallback(async () => {
+    if (!BOLSA_ACTIVA) return;
+    const r = await sb.select("bolsa_turnos", `select=id,fecha,turno,origen,descanso_de,publicado_en&estado=eq.abierto&fecha=gte.${hoy}&fecha=lte.${masDias(hoy, 60)}`);
+    setBolsa(Object.fromEntries(r.map((b) => [`${b.fecha}|${b.turno}`, b])));
+  }, [hoy]);
+  useEffect(() => { cargarBolsa().catch(() => setBolsa({})); }, [cargarBolsa]);
+  const pendiente = useMemo(() => { const m = {}; Object.values(bolsa).forEach((b) => { if (b.origen === "descanso_comp" && b.descanso_de) m[`${b.descanso_de}|${b.fecha}`] = true; }); return m; }, [bolsa]);
 
   const trab = useMemo(() => (equipo || []).filter((u) => u.rol === "trabajadora" && u.activo), [equipo]);
   const grupos = useMemo(() => {
@@ -71,8 +82,30 @@ export function Horarios() {
       if (turno) await sb.upsert("horarios", { usuario_id: uid, fecha, turno }, "usuario_id,fecha");
       else await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=eq.${fecha}`);
       cargarProx();
+      if (BOLSA_ACTIVA) setTimeout(() => cargarBolsa().catch(() => {}), 400); // si cubría un turno de la bolsa, la base de datos lo retira sola
     } catch (e) { avisar("No se ha podido guardar el turno", "mal"); cargarSemana(); }
   };
+
+  // BOLSA: publicar un hueco o retirarlo
+  const publicar = async (fecha, turno) => {
+    try {
+      const r = await sb.insert("bolsa_turnos", { fecha, turno });
+      const b = Array.isArray(r) ? r[0] : r;
+      setBolsa((m) => ({ ...m, [`${fecha}|${turno}`]: b || { fecha, turno, origen: "hueco" } }));
+      avisar(destinoDe(turno) === "plantilla" ? "Publicado para la plantilla: sale en el resumen de mañana" : "Publicado para las eventuales: sale en el resumen de mañana");
+      cargarBolsa().catch(() => {});
+    } catch (e) { avisar(/409|23505/.test(String(e.message)) ? "Ya estaba en la bolsa" : "No se ha podido publicar", "mal"); cargarBolsa().catch(() => {}); }
+  };
+  const retirar = async (fecha, turno) => {
+    const b = bolsa[`${fecha}|${turno}`]; if (!b?.id) return;
+    if (!window.confirm(`¿Retirar de la bolsa el ${turno} del ${fechaCorta(fecha)}?`)) return;
+    try {
+      await sb.update("bolsa_turnos", `id=eq.${b.id}`, { estado: "retirado", cerrado_motivo: "retirado_por_direccion" });
+      setBolsa((m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== `${fecha}|${turno}`)));
+      avisar("Retirado de la bolsa");
+    } catch (e) { avisar("No se ha podido retirar", "mal"); }
+  };
+  const tocaPublicar = (fecha, turno) => BOLSA_ACTIVA && !bolsa[`${fecha}|${turno}`] && diasHasta(fecha) <= DIAS_ANTELACION;
 
   const crearEventual = async (nombre, asignar) => {
     try {
@@ -85,6 +118,7 @@ export function Horarios() {
 
   if (!equipo || !mapa) return <Cargando />;
   const turnosDia = (f) => trab.filter((u) => mapa[`${u.id}|${f}`] && !LIBRES.has(mapa[`${u.id}|${f}`])).length;
+  const hayPend = BOLSA_ACTIVA && dias.some((f) => trab.some((u) => pendiente[`${u.id}|${f}`])); // BOLSA
 
   return (
     <>
@@ -92,7 +126,7 @@ export function Horarios() {
         <div className="head">
           <div>
             <h2>Semana del {fechaCorta(lunes)}</h2>
-            <p className="sub">Pulsa una casilla para poner o cambiar el turno.</p>
+            <p className="sub">Pulsa una casilla para poner o cambiar el turno.{BOLSA_ACTIVA ? " En la fila Cobertura, pulsa un hueco para asignarlo o publicarlo en la bolsa." : ""}</p>
           </div>
           <div className="nav-sem">
             <button className="btn-l" onClick={() => setLunes(masDias(lunes, -7))} aria-label="Semana anterior">‹</button>
@@ -101,6 +135,7 @@ export function Horarios() {
             <button className="btn-l" onClick={() => setNuevoEv({})}>+ Eventual</button>
           </div>
         </div>
+        {hayPend && <p className="b-leyenda-pend"><b>Borde discontinuo dorado</b><span>= descanso compensatorio pendiente. Esa persona libra en cuanto alguien coja su turno en la bolsa; hasta entonces sigue apuntada.</span></p>}
         <div className="tabla-scroll">
           <table className="cuadrante">
             <thead>
@@ -115,7 +150,7 @@ export function Horarios() {
             </thead>
             <tbody>
               {grupos.map((g) => (
-                <GrupoFilas key={g.id} g={g} dias={dias} mapa={mapa} hoy={hoy} onCelda={setCelda} />
+                <GrupoFilas key={g.id} g={g} dias={dias} mapa={mapa} hoy={hoy} onCelda={setCelda} pendiente={pendiente} />
               ))}
               <tr className="cobertura">
                 <th>Cobertura</th>
@@ -123,7 +158,9 @@ export function Horarios() {
                   const falta = huecosSemana[f];
                   return (
                     <td key={f} className={f === hoy ? "hoy" : ""}>
-                      {falta ? falta.map((t) => <button key={t} className="falta" onClick={() => setHueco({ fecha: f, turno: t })} title="Asignar a alguien">Falta {ABREV[t]}</button>)
+                      {falta ? falta.map((t) => bolsa[`${f}|${t}`]
+                        ? <button key={t} className="en-bolsa" onClick={() => setHueco({ fecha: f, turno: t })} title="Publicado en la bolsa: asignar a mano o retirar">En bolsa · {ABREV[t]}</button>
+                        : <button key={t} className={`falta${tocaPublicar(f, t) ? " publicar" : ""}`} onClick={() => setHueco({ fecha: f, turno: t })} title={tocaPublicar(f, t) ? "Toca publicarlo en la bolsa" : "Asignar a alguien"}>Falta {ABREV[t]}</button>)
                         : <span className="ok" title={`${turnosDia(f)} personas trabajando`}>✓ {turnosDia(f)}</span>}
                     </td>
                   );
@@ -140,14 +177,14 @@ export function Horarios() {
       <div className="grid">
         <div className="card c12">
           <h2>Turnos sin cubrir · próximos 60 días</h2>
-          <p className="sub">Días con algún turno imprescindible ({TURNOS_REQUERIDOS.join(", ")}) sin nadie asignado.</p>
+          <p className="sub">Días con algún turno imprescindible ({TURNOS_REQUERIDOS.join(", ")}) sin nadie asignado.{BOLSA_ACTIVA ? ` Los que faltan ${DIAS_ANTELACION} días o menos y no están en la bolsa, toca publicarlos.` : ""}</p>
           {!prox ? <p className="empty">Cargando…</p> : huecosProx.length === 0 ? <p className="empty">Todo cubierto ✓</p> : (
             <ul className="huecos">
               {huecosProx.map((h) => (
                 <li key={h.fecha + h.turno}>
-                  <span className="f">{fechaCorta(h.fecha)}</span>
+                  <span className="f">{fechaCorta(h.fecha)}{BOLSA_ACTIVA && (bolsa[`${h.fecha}|${h.turno}`] ? <small className="en-b">En la bolsa</small> : tocaPublicar(h.fecha, h.turno) && <small className="en-b toca">Toca publicar</small>)}</span>
                   <span className="tchip" style={{ background: TURNOS[h.turno].bg, color: TURNOS[h.turno].fg }}>{h.turno}</span>
-                  <button className="btn-l" onClick={() => setHueco(h)}>Asignar</button>
+                  <button className="btn-l" onClick={() => setHueco(h)}>{BOLSA_ACTIVA ? "Gestionar" : "Asignar"}</button>
                 </li>
               ))}
             </ul>
@@ -157,6 +194,7 @@ export function Horarios() {
 
       {celda && (
         <Panel titulo={celda.persona.nombre} sub={fechaCorta(celda.fecha)} onClose={() => setCelda(null)}>
+          {pendiente[`${celda.persona.id}|${celda.fecha}`] && <p className="b-leyenda-pend">Este día es su descanso compensatorio pendiente. Si le cambias el turno a mano, la oferta se retira de la bolsa.</p>}
           <div className="opciones-turno">
             {TURNO_OPCIONES.map((t) => {
               const sel = mapa[`${celda.persona.id}|${celda.fecha}`] === t;
@@ -176,6 +214,9 @@ export function Horarios() {
 
       {hueco && (
         <AsignarHueco hueco={hueco} trab={trab} prox={prox || []} mapa={mapa}
+          enBolsa={bolsa[`${hueco.fecha}|${hueco.turno}`]}
+          onPublicar={async () => { await publicar(hueco.fecha, hueco.turno); setHueco(null); }}
+          onRetirar={async () => { await retirar(hueco.fecha, hueco.turno); setHueco(null); }}
           onClose={() => setHueco(null)}
           onAsignar={async (uid) => { await guardar(uid, hueco.fecha, hueco.turno); setHueco(null); avisar("Turno asignado"); }}
           onNuevo={() => { setNuevoEv(hueco); setHueco(null); }} />
@@ -189,7 +230,7 @@ export function Horarios() {
   );
 }
 
-function GrupoFilas({ g, dias, mapa, hoy, onCelda }) {
+function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {} }) {
   return (
     <>
       <tr className="grupo"><th colSpan={8}>{g.label}</th></tr>
@@ -201,7 +242,7 @@ function GrupoFilas({ g, dias, mapa, hoy, onCelda }) {
             const info = t && TURNOS[t];
             return (
               <td key={f} className={`${f === hoy ? "hoy" : ""}${f < hoy ? " pasado" : ""}`}>
-                <button className={`celda ${t ? "" : "vacia"}`} onClick={() => onCelda({ persona: p, fecha: f })}
+                <button className={`celda ${t ? "" : "vacia"}${pendiente[`${p.id}|${f}`] ? " pend" : ""}`} onClick={() => onCelda({ persona: p, fecha: f })}
                   style={info ? { background: info.bg, color: info.fg } : undefined}
                   aria-label={`${p.nombre}, ${fechaCorta(f)}: ${t || "sin turno"}`} title={t ? `${t}${info?.horas ? " · " + info.horas : ""}` : "Sin turno"}>
                   {t ? ABREV[t] || t : "+"}
@@ -215,13 +256,24 @@ function GrupoFilas({ g, dias, mapa, hoy, onCelda }) {
   );
 }
 
-function AsignarHueco({ hueco, trab, prox, mapa, onClose, onAsignar, onNuevo }) {
+function AsignarHueco({ hueco, trab, prox, mapa, enBolsa, onPublicar, onRetirar, onClose, onAsignar, onNuevo }) {
   const turnoDe = {};
   prox.forEach((h) => { turnoDe[`${h.usuario_id}|${h.fecha}`] = h.turno; });
   Object.entries(mapa).forEach(([k, t]) => { turnoDe[k] = t; });
   const libres = trab.filter((u) => { const t = turnoDe[`${u.id}|${hueco.fecha}`]; return !(t && (TURNOS_REQUERIDOS.includes(t) || t === "Vacaciones")); });
   return (
     <Panel titulo={`Cubrir ${hueco.turno}`} sub={`${fechaCorta(hueco.fecha)} · ${TURNOS[hueco.turno].horas}`} onClose={onClose}>
+      {BOLSA_ACTIVA && (enBolsa ? (
+        <div className="hueco-acc">
+          <span><b>Está en la bolsa</b>{enBolsa.origen === "descanso_comp" ? " como descanso compensatorio" : enBolsa.origen === "cadena" ? " por un cambio de día" : ""}. Si se lo asignas a alguien aquí, se retira de la bolsa solo.</span>
+          <button className="btn-l" onClick={onRetirar}>Retirar de la bolsa</button>
+        </div>
+      ) : (
+        <div className="hueco-acc">
+          <span>Publícalo y lo verán {destinoDe(hueco.turno) === "plantilla" ? "las compañeras de plantilla que libran ese día (48 h primero las de apoyo)" : "las eventuales con acceso a la app"}. O asígnalo tú abajo.</span>
+          <button className="btn-p" onClick={onPublicar}>Publicar en la bolsa</button>
+        </div>
+      ))}
       {libres.length === 0 ? <p className="empty">Nadie libre este día.</p> : (
         <ul className="lista-personas">
           {libres.map((u) => {

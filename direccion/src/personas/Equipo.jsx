@@ -198,8 +198,11 @@ function Plus({ equipo }) {
   const total = (filas || []).reduce((s, f) => s + n0(f.c?.total), 0);
   const exportar = () => {
     const pct = (v) => (v == null ? "" : Math.round(v * 100) + "%");
-    const cab = ["Trabajadora", "Turnos programados", "Turnos computables", "Fallos mes", "Fallos trayectoria", "% mensual", "Importe mensual", "% trayectoria", "Importe trayectoria", "Total"];
-    const rows = filas.map((f) => { const c = f.c || {}; return [f.t.nombre, c.turnos_prog ?? "", c.turnos_comp ?? "", c.fallos_mes ?? "", c.fallos_tray ?? "", pct(c.pct_mensual), String(c.importe_mensual ?? "").replace(".", ","), pct(c.pct_tray), String(c.importe_tray ?? "").replace(".", ","), String(c.total ?? "").replace(".", ",")]; });
+    // BOLSA: si plus_calculo devuelve los días como apoyo y como principal, van también al CSV con las bases
+    const conDias = filas.some((f) => f.c && f.c.dias_apoyo != null);
+    const nu = (v) => String(v ?? "").replace(".", ",");
+    const cab = ["Trabajadora", "Turnos programados", "Turnos computables", ...(conDias ? ["Días apoyo", "Días principal", "Base mensual", "Base trayectoria"] : []), "Fallos mes", "Fallos trayectoria", "% mensual", "Importe mensual", "% trayectoria", "Importe trayectoria", "Total"];
+    const rows = filas.map((f) => { const c = f.c || {}; return [f.t.nombre, c.turnos_prog ?? "", c.turnos_comp ?? "", ...(conDias ? [c.dias_apoyo ?? "", c.dias_principal ?? "", nu(c.base_mensual), nu(c.base_tray)] : []), c.fallos_mes ?? "", c.fallos_tray ?? "", pct(c.pct_mensual), nu(c.importe_mensual), pct(c.pct_tray), nu(c.importe_tray), nu(c.total)]; });
     const csv = [cab, ...rows].map((r) => r.map((x) => `"${String(x)}"`).join(";")).join("\n");
     const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" }));
     const a = document.createElement("a"); a.href = url; a.download = `plus_${anio}_${String(mes).padStart(2, "0")}.csv`; a.click(); URL.revokeObjectURL(url);
@@ -217,7 +220,7 @@ function Plus({ equipo }) {
             <tbody>
               {filas.map(({ t, c }) => (
                 <tr key={t.id}>
-                  <td><span className="pn">{t.nombre}</span></td>
+                  <td><span className="pn">{t.nombre}</span>{n0(c?.dias_apoyo) > 0 && n0(c?.dias_principal) > 0 && <span className="pf">base proporcional: {c.dias_apoyo} días de apoyo y {c.dias_principal} de principal</span>}</td>
                   <td className="r">{c ? `${c.turnos_comp ?? "–"}/${c.turnos_prog ?? "–"}` : "–"}</td>
                   <td className={`r ${n0(c?.fallos_mes) ? "down" : ""}`}>{c?.fallos_mes ?? "–"}</td>
                   <td className="r">{c ? <>{eur(c.importe_mensual, 2)}<span className="pf">{eur(c.base_mensual, 0)} × {pctTxt(c.pct_mensual)}</span></> : "–"}</td>

@@ -4,10 +4,12 @@ import { useRecaoData } from "./hooks/useRecaoData.js";
 import { LoginScreen, Header } from "./components/LoginScreens.jsx";
 import { WorkerApp } from "./views/worker/WorkerApp.jsx";
 import { OwnerView } from "./views/owner/OwnerView.jsx";
+import { EventualApp } from "./views/eventual/EventualApp.jsx"; // BOLSA
 
 export default function RecaoApp() {
   const { user, checking, login, logout } = useAuth();
-  const { facturas, monthlyData, proveedores, config, loading, error, reload } = useRecaoData(user);
+  // BOLSA: las eventuales no cargan facturas/datos del mes/config (no son para ellas)
+  const { facturas, monthlyData, proveedores, config, loading, error, reload } = useRecaoData(user && !user.eventual ? user : null);
 
   if (checking) return (
     <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", fontFamily: SF, color: C.char, background: C.cream }}>
@@ -34,7 +36,8 @@ export default function RecaoApp() {
   return (
     <div style={{ minHeight: "100vh", background: C.cream }}>
       <Header user={user} onLogout={logout} />
-      {user.rol === "trabajadora" && <WorkerApp user={user} facturas={facturas} proveedores={proveedores} onReload={reload} />}
+      {user.rol === "trabajadora" && user.eventual && <EventualApp user={user} />}
+      {user.rol === "trabajadora" && !user.eventual && <WorkerApp user={user} facturas={facturas} proveedores={proveedores} onReload={reload} />}
       {user.rol === "admin" && <OwnerView facturas={facturas} monthlyData={monthlyData} proveedores={proveedores} config={config} onReload={reload} currentUser={user} />}
     </div>
   );

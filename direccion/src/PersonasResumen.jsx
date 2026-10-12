@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { sb } from "../../src/lib/supabase.js";
 import { ymd, TURNOS, TURNO_OPCIONES } from "../../src/lib/turnos.js";
 import { huecosCobertura } from "../../src/lib/cobertura.js";
+import { BOLSA_ACTIVA, DIAS_URGENTE } from "../../src/lib/bolsa.js"; // BOLSA
 
 const LIBRES = new Set(["Descanso", "Vacaciones", "Baja", "Permiso"]);
 const masDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
@@ -57,18 +58,20 @@ export function PersonasResumen() {
     (async () => {
       try {
         const hoy = ymd(new Date()), manana = masDias(1);
-        const [usuarios, vac, cambios, hor] = await Promise.all([
+        const [usuarios, vac, cambios, hor, urg] = await Promise.all([
           sb.select("usuarios", "select=id,nombre,rol,activo"),
           sb.select("vacaciones_solicitudes", "select=id&estado=eq.pendiente"),
           sb.select("cambios_turno", "select=id&estado=eq.pendiente"),
           sb.select("horarios", `select=usuario_id,fecha,turno&fecha=gte.${hoy}&fecha=lte.${masDias(60)}`),
+          // BOLSA: turnos de la bolsa sin cubrir a 10 días o menos
+          BOLSA_ACTIVA ? sb.select("bolsa_turnos", `select=id&estado=eq.abierto&fecha=gte.${hoy}&fecha=lte.${masDias(DIAS_URGENTE)}`).catch(() => []) : Promise.resolve([]),
         ]);
         const nombres = Object.fromEntries(usuarios.map((u) => [u.id, u.nombre]));
         const huecos = huecosCobertura(hor);
         setD({
           nombres,
           equipo: usuarios.filter((u) => u.activo && u.rol === "trabajadora").length,
-          vac: vac.length, cambios: cambios.length,
+          vac: vac.length, cambios: cambios.length, urgBolsa: urg.length,
           diasSinCubrir: new Set(huecos.map((h) => h.fecha)).size,
           primerHueco: huecos.map((h) => h.fecha).sort()[0],
           hoy: hor.filter((h) => h.fecha === hoy),
@@ -85,6 +88,7 @@ export function PersonasResumen() {
   const avisos = [
     d.vac > 0 && { n: d.vac, t: `solicitud${d.vac > 1 ? "es" : ""} de vacaciones por revisar`, ruta: "personas/solicitudes" },
     d.diasSinCubrir > 0 && { n: d.diasSinCubrir, t: `día${d.diasSinCubrir > 1 ? "s" : ""} con turnos sin cubrir${d.primerHueco ? `, el primero el ${diaCorto(d.primerHueco)}` : ""}`, ruta: "personas/horarios" },
+    d.urgBolsa > 0 && { n: d.urgBolsa, t: `turno${d.urgBolsa > 1 ? "s" : ""} de la bolsa sin cubrir a 10 días o menos`, ruta: "personas/bolsa" },
     d.cambios > 0 && { n: d.cambios, t: `cambio${d.cambios > 1 ? "s" : ""} de turno por revisar`, ruta: "personas/solicitudes" },
   ].filter(Boolean);
 

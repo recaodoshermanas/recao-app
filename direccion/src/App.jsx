@@ -11,6 +11,7 @@ import { Horarios } from "./personas/Horarios.jsx";
 import { Solicitudes } from "./personas/Solicitudes.jsx";
 import { Seguimiento } from "./personas/Seguimiento.jsx";
 import { Equipo } from "./personas/Equipo.jsx";
+import { Bolsa } from "./personas/Bolsa.jsx";
 import { PlanResumen, Proyectos, PlanTareas, PlanCalendario } from "./plan/Plan.jsx";
 import { ProductoResumen, Catalogo, Familias, Proveedores, Salud } from "./producto/Producto.jsx";
 import { MarketingResumen, MarketingClientes, MarketingCaptacion, MarketingCampanas, MarketingReputacion } from "./marketing/Marketing.jsx";
@@ -143,6 +144,7 @@ export default function App() {
   if (area.id === "pulso") contenido = <Pulso />;
   else if (area.id === "personas" && sub.id === "resumen") contenido = <PersonasResumen />;
   else if (area.id === "personas" && sub.id === "horarios") contenido = <Horarios />;
+  else if (area.id === "personas" && sub.id === "bolsa") contenido = <Bolsa />;
   else if (area.id === "personas" && sub.id === "solicitudes") contenido = <Solicitudes />;
   else if (area.id === "personas" && sub.id === "seguimiento") contenido = <Seguimiento sub={extra} />;
   else if (area.id === "personas" && sub.id === "equipo") contenido = <Equipo user={user} />;

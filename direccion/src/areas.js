@@ -1,5 +1,6 @@
 // Mapa del panel: áreas y sus subpáginas. La URL es #/area/subpagina[/detalle].
 // "legado" = pantalla que viene tal cual de la app (con el tema del panel).
+import { BOLSA_ACTIVA } from "../../src/lib/bolsa.js";
 export const AREAS = [
   { id: "pulso", label: "Pulso" },
   {
@@ -7,6 +8,7 @@ export const AREAS = [
     subs: [
       { id: "resumen", label: "Resumen" },
       { id: "horarios", label: "Horarios" },
+      ...(BOLSA_ACTIVA ? [{ id: "bolsa", label: "Bolsa de turnos" }] : []),
       { id: "solicitudes", label: "Vacaciones y cambios" },
       { id: "seguimiento", label: "Seguimiento" },
       { id: "equipo", label: "Equipo" },
@@ -63,7 +65,7 @@ export const DESTINOS = {
   horarios: "personas/horarios", cobertura: "personas/horarios", vacaciones: "personas/solicitudes",
   cambios: "personas/solicitudes", cierres: "personas/seguimiento", incidencias: "personas/seguimiento",
   disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
-  candidatos: "personas/seleccion", plus: "personas/equipo",
+  candidatos: "personas/seleccion", plus: "personas/equipo", bolsa: "personas/bolsa",
 };
 
 // Enlaces antiguos de Personas → secciones nuevas

@@ -3,6 +3,7 @@ import { F, SF, C } from "../../lib/styles.js";
 import { IcoLeft, IcoRight } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
 import { TURNOS, ymd } from "../../lib/turnos.js";
+import { BOLSA_ACTIVA } from "../../lib/bolsa.js"; // BOLSA
 
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS = ["L","M","X","J","V","S","D"];
@@ -11,6 +12,7 @@ const navBtn = { border: `1.5px solid ${C.brd}`, background: "#fff", borderRadiu
 export function MiHorarioView({ user }) {
   const [cursor, setCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [mapa, setMapa] = useState({});
+  const [pend, setPend] = useState({}); // BOLSA: fecha → true si es un descanso compensatorio pendiente
 
   const { first, days } = useMemo(() => {
     const first = new Date(cursor.y, cursor.m, 1);
@@ -27,12 +29,19 @@ export function MiHorarioView({ user }) {
       const rows = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${user.id}&fecha=gte.${desde}&fecha=lte.${hasta}`);
       const m = {}; rows.forEach(r => { m[r.fecha] = r.turno; }); setMapa(m);
     } catch (e) { setMapa({}); }
+    if (BOLSA_ACTIVA) { // BOLSA
+      try {
+        const p = await sb.select("bolsa_turnos", `select=fecha&descanso_de=eq.${user.id}&estado=eq.abierto&fecha=gte.${desde}&fecha=lte.${hasta}`);
+        const mp = {}; p.forEach(r => { mp[r.fecha] = true; }); setPend(mp);
+      } catch (e) { setPend({}); }
+    }
   }, [cursor, user.id]);
   useEffect(() => { load(); }, [load]);
 
   const startOffset = (first.getDay() + 6) % 7;
   const hoy = ymd(new Date());
   const usados = [...new Set(Object.values(mapa))];
+  const hayPend = Object.keys(pend).length > 0;
 
   return (
     <div style={{ padding: "16px 14px", maxWidth: 540, margin: "0 auto" }}>
@@ -49,14 +58,22 @@ export function MiHorarioView({ user }) {
           const f = ymd(d);
           const def = mapa[f] ? TURNOS[mapa[f]] : null;
           const esHoy = f === hoy;
+          const esPend = !!pend[f];
           return (
-            <div key={f} style={{ aspectRatio: "1", border: esHoy ? `2px solid ${C.char}` : `1px solid ${C.brdL}`, borderRadius: 12, background: def ? def.bg : "#fff", color: def ? def.fg : C.mutL, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 2 }}>
+            <div key={f} title={esPend ? "Descanso pendiente: lo trabajas hasta que alguien coja tu turno" : undefined} style={{ aspectRatio: "1", border: esPend ? "2px dashed #E0B94A" : esHoy ? `2px solid ${C.char}` : `1px solid ${C.brdL}`, borderRadius: 12, background: def ? def.bg : "#fff", color: def ? def.fg : C.mutL, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 2 }}>
               <span style={{ fontFamily: F, fontSize: 12.5, fontWeight: 600 }}>{d.getDate()}</span>
               {def && <span style={{ fontFamily: F, fontSize: 8.5, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{def.label}</span>}
+              {esPend && <span style={{ fontFamily: F, fontSize: 7.5, fontWeight: 700, lineHeight: 1, marginTop: 2, color: "#8A6410" }}>desc. pend.</span>}
             </div>
           );
         })}
       </div>
+
+      {hayPend && (
+        <div style={{ marginTop: 14, fontFamily: F, fontSize: 12.5, color: "#6A4A08", background: "#FFFBF0", border: "1.5px dashed #E0B94A", borderRadius: 12, padding: "10px 12px", lineHeight: 1.45 }}>
+          <strong>Descanso pendiente:</strong> ese día te toca descansar, pero sigues apuntada hasta que una compañera coja tu turno en la bolsa.
+        </div>
+      )}
 
       {usados.length > 0 && (
         <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 8 }}>
