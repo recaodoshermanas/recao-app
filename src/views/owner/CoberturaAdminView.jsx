@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C, SHADOW, avatar } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { TURNOS, ymd } from "../../lib/turnos.js";
-import { huecosCobertura, TURNOS_REQUERIDOS } from "../../lib/cobertura.js";
+import { huecosCobertura, TURNOS_TRABAJO } from "../../lib/cobertura.js";
 
 const DOW = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 function fmtDia(f) { const p = f.split("-"); const d = new Date(f + "T00:00:00"); return `${DOW[d.getDay()]} ${p[2]}/${p[1]}`; }
@@ -38,7 +38,7 @@ export function CoberturaAdminView() {
   const porDia = {}; huecos.forEach(h => { (porDia[h.fecha] = porDia[h.fecha] || []).push(h.turno); });
   const dias = Object.keys(porDia).sort();
 
-  const disponibles = (fecha) => trab.filter(t => { const tu = turnoDe[`${t.id}|${fecha}`]; return !(tu && (TURNOS_REQUERIDOS.includes(tu) || tu === "Vacaciones")); });
+  const disponibles = (fecha) => trab.filter(t => { const tu = turnoDe[`${t.id}|${fecha}`]; return !(tu && (TURNOS_TRABAJO.includes(tu) || tu === "Vacaciones")); });
 
   const asignar = async (fecha, turno, uid) => {
     setHorarios(prev => [...prev.filter(h => !(h.usuario_id === uid && h.fecha === fecha)), { usuario_id: uid, fecha, turno }]);
@@ -49,7 +49,7 @@ export function CoberturaAdminView() {
   return (
     <div style={{ padding: "16px", maxWidth: 640, margin: "0 auto" }}>
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: C.gold, padding: "8px 12px", borderRadius: 10, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
-      <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 16 }}>Días con turnos sin cubrir (por vacaciones u otros huecos). Asigna a alguien que esté de descanso.</div>
+      <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 16 }}>Días con turnos sin cubrir: Mañana, Tarde, Apoyo 1 y Apoyo 2 todos los días, y Apoyo 3 los domingos. Asigna a alguien que esté de descanso.</div>
 
       {loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 24 }}>Cargando…</div>
         : dias.length === 0 ? <div style={{ fontFamily: SF, fontSize: 16, color: "#1E7A46", textAlign: "center", padding: 30 }}>Todo cubierto ✓</div>

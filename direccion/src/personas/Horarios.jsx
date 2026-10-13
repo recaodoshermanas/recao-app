@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { TURNOS, TURNO_OPCIONES } from "../../../src/lib/turnos.js";
-import { TURNOS_REQUERIDOS } from "../../../src/lib/cobertura.js";
+import { requeridosDe, TURNOS_TRABAJO, REGLA_COBERTURA } from "../../../src/lib/cobertura.js";
 import { Panel, useEquipo, avisar, hoyStr, masDias, lunesDe, fechaCorta, Cargando, Avatar } from "../ui.jsx";
 import { BOLSA_ACTIVA, DIAS_ANTELACION, destinoDe, diasHasta } from "../../../src/lib/bolsa.js"; // BOLSA
 import "./bolsa.css"; // BOLSA
@@ -15,7 +15,7 @@ function huecosDe(filas) {
   const porDia = {};
   filas.forEach((h) => { (porDia[h.fecha] ||= []).push(h.turno); });
   const out = {};
-  Object.entries(porDia).forEach(([f, ts]) => { const faltan = TURNOS_REQUERIDOS.filter((t) => !ts.includes(t)); if (faltan.length) out[f] = faltan; });
+  Object.entries(porDia).forEach(([f, ts]) => { const faltan = requeridosDe(f).filter((t) => !ts.includes(t)); if (faltan.length) out[f] = faltan; });
   return out;
 }
 
@@ -177,7 +177,7 @@ export function Horarios() {
       <div className="grid">
         <div className="card c12">
           <h2>Turnos sin cubrir · próximos 60 días</h2>
-          <p className="sub">Días con algún turno imprescindible ({TURNOS_REQUERIDOS.join(", ")}) sin nadie asignado.{BOLSA_ACTIVA ? ` Los que faltan ${DIAS_ANTELACION} días o menos y no están en la bolsa, toca publicarlos.` : ""}</p>
+          <p className="sub">Días con algún turno imprescindible sin nadie asignado ({REGLA_COBERTURA}).{BOLSA_ACTIVA ? ` Los que faltan ${DIAS_ANTELACION} días o menos y no están en la bolsa, toca publicarlos.` : ""}</p>
           {!prox ? <p className="empty">Cargando…</p> : huecosProx.length === 0 ? <p className="empty">Todo cubierto ✓</p> : (
             <ul className="huecos">
               {huecosProx.map((h) => (
@@ -260,7 +260,7 @@ function AsignarHueco({ hueco, trab, prox, mapa, enBolsa, onPublicar, onRetirar,
   const turnoDe = {};
   prox.forEach((h) => { turnoDe[`${h.usuario_id}|${h.fecha}`] = h.turno; });
   Object.entries(mapa).forEach(([k, t]) => { turnoDe[k] = t; });
-  const libres = trab.filter((u) => { const t = turnoDe[`${u.id}|${hueco.fecha}`]; return !(t && (TURNOS_REQUERIDOS.includes(t) || t === "Vacaciones")); });
+  const libres = trab.filter((u) => { const t = turnoDe[`${u.id}|${hueco.fecha}`]; return !(t && (TURNOS_TRABAJO.includes(t) || t === "Vacaciones")); });
   return (
     <Panel titulo={`Cubrir ${hueco.turno}`} sub={`${fechaCorta(hueco.fecha)} · ${TURNOS[hueco.turno].horas}`} onClose={onClose}>
       {BOLSA_ACTIVA && (enBolsa ? (
