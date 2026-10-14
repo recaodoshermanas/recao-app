@@ -1,10 +1,10 @@
 // Producto: el corazón de Recao. Todo sale de Epos (ventas línea a línea, catálogo y costes)
 // y de las facturas de proveedores. Periodo de referencia: últimos 30 días completos frente a los 30 anteriores.
 // Los datos de producto se pueden cambiar desde aquí: se escriben en Epos al momento (ver datos.js y Ficha.jsx).
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { eur, eurK, pct, num, mesCorto, mesAnio } from "../fmt.js";
 import { Cargando, ir, avisar, confirmar } from "../ui.jsx";
-import { FAMILIAS, COLOR_FAM, ESTADOS, n0, r0, margenPct, varPct, senales, tiene, useDatos, guardarCambios } from "./datos.js";
+import { FAMILIAS, COLOR_FAM, ESTADOS, n0, r0, margenPct, varPct, senales, tiene, useDatos, guardarCambios, ventaPeriodo } from "./datos.js";
 import { FichaProducto, NuevoProducto, SelectCat, SelectProv, SelectIva, BarraDeshacer, Delta } from "./Ficha.jsx";
 import { salud } from "./Salud.jsx";
 export { Salud } from "./Salud.jsx";
@@ -277,23 +277,93 @@ export function Catalogo({ extra }) {
 }
 
 // ---------- 3. Familias ----------
+// Periodo elegible: últimos 30 días, semana, mes, trimestre, año o fechas libres; se compara con el periodo anterior de la misma duración.
+const MODOS = [{ id: "30d", t: "30 días" }, { id: "semana", t: "Semana" }, { id: "mes", t: "Mes" }, { id: "trimestre", t: "Trimestre" }, { id: "anio", t: "Año" }, { id: "libre", t: "Fechas" }];
+const isoD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const masDias = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const fCorta = (s) => new Date(`${s}T12:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
+function calcPeriodo(modo, off, libre) {
+  const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
+  let ini, fin, et;
+  if (modo === "30d") { ini = masDias(hoy, -30); fin = masDias(hoy, -1); et = "Últimos 30 días"; }
+  else if (modo === "semana") {
+    ini = masDias(hoy, -((hoy.getDay() + 6) % 7) + 7 * off); fin = masDias(ini, 6);
+    et = `Semana del ${ini.toLocaleDateString("es-ES", { day: "numeric", month: "short" })} al ${fin.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" })}`;
+  } else if (modo === "mes") {
+    ini = new Date(hoy.getFullYear(), hoy.getMonth() + off, 1, 12); fin = new Date(ini.getFullYear(), ini.getMonth() + 1, 0, 12);
+    et = ini.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+  } else if (modo === "trimestre") {
+    const q = Math.floor(hoy.getMonth() / 3) + off;
+    ini = new Date(hoy.getFullYear(), q * 3, 1, 12); fin = new Date(ini.getFullYear(), ini.getMonth() + 3, 0, 12);
+    const m1 = ini.toLocaleDateString("es-ES", { month: "long" }), m3 = fin.toLocaleDateString("es-ES", { month: "long" });
+    et = `${Math.floor(ini.getMonth() / 3) + 1}.º trimestre ${ini.getFullYear()} (${m1}–${m3})`;
+  } else if (modo === "anio") { ini = new Date(hoy.getFullYear() + off, 0, 1, 12); fin = new Date(ini.getFullYear(), 11, 31, 12); et = String(ini.getFullYear()); }
+  else {
+    if (!libre.desde || !libre.hasta || libre.hasta < libre.desde) return null;
+    return { desde: libre.desde, hasta: libre.hasta, et: `Del ${fCorta(libre.desde)} al ${fCorta(libre.hasta)}`, curso: false };
+  }
+  const curso = fin >= hoy;
+  if (curso) fin = hoy;
+  if (ini > hoy) return null;
+  return { desde: isoD(ini), hasta: isoD(fin), et: et.charAt(0).toUpperCase() + et.slice(1), curso };
+}
+
 export function Familias() {
   const R = useResumen();
   const C = useCatalogo();
   const [ficha, setFicha] = useState(null);
+  const [modo, setModo] = useState("30d");
+  const [off, setOff] = useState(0);
+  const [libre, setLibre] = useState({ desde: "", hasta: "" });
+  const per = useMemo(() => calcPeriodo(modo, off, libre), [modo, off, libre.desde, libre.hasta]);
+  const [V, setV] = useState({ d: null, fallo: null, cargando: false });
+  useEffect(() => {
+    if (!per) return undefined;
+    let vivo = true;
+    setV((x) => ({ ...x, cargando: true, fallo: null }));
+    ventaPeriodo(per.desde, per.hasta).then((d) => vivo && setV({ d, fallo: null, cargando: false })).catch((e) => vivo && setV((x) => ({ ...x, fallo: e.message, cargando: false })));
+    return () => { vivo = false; };
+  }, [per?.desde, per?.hasta]);
   if (!C.d || !R.d) return <Estado fallo={C.fallo || R.fallo} />;
-  const cat = C.d.productos;
-  const tot = cat.reduce((s, p) => s + n0(p.v), 0);
+  const porId = new Map(C.d.productos.map((p) => [p.id, p]));
+  const filas = V.d?.productos || [];
+  const tot = filas.reduce((s, p) => s + n0(p.v), 0);
   const fams = FAMILIAS.map((f) => {
-    const ps = cat.filter((p) => p.fam === f);
+    const ps = filas.filter((p) => p.fam === f);
     const v = ps.reduce((s, p) => s + n0(p.v), 0), v0 = ps.reduce((s, p) => s + n0(p.v0), 0);
     const vs = ps.reduce((s, p) => s + n0(p.vs), 0), c = ps.reduce((s, p) => s + n0(p.c), 0);
-    const cats = Object.entries(ps.reduce((a, p) => { const k = p.cat || "Sin categoría"; a[k] = (a[k] || 0) + n0(p.v); return a; }, {})).sort((a, b) => b[1] - a[1]);
+    const cats = Object.entries(ps.reduce((a, p) => { const k = p.cat || "Sin categoría"; a[k] = (a[k] || 0) + n0(p.v); return a; }, {})).filter(([, x]) => x > 0).sort((a, b) => b[1] - a[1]);
     const serie = (R.d.familias_mes || []).filter((x) => x.fam === f).sort((a, b) => a.mes.localeCompare(b.mes));
-    return { f, v, v0, vs, c, m: margenPct(vs, c), top: [...ps].sort((a, b) => n0(b.v) - n0(a.v)).slice(0, 6), refs: ps.filter((p) => n0(p.v) > 0).length, total: ps.length, cats, serie };
+    const total = C.d.productos.filter((p) => p.fam === f).length;
+    return { f, v, v0, vs, c, m: margenPct(vs, c), top: ps.filter((p) => n0(p.v) > 0).sort((a, b) => n0(b.v) - n0(a.v)).slice(0, 6), refs: ps.filter((p) => n0(p.v) > 0).length, total, cats, serie };
   }).filter((x) => x.v > 0 || x.total > 0).sort((a, b) => b.v - a.v);
+  const navegable = modo !== "30d" && modo !== "libre";
   return (
     <>
+      <div className="card per-card">
+        <div className="per-fila">
+          <div className="seg" role="group" aria-label="Periodo">
+            {MODOS.map((m) => <button key={m.id} aria-pressed={modo === m.id} onClick={() => { setModo(m.id); setOff(0); }}>{m.t}</button>)}
+          </div>
+          {navegable && (
+            <div className="per-nav">
+              <button className="btn-l" onClick={() => setOff(off - 1)} aria-label="Periodo anterior">‹</button>
+              <b>{per?.et}</b>
+              <button className="btn-l" onClick={() => setOff(off + 1)} disabled={off >= 0} aria-label="Periodo siguiente">›</button>
+            </div>
+          )}
+          {modo === "libre" && (
+            <div className="per-nav">
+              <label>Desde <input type="date" value={libre.desde} onChange={(e) => setLibre({ ...libre, desde: e.target.value })} /></label>
+              <label>Hasta <input type="date" value={libre.hasta} onChange={(e) => setLibre({ ...libre, hasta: e.target.value })} /></label>
+            </div>
+          )}
+        </div>
+        <p className="sub">
+          {!per ? "Elige las dos fechas." : V.fallo ? `No se han podido cargar los datos: ${V.fallo}` : V.d ? <>{modo === "30d" || modo === "libre" ? per.et : `${per.et}${per.curso ? " (en curso, hasta hoy)" : ""}`} · venta {eur(r0(tot))} · comparado con {fCorta(V.d.desde0)} – {fCorta(V.d.hasta0)}{V.cargando ? " · actualizando…" : ""}</> : "Cargando…"}
+        </p>
+      </div>
+      {!V.d ? (per && !V.fallo ? <Cargando texto="Cargando ventas del periodo…" /> : null) : (
       <div className="fam-grid">
         {fams.map((x) => {
           const maxS = Math.max(...x.serie.map((s) => n0(s.v)), 1);
@@ -304,20 +374,22 @@ export function Familias() {
                 <Delta v={varPct(x.v, x.v0)} />
               </div>
               <div className="fam-nums">
-                <div><b>{eur(r0(x.v))}</b><small>{num((x.v / tot) * 100, 1)} % de la venta</small></div>
+                <div><b>{eur(r0(x.v))}</b><small>{tot > 0 ? num((x.v / tot) * 100, 1) : "0"} % de la venta</small></div>
                 <div><b className={x.m != null && x.m < 30 ? "mal" : ""}>{pct(x.m, 1)}</b><small>margen · deja {eur(r0(x.vs - x.c))}</small></div>
                 <div><b>{x.refs}</b><small>de {x.total} referencias vendidas</small></div>
               </div>
               <div className="mini-serie" aria-label="Venta de los últimos 13 meses">
                 {x.serie.map((s) => <i key={s.mes} style={{ height: `${(n0(s.v) / maxS) * 100}%` }} data-tip={`${esc(mesAnio(s.mes))}: <b>${eur(r0(s.v))}</b>`} />)}
               </div>
+              <p className="sub per-serie">Barras: venta de los últimos 13 meses</p>
               <h3 className="fh3">Lo que más vende</h3>
-              <ul className="top-fam">{x.top.map((p) => <li key={p.id}><button onClick={() => setFicha(p)}><span>{p.n}</span><b>{eur(r0(p.v))}</b></button></li>)}</ul>
+              <ul className="top-fam">{x.top.map((p) => { const cp = porId.get(p.id); return <li key={p.id}><button onClick={() => cp && setFicha(cp)} disabled={!cp}><span>{p.n}{!cp && " (archivado)"}</span><b>{eur(r0(p.v))}</b></button></li>; })}</ul>
               {x.cats.length > 1 && <p className="sub fuera">Categorías de Epos: {x.cats.map(([c, v]) => `${c} (${eurK(v)})`).join(" · ")}</p>}
             </article>
           );
         })}
       </div>
+      )}
       {ficha && <FichaProducto p={ficha} onClose={() => setFicha(null)} />}
     </>
   );
