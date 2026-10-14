@@ -50,6 +50,17 @@ export function useDatos(clave) {
   }, [clave]);
   return store[clave];
 }
+// Venta por producto en un periodo (Producto → Familias). Se guarda en memoria por periodo.
+const cachePeriodo = new Map();
+export async function ventaPeriodo(desde, hasta) {
+  const k = `${desde}|${hasta}`;
+  const c = cachePeriodo.get(k);
+  if (c && Date.now() - c.t < 10 * 60 * 1000) return c.d;
+  const { data, error } = await supabase.rpc("dash_familias_periodo", { p_desde: desde, p_hasta: hasta });
+  if (error) throw new Error(error.message);
+  cachePeriodo.set(k, { d: data, t: Date.now() });
+  return data;
+}
 export function useUltimo() { const [, set] = useState(0); useEffect(() => { const f = () => set((x) => x + 1); subs.add(f); return () => subs.delete(f); }, []); return store.ultimo; }
 
 // Refleja un cambio en el catálogo cargado sin esperar a recargar

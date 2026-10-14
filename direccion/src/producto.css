@@ -73,6 +73,18 @@ th.ordenable.on button { color: var(--text); }
 .ficha-sec h3 small { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: 6px; }
 
 /* familias */
+.per-card { margin-bottom: 16px; }
+.per-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.per-fila .seg { flex-wrap: wrap; }
+.per-nav { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; }
+.per-nav b { min-width: 12ch; text-align: center; }
+.per-nav .btn-l { min-width: 36px; padding: 4px 10px; font-size: 18px; line-height: 1; }
+.per-nav .btn-l:disabled { opacity: .35; cursor: default; }
+.per-nav label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.per-nav input[type=date] { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; }
+.per-card .sub { margin: 10px 0 0; }
+.per-serie { margin: -8px 0 6px; font-size: 11px; }
+.top-fam button:disabled { cursor: default; }
 .fam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
 .fam-card { border-top: 4px solid var(--c); display: flex; flex-direction: column; }
 .fam-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
