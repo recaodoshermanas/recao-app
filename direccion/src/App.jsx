@@ -16,6 +16,7 @@ import { PlanResumen, Proyectos, PlanTareas, PlanCalendario } from "./plan/Plan.
 import { ProductoResumen, Catalogo, Familias, Proveedores, Salud } from "./producto/Producto.jsx";
 import { MarketingResumen, MarketingClientes, MarketingCaptacion, MarketingCampanas, MarketingReputacion } from "./marketing/Marketing.jsx";
 import { Avisos } from "./ui.jsx";
+import { tokenRecuperar, limpiarTokenRecuperar, pedirRecuperacion, cambiarConToken } from "../../src/lib/recuperar.js";
 
 const ICONO = "/icono.png";
 
@@ -31,27 +32,71 @@ function usarRuta() {
 export const ir = (ruta) => { window.location.hash = `#/${ruta}`; };
 
 function Login({ onLogin, aviso }) {
+  const [token] = useState(() => tokenRecuperar());
+  const [modo, setModo] = useState(token ? "nueva" : "entrar"); // entrar | olvido | enviado | nueva
+  const [correo, setCorreo] = useState("");
   const [msg, setMsg] = useState(aviso || "");
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (aviso) setMsg(aviso); }, [aviso]);
+  const cambiarModo = (m) => { setModo(m); setMsg(""); if (m === "entrar" && token) limpiarTokenRecuperar(); };
   const enviar = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
     setBusy(true); setMsg("");
+    if (modo === "olvido") {
+      const em = String(f.get("email") || "").trim();
+      try { await pedirRecuperacion(em, "direccion"); setCorreo(em); setModo("enviado"); }
+      catch (er) { setMsg(er.message || "No se ha podido enviar."); }
+      setBusy(false); return;
+    }
+    if (modo === "nueva") {
+      const p1 = String(f.get("pass") || ""), p2 = String(f.get("pass2") || "");
+      if (p1.length < 8) { setMsg("Mínimo 8 caracteres."); setBusy(false); return; }
+      if (p1 !== p2) { setMsg("Las contraseñas no coinciden."); setBusy(false); return; }
+      try {
+        const r = await cambiarConToken(token, p1);
+        limpiarTokenRecuperar();
+        const l = await onLogin(r.email, p1);
+        if (!l?.ok) { setModo("entrar"); setMsg("Contraseña cambiada. Entra con la nueva."); }
+      } catch (er) { setMsg(er.message || "No se ha podido cambiar."); }
+      setBusy(false); return;
+    }
     const r = await onLogin(String(f.get("email")), String(f.get("pass")));
     setBusy(false);
     if (!r?.ok) setMsg(r?.error === "Email o contrasena incorrectos" ? "Email o contraseña incorrectos." : (r?.error || "No se ha podido entrar."));
   };
   return (
     <div className="login">
-      <form onSubmit={enviar}>
+      <form onSubmit={enviar} key={modo}>
         <img src={ICONO} alt="Recao" />
         <h1>Dirección</h1>
-        <p>Entra con tu cuenta de la app de Recao.</p>
-        <label>Email<input name="email" type="email" autoComplete="username" required /></label>
-        <label>Contraseña<input name="pass" type="password" autoComplete="current-password" required /></label>
-        <div className="err" role="alert">{msg}</div>
-        <button type="submit" disabled={busy}>{busy ? "Entrando…" : "Entrar"}</button>
+        {modo === "entrar" && <>
+          <p>Entra con tu cuenta de la app de Recao.</p>
+          <label>Email<input name="email" type="email" autoComplete="username" required /></label>
+          <label>Contraseña<input name="pass" type="password" autoComplete="current-password" required /></label>
+          <div className="err" role="alert">{msg}</div>
+          <button type="submit" disabled={busy}>{busy ? "Entrando…" : "Entrar"}</button>
+          <button type="button" className="link" onClick={() => cambiarModo("olvido")}>¿Has olvidado tu contraseña?</button>
+        </>}
+        {modo === "olvido" && <>
+          <p>Escribe tu correo y te mandamos un enlace para elegir una contraseña nueva.</p>
+          <label>Email<input name="email" type="email" autoComplete="username" required autoFocus /></label>
+          <div className="err" role="alert">{msg}</div>
+          <button type="submit" disabled={busy}>{busy ? "Enviando…" : "Enviarme el enlace"}</button>
+          <button type="button" className="link" onClick={() => cambiarModo("entrar")}>Volver a entrar</button>
+        </>}
+        {modo === "enviado" && <>
+          <p>Si <b>{correo}</b> tiene cuenta en Recao, en unos minutos te llega un correo con el enlace. Mira también en spam. El enlace caduca en 1 hora.</p>
+          <button type="button" className="link" onClick={() => cambiarModo("entrar")}>Volver a entrar</button>
+        </>}
+        {modo === "nueva" && <>
+          <p>Elige tu contraseña nueva (mínimo 8 caracteres).</p>
+          <label>Contraseña nueva<input name="pass" type="password" autoComplete="new-password" required minLength={8} autoFocus /></label>
+          <label>Repite la contraseña<input name="pass2" type="password" autoComplete="new-password" required minLength={8} /></label>
+          <div className="err" role="alert">{msg}</div>
+          <button type="submit" disabled={busy}>{busy ? "Guardando…" : "Guardar y entrar"}</button>
+          <button type="button" className="link" onClick={() => cambiarModo("entrar")}>Volver a entrar</button>
+        </>}
       </form>
     </div>
   );
@@ -138,7 +183,7 @@ export default function App() {
   const editarMes = useCallback((mk) => { setMesFoco(mk); ir("finanzas/cierre"); }, []);
 
   if (checking) return <div className="state">Cargando…</div>;
-  if (!esAdmin) return <Login onLogin={async (e, p) => { setAviso(""); return login(e, p); }} aviso={aviso} />;
+  if (!esAdmin || tokenRecuperar()) return <Login onLogin={async (e, p) => { setAviso(""); return login(e, p); }} aviso={aviso} />;
 
   let contenido;
   if (area.id === "pulso") contenido = <Pulso />;

@@ -208,6 +208,7 @@ svg text { font-family: var(--ui); }
 .login input { border: 1px solid var(--line); background: var(--bg); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
 .login button { margin-top: 6px; border: 0; background: var(--tinta); color: #fff; border-radius: 12px; padding: 13px; font-weight: 700; cursor: pointer; }
 .login .err { color: var(--down); font-size: 13px; min-height: 18px; }
+.login button.link { margin-top: 0; background: none; color: var(--muted); padding: 4px; font-weight: 600; font-size: 13px; text-decoration: underline; }
 .state { min-height: 60vh; display: grid; place-items: center; color: var(--muted); text-align: center; }
 
 /* ---------- responsive ---------- */

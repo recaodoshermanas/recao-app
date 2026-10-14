@@ -2,6 +2,7 @@ import { F, SF, C } from "./lib/styles.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { useRecaoData } from "./hooks/useRecaoData.js";
 import { LoginScreen, Header } from "./components/LoginScreens.jsx";
+import { tokenRecuperar } from "./lib/recuperar.js";
 import { WorkerApp } from "./views/worker/WorkerApp.jsx";
 import { OwnerView } from "./views/owner/OwnerView.jsx";
 import { EventualApp } from "./views/eventual/EventualApp.jsx"; // BOLSA
@@ -17,7 +18,8 @@ export default function RecaoApp() {
     </div>
   );
 
-  if (!user) return <LoginScreen onLogin={login} />;
+  // Enlace de "¿Has olvidado tu contraseña?": se muestra aunque haya otra sesión abierta en este móvil
+  if (!user || tokenRecuperar()) return <LoginScreen onLogin={login} />;
 
   if (loading) return (
     <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", fontFamily: SF, color: C.char, background: C.cream }}>
