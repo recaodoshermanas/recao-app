@@ -8,6 +8,7 @@ import { TURNOS } from "../../../src/lib/turnos.js";
 import { TURNOS_BOLSA, DIAS_ANTELACION, destinoDe, horarioDe, horasDe, fechaLarga, hoyYmd, plazo, diasHasta, horaCorta, motivo } from "../../../src/lib/bolsa.js";
 import { Panel, Pestanas, Cargando, Avatar, avisar, ir, fechaCorta, useEquipo } from "../ui.jsx";
 import "./bolsa.css";
+import { telNormalizado, TEL_AYUDA } from "../../../src/views/owner/UsuariosView.jsx";
 
 const corto = (n) => {
   const p = (n || "").trim().split(/\s+/);
@@ -237,11 +238,13 @@ function Publicar({ onClose, onHecho }) {
 function DarAcceso({ persona, onClose, onHecho }) {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
+  const [tel, setTel] = useState(persona.telefono || "");
   const [busy, setBusy] = useState(false);
-  const valido = /\S+@\S+\.\S+/.test(email) && pass.length >= 8;
+  const telN = telNormalizado(tel);
+  const valido = /\S+@\S+\.\S+/.test(email) && pass.length >= 8 && !!telN;
   async function crear() {
     setBusy(true);
-    try { await sb.fn("gestion-usuarios", { action: "dar_acceso_eventual", id: persona.id, email: email.trim(), password: pass }); avisar("Acceso creado: pásale su email y contraseña"); onHecho(); }
+    try { await sb.fn("gestion-usuarios", { action: "dar_acceso_eventual", id: persona.id, email: email.trim(), password: pass, telefono: telN }); avisar("Acceso creado: pásale su email y contraseña"); onHecho(); }
     catch (e) { avisar(e.message || "No se ha podido crear el acceso", "mal"); }
     finally { setBusy(false); }
   }
@@ -250,6 +253,8 @@ function DarAcceso({ persona, onClose, onHecho }) {
       pie={<button className="btn-p" disabled={!valido || busy} onClick={crear}>{busy ? "Creando…" : "Crear acceso"}</button>}>
       <label className="campo">Email<input type="email" autoCapitalize="none" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nombre@correo.com" /></label>
       <label className="campo">Contraseña temporal<input autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Mínimo 8 caracteres" /></label>
+      <label className="campo">Móvil (avisos por WhatsApp)<input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="612 345 678" /></label>
+      <p className="sub" style={tel && telN === null ? { color: "var(--down)" } : undefined}>{tel && telN === null ? "Formato no válido. " : ""}{TEL_AYUDA}</p>
       <p className="sub">Pásale el email y la contraseña en persona o por teléfono, no por escrito en un grupo.</p>
     </Panel>
   );

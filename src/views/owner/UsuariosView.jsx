@@ -4,7 +4,22 @@ import { sb } from "../../lib/supabase.js";
 
 const ROLES = [{ id: "trabajadora", label: "Trabajadora" }, { id: "admin", label: "Dirección" }];
 const ROLCHIP = { admin: { bg: "#F0ECF6", fg: "#8B6DAF", label: "Dirección" }, trabajadora: { bg: "#EAF0F8", fg: "#4A7AB5", label: "Trabajadora" } };
-const EVCHIP = { bg: "#F0ECE2", fg: "#8A7A54", label: "Eventual · sin acceso" };
+const EVCHIP = { bg: "#F0ECE2", fg: "#8A7A54", label: "Eventual" };
+// Móvil para los avisos por WhatsApp: 9 cifras si es español; si no, con prefijo (+351…)
+export function telNormalizado(v) {
+  let d = String(v || "").trim().replace(/[^\d+]/g, "");
+  if (!d) return "";
+  if (d.startsWith("00")) d = "+" + d.slice(2);
+  const dig = d.replace(/\D/g, "");
+  if (!d.startsWith("+")) {
+    if (dig.length === 9 && /^[6789]/.test(dig)) return "+34" + dig;
+    if (dig.length === 11 && dig.startsWith("34")) return "+" + dig;
+    return null;
+  }
+  return dig.length >= 10 && dig.length <= 15 ? "+" + dig : null;
+}
+export const TEL_AYUDA = "Móvil español: 9 cifras, sin prefijo (612 345 678). Si no es español, con su prefijo: +351 912 345 678.";
+const verTel = (t) => (t || "").replace(/^\+34(\d{3})(\d{3})(\d{3})$/, "$1 $2 $3");
 const btnSm = { padding: "8px 12px", borderRadius: 10, border: `1.5px solid ${C.brd}`, background: "#fff", color: C.char, fontFamily: F, fontSize: 12.5, fontWeight: 600, cursor: "pointer" };
 
 function Avatar({ name, size = 40 }) {
@@ -22,6 +37,7 @@ export function UsuariosView({ currentUser }) {
   const [nNombre, setNNombre] = useState("");
   const [nRol, setNRol] = useState("trabajadora");
   const [nPass, setNPass] = useState("");
+  const [nTel, setNTel] = useState("");
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
@@ -39,10 +55,12 @@ export function UsuariosView({ currentUser }) {
   const crear = async () => {
     if (creating) return;
     if (!nEmail || !nNombre || nPass.length < 8) { flash("Email, nombre y contraseña (mín. 8)"); return; }
+    const tel = telNormalizado(nTel);
+    if (!tel) { flash(nTel ? "El móvil no tiene un formato válido" : "Falta el móvil"); return; }
     setCreating(true);
     try {
-      await sb.fn("gestion-usuarios", { action: "crear", email: nEmail, nombre: nNombre, rol: nRol, password: nPass });
-      setNEmail(""); setNNombre(""); setNRol("trabajadora"); setNPass("");
+      await sb.fn("gestion-usuarios", { action: "crear", email: nEmail, nombre: nNombre, rol: nRol, password: nPass, telefono: tel });
+      setNEmail(""); setNNombre(""); setNRol("trabajadora"); setNPass(""); setNTel("");
       flash("Usuario creado"); await load();
     } catch (e) { flash(e.message || "Error al crear"); }
     setCreating(false);
@@ -55,6 +73,14 @@ export function UsuariosView({ currentUser }) {
     if (!p) return;
     if (p.length < 8) { flash("Mínimo 8 caracteres"); return; }
     try { await sb.fn("gestion-usuarios", { action: "resetear_password", id: u.id, password: p }); flash("Contraseña actualizada"); }
+    catch (e) { flash(e.message); }
+  };
+  const cambiarTel = async (u) => {
+    const v = window.prompt(`Móvil de ${u.nombre}\n${TEL_AYUDA}`, verTel(u.telefono));
+    if (v === null) return;
+    const tel = v.trim() ? telNormalizado(v) : "";
+    if (tel === null) { flash("El móvil no tiene un formato válido"); return; }
+    try { await sb.fn("gestion-usuarios", { action: "actualizar", id: u.id, telefono: tel }); flash("Móvil guardado"); await load(); }
     catch (e) { flash(e.message); }
   };
   const eliminarEventual = async (u) => {
@@ -76,6 +102,11 @@ export function UsuariosView({ currentUser }) {
         <input style={{ ...inp, marginBottom: 10 }} type="email" value={nEmail} onChange={e => setNEmail(e.target.value)} placeholder="email@ejemplo.com" />
         <label style={lbl}>Contraseña</label>
         <input style={{ ...inp, marginBottom: 10 }} type="text" value={nPass} onChange={e => setNPass(e.target.value)} placeholder="Mínimo 8 caracteres" />
+        <label style={lbl}>Móvil (para los avisos por WhatsApp)</label>
+        <input style={{ ...inp, marginBottom: 4 }} type="tel" inputMode="tel" value={nTel} onChange={e => setNTel(e.target.value)} placeholder="612 345 678" />
+        <div style={{ fontFamily: F, fontSize: 11.5, color: nTel && telNormalizado(nTel) === null ? C.red : C.mutL, marginBottom: 12, lineHeight: 1.4 }}>
+          {nTel && telNormalizado(nTel) === null ? "Formato no válido. " : nTel && telNormalizado(nTel) ? `Se guardará como ${telNormalizado(nTel)}. ` : ""}{TEL_AYUDA}
+        </div>
         <label style={lbl}>Rol</label>
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           {ROLES.map(r => (
@@ -103,6 +134,7 @@ export function UsuariosView({ currentUser }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{u.nombre}{isSelf ? " (tú)" : ""}</div>
                   <div style={{ fontFamily: F, fontSize: 12, color: C.mut, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.email}</div>
+                  <div style={{ fontFamily: F, fontSize: 12, color: u.telefono ? C.mut : C.red }}>{u.telefono ? `📱 ${verTel(u.telefono)}` : "Sin móvil: no le llegarán avisos por WhatsApp"}</div>
                 </div>
               </div>
               <span style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", padding: "5px 11px", borderRadius: 999, background: rc.bg, color: rc.fg, whiteSpace: "nowrap", flexShrink: 0 }}>{rc.label}</span>
@@ -111,6 +143,7 @@ export function UsuariosView({ currentUser }) {
               {!isSelf && <button onClick={() => cambiarRol(u, u.rol === "admin" ? "trabajadora" : "admin")} style={btnSm}>{u.rol === "admin" ? "Hacer trabajadora" : "Hacer dirección"}</button>}
               {!isSelf && <button onClick={() => toggleActivo(u)} style={btnSm}>{u.activo ? "Desactivar" : "Activar"}</button>}
               <button onClick={() => resetPass(u)} style={btnSm}>Resetear contraseña</button>
+              <button onClick={() => cambiarTel(u)} style={btnSm}>{u.telefono ? "Cambiar móvil" : "Añadir móvil"}</button>
             </div>
           </div>
         );
@@ -126,12 +159,13 @@ export function UsuariosView({ currentUser }) {
                   <Avatar name={u.nombre} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{u.nombre}</div>
-                    <div style={{ fontFamily: F, fontSize: 12, color: C.mutL }}>Sin cuenta</div>
+                    <div style={{ fontFamily: F, fontSize: 12, color: C.mutL }}>{u.auth_id ? "Con acceso a la app" : "Sin cuenta"}{u.telefono ? ` · 📱 ${verTel(u.telefono)}` : " · sin móvil"}</div>
                   </div>
                 </div>
                 <span style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", padding: "5px 11px", borderRadius: 999, background: EVCHIP.bg, color: EVCHIP.fg, whiteSpace: "nowrap", flexShrink: 0 }}>{EVCHIP.label}</span>
               </div>
               <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                <button onClick={() => cambiarTel(u)} style={btnSm}>{u.telefono ? "Cambiar móvil" : "Añadir móvil"}</button>
                 <button onClick={() => eliminarEventual(u)} style={{ ...btnSm, color: "#B23A2C", border: "1.5px solid #EDC9C3" }}>Eliminar</button>
               </div>
             </div>

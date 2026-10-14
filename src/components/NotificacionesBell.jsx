@@ -26,6 +26,59 @@ const IcoBell = ({ color = "#C9C0B0", size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
 );
 
+// Móvil + avisos por WhatsApp (trabajadoras). Dirección lo gestiona en Ajustes → Mis avisos.
+function telNorm(v) {
+  let d = String(v || "").trim().replace(/[^\d+]/g, "");
+  if (!d) return "";
+  if (d.startsWith("00")) d = "+" + d.slice(2);
+  const dig = d.replace(/\D/g, "");
+  if (!d.startsWith("+")) {
+    if (dig.length === 9 && /^[6789]/.test(dig)) return "+34" + dig;
+    if (dig.length === 11 && dig.startsWith("34")) return "+" + dig;
+    return null;
+  }
+  return dig.length >= 10 && dig.length <= 15 ? "+" + dig : null;
+}
+function WhatsAppAvisos() {
+  const [d, setD] = useState(null);
+  const [tel, setTel] = useState("");
+  const [editando, setEditando] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => { sb.rpc("mis_avisos").then((r) => { setD(r); setTel((r?.telefono || "").replace(/^\+34(\d{3})(\d{3})(\d{3})$/, "$1 $2 $3")); }).catch(() => {}); }, []);
+  if (!d || d.rol === "admin") return null;
+  const guardar = async (activo) => {
+    const t = tel.trim() ? telNorm(tel) : "";
+    if (t === null) { setMsg("Ese móvil no tiene un formato válido"); return; }
+    try { const r = await sb.rpc("guardar_mis_avisos", { p_telefono: t, p_whatsapp: activo }); setD(r); setEditando(false); setMsg(activo ? "Guardado ✓" : "Avisos por WhatsApp desactivados"); }
+    catch (e) { setMsg("No se ha podido guardar"); }
+  };
+  const on = d.whatsapp_avisos !== false;
+  return (
+    <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.brdL}`, background: "#FAF7F2", position: "sticky", bottom: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <span style={{ fontFamily: F, fontSize: 13, fontWeight: 700, color: C.char }}>Avisos por WhatsApp</span>
+        <button onClick={() => guardar(!on)} role="switch" aria-checked={on} aria-label="Avisos por WhatsApp"
+          style={{ width: 40, height: 23, borderRadius: 999, border: "none", padding: 2, cursor: "pointer", background: on ? "#2D8B4E" : C.brd }}>
+          <span style={{ display: "block", width: 19, height: 19, borderRadius: 999, background: "#fff", transform: on ? "translateX(17px)" : "none" }} />
+        </button>
+      </div>
+      {on && (!d.telefono || editando ? (
+        <div style={{ marginTop: 8 }}>
+          <input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="Tu móvil: 612 345 678"
+            style={{ width: "100%", boxSizing: "border-box", fontFamily: F, fontSize: 14, padding: "9px 11px", borderRadius: 10, border: `1px solid ${tel && telNorm(tel) === null ? "#E5484D" : C.brd}` }} />
+          <div style={{ fontFamily: F, fontSize: 11, color: C.mut, marginTop: 4, lineHeight: 1.35 }}>9 cifras, sin prefijo. Si tu móvil no es español, con prefijo (+351…).</div>
+          <button onClick={() => guardar(true)} style={{ marginTop: 8, background: C.gold, color: C.goldDark, border: "none", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Guardar móvil</button>
+        </div>
+      ) : (
+        <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 4 }}>
+          Te avisamos de turnos para cubrir, vacaciones y cambios al {tel}. <button onClick={() => setEditando(true)} style={{ background: "none", border: "none", padding: 0, color: C.blu, fontFamily: F, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cambiar</button>
+        </div>
+      ))}
+      {msg && <div style={{ fontFamily: F, fontSize: 12, marginTop: 6, color: msg.includes("✓") ? "#2D8B4E" : C.mut }}>{msg}</div>}
+    </div>
+  );
+}
+
 export function NotificacionesBell({ user }) {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
@@ -76,6 +129,7 @@ export function NotificacionesBell({ user }) {
                 </span>
               </button>
             ))}
+            <WhatsAppAvisos />
           </div>
         </>
       )}
