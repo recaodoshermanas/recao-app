@@ -5,8 +5,16 @@ import { supabase, sb } from "../../../src/lib/supabase.js";
 import { initTips } from "../charts.js";
 import { num } from "../fmt.js";
 
-export const FAMILIAS = ["Bollería", "Bebidas", "Snacks y chuches", "Tabaco y vapers", "Bocatas y frío", "Pan", "Alimentación y hogar", "Helados", "Cromos y papelería", "Sin clasificar"];
-export const COLOR_FAM = { "Bollería": "#D9822B", "Bebidas": "#3D6E9E", "Snacks y chuches": "#B2412A", "Tabaco y vapers": "#5C6670", "Bocatas y frío": "#317039", "Pan": "#C59A3D", "Alimentación y hogar": "#7A5E9E", "Helados": "#2E8C8C", "Cromos y papelería": "#9E5E7A", "Sin clasificar": "#A9AFB4" };
+// Familias = categorías principales del árbol de EPOS (reorganización de oct 2026), ordenadas por venta.
+// La familia de cada producto la calcula la base de datos (epos_familia) con su categoría actual.
+export const FAMILIAS = ["Bebidas", "Bollería y pastelería", "Snacks salados", "Tabaco y vapers", "Panadería", "Chocolates y golosinas", "Refrigerados", "Comida preparada", "Helados", "Despensa", "Galletas y cereales", "Bazar", "Productos sin código", "Fruta, verdura y huevos", "Droguería e higiene", "Congelados", "Técnicos", "Sin clasificar"];
+export const COLOR_FAM = {
+  "Bebidas": "#3D6E9E", "Bollería y pastelería": "#D9822B", "Snacks salados": "#B2412A", "Tabaco y vapers": "#5C6670",
+  "Panadería": "#C59A3D", "Chocolates y golosinas": "#8A4B2E", "Refrigerados": "#317039", "Comida preparada": "#6E8B3D",
+  "Helados": "#2E8C8C", "Despensa": "#7A5E9E", "Galletas y cereales": "#B8873A", "Bazar": "#9E5E7A",
+  "Productos sin código": "#8C8F5A", "Fruta, verdura y huevos": "#4E9A4A", "Droguería e higiene": "#4F7FB8",
+  "Congelados": "#5A9BB0", "Técnicos": "#7D858C", "Sin clasificar": "#A9AFB4",
+};
 export const ESTADOS = [{ id: "novedad", t: "Novedad" }, { id: "fijo", t: "Fijo" }, { id: "temporada", t: "Temporada" }, { id: "retirar", t: "A retirar" }];
 export const n0 = (v) => Number(v) || 0;
 export const r0 = (v) => Math.round(n0(v));
@@ -85,7 +93,7 @@ export async function crearProducto(producto) {
 }
 export async function crearCategoria(nombre) {
   const r = await sb.fn("epos-producto", { accion: "crear_categoria", nombre });
-  const C = store.catalogo.d; if (C) { C.categorias = [...(C.categorias || []), { id: r.id, n: r.nombre, padre: null, fam: "Alimentación y hogar" }]; avisarCambio(); }
+  const C = store.catalogo.d; if (C) { C.categorias = [...(C.categorias || []), { id: r.id, n: r.nombre, padre: null, fam: r.nombre }]; avisarCambio(); }
   return r;
 }
 export async function crearProveedor(nombre) {
