@@ -12,6 +12,7 @@ import { Solicitudes } from "./personas/Solicitudes.jsx";
 import { Seguimiento } from "./personas/Seguimiento.jsx";
 import { Equipo } from "./personas/Equipo.jsx";
 import { Bolsa } from "./personas/Bolsa.jsx";
+import { Fichajes } from "./personas/Fichajes.jsx";
 import { PlanResumen, Proyectos, PlanTareas, PlanCalendario } from "./plan/Plan.jsx";
 import { ProductoResumen, Catalogo, Familias, Proveedores, Salud } from "./producto/Producto.jsx";
 import { Recepcion } from "./producto/Recepcion.jsx";
@@ -191,6 +192,7 @@ export default function App() {
   else if (area.id === "personas" && sub.id === "resumen") contenido = <PersonasResumen />;
   else if (area.id === "personas" && sub.id === "horarios") contenido = <Horarios />;
   else if (area.id === "personas" && sub.id === "bolsa") contenido = <Bolsa />;
+  else if (area.id === "personas" && sub.id === "fichajes") contenido = <Fichajes />;
   else if (area.id === "personas" && sub.id === "solicitudes") contenido = <Solicitudes />;
   else if (area.id === "personas" && sub.id === "seguimiento") contenido = <Seguimiento sub={extra} />;
   else if (area.id === "personas" && sub.id === "equipo") contenido = <Equipo user={user} />;

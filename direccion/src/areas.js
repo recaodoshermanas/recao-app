@@ -8,6 +8,7 @@ export const AREAS = [
     subs: [
       { id: "resumen", label: "Resumen" },
       { id: "horarios", label: "Horarios" },
+      { id: "fichajes", label: "Fichajes" },
       ...(BOLSA_ACTIVA ? [{ id: "bolsa", label: "Bolsa de turnos" }] : []),
       { id: "solicitudes", label: "Vacaciones y cambios" },
       { id: "seguimiento", label: "Seguimiento" },
@@ -67,7 +68,7 @@ export const DESTINOS = {
   cambios: "personas/solicitudes", cierres: "personas/seguimiento", incidencias: "personas/seguimiento",
   disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
   candidatos: "personas/seleccion", plus: "personas/equipo", bolsa: "personas/bolsa",
-  recepcion_admin: "producto/recepcion",
+  recepcion_admin: "producto/recepcion", fichajes_admin: "personas/fichajes",
 };
 
 // Enlaces antiguos de Personas → secciones nuevas
