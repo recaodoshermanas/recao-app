@@ -12,9 +12,12 @@ import { RevisarTurnoView } from "./RevisarTurnoView.jsx";
 import { MiSeguimientoView } from "./MiSeguimientoView.jsx";
 import { MisAvisosView } from "./MisAvisosView.jsx";
 import { CubrirTurnosView } from "./CubrirTurnosView.jsx"; // BOLSA
+import { RecepcionView } from "./RecepcionView.jsx"; // RECEPCION
 import { WorkerView } from "../WorkerView.jsx";
 
+const IcoCaja = ({ size = 20, color = "currentColor" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 7v10l9 4 9-4V7" /><path d="M12 11v10" /></svg>; // RECEPCION
 const TILES = [
+  { id: "recepcion", label: "Recepcionar pedido", sub: "Mercancía que llega", Ico: IcoCaja, iconBg: "#FBF0DA", iconFg: "#B08421" }, // RECEPCION
   ...(BOLSA_ACTIVA ? [{ id: "cubrir", label: "Turnos para cubrir", sub: "Mañana y Tarde", Ico: IcoUsers, iconBg: "#FBF0DA", iconFg: "#B08421" }] : []), // BOLSA
   { id: "horario", label: "Mis horarios", sub: "Tu calendario", Ico: IcoCalendar, iconBg: "#EAF4EE", iconFg: "#2D8B4E" },
   { id: "revisar", label: "Turno anterior", sub: "Revisar y reportar", Ico: IcoCheck, iconBg: "#FBEDE9", iconFg: "#C44D3F" },
@@ -25,14 +28,15 @@ const TILES = [
   { id: "facturas", label: "Facturas", sub: "Registrar", Ico: IcoReceipt, iconBg: "#F0EEF6", iconFg: "#8B6DAF" },
   { id: "cuenta", label: "Mi cuenta", sub: "Contraseña", Ico: IcoUser, iconBg: "#F0ECE2", iconFg: "#8A7A54" },
 ];
-const TITULOS = { cerrar: "Mi turno", cubrir: "Turnos para cubrir", horario: "Mis horarios", revisar: "Turno anterior", seguimiento: "Mi seguimiento", avisos: "Avisos", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", horario: "Mis horarios", revisar: "Turno anterior", seguimiento: "Mi seguimiento", avisos: "Avisos", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [screen, setScreen] = useState("home");
   const [porCubrir, setPorCubrir] = useState(0); // BOLSA
+  const [porRecepcionar, setPorRecepcionar] = useState({ n: 0, listos: 0 }); // RECEPCION
 
   useEffect(() => {
-    const h = (e) => { const d = e.detail && e.detail.destino; if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); else if (d === "cubrir" && BOLSA_ACTIVA) setScreen("cubrir"); };
+    const h = (e) => { const d = e.detail && e.detail.destino; if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); else if (d === "cubrir" && BOLSA_ACTIVA) setScreen("cubrir"); else if (d === "recepcion") setScreen("recepcion"); };
     window.addEventListener("recao-nav", h);
     return () => window.removeEventListener("recao-nav", h);
   }, []);
@@ -41,6 +45,12 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   useEffect(() => {
     if (!BOLSA_ACTIVA || screen !== "home") return;
     sb.rpc("bolsa_disponibles").then(r => setPorCubrir((r || []).filter(x => x.destino === "plantilla" && !x.rechazado).length)).catch(() => {});
+  }, [screen]);
+
+  // RECEPCION: pedidos pendientes de recepcionar (y cuántos ya tienen su factura)
+  useEffect(() => {
+    if (screen !== "home") return;
+    sb.fn("recepcion", { accion: "inicio" }).then(r => { const p = r.pendientes || []; setPorRecepcionar({ n: p.length, listos: p.filter(x => x.estado === "por_revisar" && x.via === "email").length }); }).catch(() => {});
   }, [screen]);
 
   if (screen === "home") {
@@ -66,10 +76,19 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
           </button>
         )}
 
+        {porRecepcionar.n > 0 && ( // RECEPCION
+          <button onClick={() => setScreen("recepcion")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", marginTop: 12, background: C.char, border: "none", borderRadius: 15, padding: "15px 18px", display: "flex", alignItems: "center", gap: 13, textAlign: "left" }}>
+            <span style={{ width: 34, height: 34, borderRadius: "999px", background: C.gold, color: C.goldDark, fontFamily: SF, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{porRecepcionar.n}</span>
+            <span style={{ flex: 1, fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.gold }}>pedido{porRecepcionar.n > 1 ? "s" : ""} por recepcionar{porRecepcionar.listos ? ` · ${porRecepcionar.listos} ya ${porRecepcionar.listos > 1 ? "tienen" : "tiene"} su factura` : ""}</span>
+            <IcoRight size={18} color={C.gold} sw={2.4} />
+          </button>
+        )}
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
           {TILES.map(t => { const Ico = t.Ico; return (
             <button key={t.id} onClick={() => setScreen(t.id)} style={{ position: "relative", textAlign: "left", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 18, padding: 16, cursor: "pointer", boxShadow: SHADOW.card }}>
               <span style={{ width: 38, height: 38, borderRadius: 11, background: t.iconBg, display: "flex", alignItems: "center", justifyContent: "center" }}><Ico size={20} color={t.iconFg} /></span>
+              {t.id === "recepcion" && porRecepcionar.n > 0 && <span style={{ position: "absolute", top: 12, right: 12, minWidth: 22, height: 22, padding: "0 6px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{porRecepcionar.n}</span>}
               {t.id === "cubrir" && porCubrir > 0 && <span style={{ position: "absolute", top: 12, right: 12, minWidth: 22, height: 22, padding: "0 6px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{porCubrir}</span>}
               <div style={{ fontFamily: SF, fontSize: 16, color: C.char, marginTop: 12 }}>{t.label}</div>
               <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 2 }}>{t.sub}</div>
@@ -86,6 +105,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
         <button onClick={() => setScreen("home")} style={{ border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IcoLeft size={18} color={C.char} sw={2.4} /></button>
         <div style={{ fontFamily: SF, fontSize: 18, color: C.char }}>{TITULOS[screen]}</div>
       </div>
+      {screen === "recepcion" && <RecepcionView />}
       {screen === "cerrar" && <CerrarTurnoView user={user} />}
       {screen === "cubrir" && <CubrirTurnosView user={user} />}
       {screen === "horario" && <MiHorarioView user={user} />}

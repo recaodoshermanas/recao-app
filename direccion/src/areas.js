@@ -32,6 +32,7 @@ export const AREAS = [
     subs: [
       { id: "resumen", label: "Resumen" },
       { id: "catalogo", label: "Catálogo" },
+      { id: "recepcion", label: "Recepción" },
       { id: "familias", label: "Familias" },
       { id: "proveedores", label: "Proveedores" },
       { id: "salud", label: "Salud del catálogo" },
@@ -66,6 +67,7 @@ export const DESTINOS = {
   cambios: "personas/solicitudes", cierres: "personas/seguimiento", incidencias: "personas/seguimiento",
   disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
   candidatos: "personas/seleccion", plus: "personas/equipo", bolsa: "personas/bolsa",
+  recepcion_admin: "producto/recepcion",
 };
 
 // Enlaces antiguos de Personas → secciones nuevas

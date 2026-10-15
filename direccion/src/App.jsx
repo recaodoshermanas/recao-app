@@ -14,6 +14,7 @@ import { Equipo } from "./personas/Equipo.jsx";
 import { Bolsa } from "./personas/Bolsa.jsx";
 import { PlanResumen, Proyectos, PlanTareas, PlanCalendario } from "./plan/Plan.jsx";
 import { ProductoResumen, Catalogo, Familias, Proveedores, Salud } from "./producto/Producto.jsx";
+import { Recepcion } from "./producto/Recepcion.jsx";
 import { MarketingResumen, MarketingClientes, MarketingCaptacion, MarketingCampanas, MarketingReputacion } from "./marketing/Marketing.jsx";
 import { Avisos } from "./ui.jsx";
 import { tokenRecuperar, limpiarTokenRecuperar, pedirRecuperacion, cambiarConToken } from "../../src/lib/recuperar.js";
@@ -195,6 +196,7 @@ export default function App() {
   else if (area.id === "personas" && sub.id === "equipo") contenido = <Equipo user={user} />;
   else if (area.id === "producto" && sub.id === "resumen") contenido = <ProductoResumen />;
   else if (area.id === "producto" && sub.id === "catalogo") contenido = <Catalogo extra={extra} />;
+  else if (area.id === "producto" && sub.id === "recepcion") contenido = <Recepcion />;
   else if (area.id === "producto" && sub.id === "familias") contenido = <Familias />;
   else if (area.id === "producto" && sub.id === "proveedores") contenido = <Proveedores />;
   else if (area.id === "producto" && sub.id === "salud") contenido = <Salud extra={extra} />;
