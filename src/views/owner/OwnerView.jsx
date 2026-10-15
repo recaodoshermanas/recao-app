@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { RecepcionView } from "../worker/RecepcionView.jsx"; // RECEPCION: dirección también puede recepcionar
 import { F, SF, C, SHADOW } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { ymd } from "../../lib/turnos.js";
@@ -29,7 +30,7 @@ const MUNDOS = {
     { id: "resumen", label: "Evolución" }, { id: "analitica", label: "Analítica" }, { id: "mes", label: "Datos mes" }, { id: "resultados", label: "P&L" }, { id: "tesoreria", label: "Tesorería" }, { id: "plus", label: "Plus" }, { id: "facturas", label: "Facturas" },
   ] },
   equipo: { label: "Equipo", sub: "Cierres · Incidencias · Disciplina · Candidatos · Horarios · Vacaciones · Cobertura · Cambios · Horas · Usuarios", Ico: IcoUsers, iconBg: "#F0ECF6", iconFg: "#8B6DAF", tabs: [
-    { id: "cierres", label: "Cierres" }, { id: "incidencias", label: "Incidencias" }, { id: "disciplina", label: "Disciplina" }, { id: "candidatos", label: "Candidatos" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cobertura", label: "Cobertura" }, { id: "cambios", label: "Cambios" }, { id: "horas", label: "Horas extras" }, { id: "usuarios", label: "Usuarios" },
+    { id: "cierres", label: "Cierres" }, { id: "incidencias", label: "Incidencias" }, { id: "disciplina", label: "Disciplina" }, { id: "candidatos", label: "Candidatos" }, { id: "horarios", label: "Horarios" }, { id: "vacaciones", label: "Vacaciones" }, { id: "cobertura", label: "Cobertura" }, { id: "cambios", label: "Cambios" }, { id: "horas", label: "Horas extras" }, { id: "usuarios", label: "Usuarios" }, { id: "recepcion", label: "Recepción" },
   ] },
 };
 
@@ -55,7 +56,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
 
   useEffect(() => {
     const nav = (dest) => {
-      const enEquipo = ["disciplina", "vacaciones", "cambios", "cobertura", "cierres", "incidencias", "horarios", "horas", "usuarios", "candidatos"];
+      const enEquipo = ["recepcion", "disciplina", "vacaciones", "cambios", "cobertura", "cierres", "incidencias", "horarios", "horas", "usuarios", "candidatos"];
       if (enEquipo.includes(dest)) { setMundo("equipo"); setTab(dest); }
     };
     const h = (e) => { const d = e.detail && e.detail.destino; if (d) nav(d); };
@@ -158,6 +159,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
       {tab === "tesoreria" && <TesoreriaView facturas={facturas} monthlyData={monthlyData} config={config} onReload={onReload} />}
       {tab === "plus" && <PlusMesView />}
       {tab === "facturas" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={onReload} user={currentUser} />}
+      {tab === "recepcion" && <RecepcionView />}
       {tab === "cierres" && <CierresAdminView />}
       {tab === "incidencias" && <IncidenciasAdminView />}
       {tab === "disciplina" && <DisciplinaAdminView />}
