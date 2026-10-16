@@ -1,6 +1,7 @@
 // Personas · Documentos (dirección)
 // Nóminas, contratos, anexos y finiquitos que hace la gestoría. Se suben aquí en PDF y cada trabajadora los ve en su app.
-// Nóminas: la trabajadora confirma que la ha recibido. Contratos/anexos/finiquitos: firma digital con prestador cualificado.
+// Nóminas: la trabajadora confirma que la ha recibido. Contratos y anexos: los firma en la app (código al correo) y el PDF
+// queda sellado con el certificado de la empresa. Los finiquitos no van por aquí: se firman en persona.
 // Nada se borra: se anula, y cada paso (subida, apertura, recibí, firma) queda registrado con fecha, IP y dispositivo.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sb, supabase } from "../../../src/lib/supabase.js";
@@ -11,7 +12,6 @@ const TIPOS = [
   { id: "nomina", t: "Nómina", firma: false },
   { id: "contrato", t: "Contrato", firma: true },
   { id: "anexo", t: "Anexo al contrato", firma: true },
-  { id: "finiquito", t: "Finiquito", firma: true },
   { id: "certificado", t: "Certificado", firma: false },
   { id: "otro", t: "Otro documento", firma: false },
 ];
@@ -54,6 +54,7 @@ export function Documentos() {
     { id: "pendientes", label: "Pendientes", n: pend.length },
     { id: "todos", label: "Todos" },
     { id: "subir", label: "Subir documento" },
+    { id: "firma", label: "Firma" },
   ];
 
   return (
@@ -61,11 +62,11 @@ export function Documentos() {
       <div className="head" style={{ alignItems: "center" }}>
         <p className="sub" style={{ margin: 0 }}>Nóminas y contratos de la gestoría. Cada trabajadora ve los suyos en «Mis documentos» de la app. Nada se borra: se anula, y cada paso queda registrado.</p>
       </div>
-      {!d.firma_proveedor && <p className="b-nota">La firma digital de contratos todavía no está conectada (falta contratar el prestador). Mientras tanto, los contratos se pueden subir para que la trabajadora los vea, o marcarlos como «firmado en papel» si ya lo están.</p>}
+      {!d.firma_proveedor && <p className="b-nota">Para que las trabajadoras puedan firmar contratos en la app falta subir el certificado digital de la empresa en la pestaña «Firma». Mientras tanto, los contratos firmados en papel se pueden subir marcándolos como tal.</p>}
       {sinAceptar.length > 0 && <p className="b-nota">Aún no han aceptado recibir documentos en la app: {sinAceptar.map((u) => u.nombre).join(", ")}. Se les pide la primera vez que entran en «Mis documentos».</p>}
       <Pestanas valor={tab} opciones={opciones} onChange={setTab} etiqueta="Secciones de documentos" />
       <div className="card mt">
-        {tab === "subir" ? <Subir trabajadoras={activas} onHecho={() => { cargar(); }} /> : (
+        {tab === "firma" ? <Firma onCambio={cargar} /> : tab === "subir" ? <Subir trabajadoras={activas} onHecho={() => { cargar(); }} /> : (
           <>
             <div className="head">
               <div><h2>{tab === "pendientes" ? "Pendientes de recibir o firmar" : "Todos los documentos"}</h2></div>
@@ -173,7 +174,58 @@ function Subir({ trabajadoras, onHecho }) {
   );
 }
 
-const EV = { subido: "Subido", notificado: "Avisada", abierto: "Lo abrió", descargado: "Lo descargó", recibido: "Confirmó que lo ha recibido", enviado_firma: "Enviado a firmar", firmado: "Firmado", rechazado: "Rechazó la firma", anulado: "Anulado", admin_abrir: "Abierto por dirección", admin_descargar: "Descargado por dirección" };
+function Firma({ onCambio }) {
+  const [st, setSt] = useState(null);
+  const [archivo, setArchivo] = useState(null);
+  const [clave, setClave] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [prueba, setPrueba] = useState(null);
+  const cargar = useCallback(async () => { try { setSt(await fn("firma_estado")); } catch (e) { avisar(e.message, "mal"); setSt({ certificado: null }); } }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+  const guardar = async () => {
+    if (!archivo) { avisar("Elige el archivo del certificado (.p12 o .pfx)", "mal"); return; }
+    if (archivo.size > 1024 * 1024) { avisar("Ese archivo es demasiado grande para ser un certificado", "mal"); return; }
+    setBusy(true);
+    try {
+      const buf = new Uint8Array(await archivo.arrayBuffer());
+      let bin = ""; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+      const r = await fn("certificado_guardar", { p12: btoa(bin), clave });
+      setClave(""); setArchivo(null); setPrueba(r.prueba_url);
+      avisar("Certificado guardado: la firma ya está activa"); await cargar(); onCambio();
+    } catch (e) { avisar(e.message || "No se ha podido guardar", "mal"); }
+    setBusy(false);
+  };
+  if (!st) return <Cargando />;
+  const c = st.certificado;
+  const dias = c ? Math.round((new Date(c.hasta) - new Date()) / 86400000) : null;
+  return (
+    <>
+      <div className="head"><div><h2>Firma de contratos en la app</h2><p className="sub">La trabajadora firma con un código que le llega a su correo. Al firmar, el PDF se sella con el certificado digital de la empresa (cualquier cambio posterior lo invalida), un servicio externo certifica la hora y se le envía su copia por correo.</p></div></div>
+      {c ? (
+        <div style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 14, marginBottom: 16, maxWidth: 620 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>{st.activa ? "✓ Firma activa" : "Certificado caducado: la firma está parada"}</div>
+          <div className="pf" style={{ color: "inherit" }}>{c.organizacion || c.titular}{c.nif ? ` · ${c.nif}` : ""}</div>
+          <div className="pf">Titular: {c.titular} · Emisor: {c.emisor}</div>
+          <div className="pf" style={{ color: dias != null && dias < 45 ? "var(--down)" : undefined }}>Caduca el {new Date(c.hasta).toLocaleDateString("es-ES")}{dias != null && dias >= 0 ? ` (en ${dias} días)` : ""}</div>
+          {c.subido_por && <div className="pf">Subido por {c.subido_por} {c.subido_en ? hace(c.subido_en) : ""}</div>}
+        </div>
+      ) : <p className="b-nota" style={{ maxWidth: 620 }}>Todavía no hay certificado. Sube el certificado digital de la empresa (el de representante de persona jurídica que emite la FNMT, el mismo que suele usar la gestoría). Es un archivo .p12 o .pfx con su contraseña.</p>}
+      {prueba && <p className="b-nota" style={{ maxWidth: 620 }}>Comprobación: <a href={prueba} target="_blank" rel="noreferrer">descarga este PDF de prueba</a> y ábrelo con Adobe Acrobat Reader. En el panel de firmas debe aparecer el sello de la empresa. (El enlace caduca en 10 minutos.)</p>}
+      <div style={{ maxWidth: 620 }}>
+        <label className="campo">{c ? "Cambiar certificado (por ejemplo, al renovarlo)" : "Certificado de la empresa (.p12 o .pfx)"}
+          <input type="file" accept=".p12,.pfx,application/x-pkcs12" onChange={(e) => setArchivo(e.target.files?.[0] || null)} />
+        </label>
+        <label className="campo">Contraseña del certificado
+          <input type="password" autoComplete="off" value={clave} onChange={(e) => setClave(e.target.value)} />
+        </label>
+        <p className="pf" style={{ marginTop: 0 }}>Se comprueba que el certificado vale y que sella bien antes de guardarlo. Queda guardado en el servidor, sin acceso desde la app de las trabajadoras.</p>
+        <button className="btn-p" disabled={busy} onClick={guardar}>{busy ? "Comprobando…" : "Guardar certificado"}</button>
+      </div>
+    </>
+  );
+}
+
+const EV = { subido: "Subido", notificado: "Avisada", abierto: "Lo abrió", descargado: "Lo descargó", recibido: "Confirmó que lo ha recibido", codigo_enviado: "Se le envió el código de firma", codigo_erroneo: "Código incorrecto", firmado: "Firmado", copia_enviada: "Copia firmada enviada a su correo", recordatorio: "Recordatorio de firma", anulado: "Anulado", admin_abrir: "Abierto por dirección", admin_descargar: "Descargado por dirección" };
 
 function Detalle({ doc, onClose, onCambio }) {
   const [ev, setEv] = useState(null);
@@ -191,17 +243,17 @@ function Detalle({ doc, onClose, onCambio }) {
     try { await fn("anular", { id: doc.id, motivo }); avisar("Documento anulado"); onCambio(); } catch (e) { avisar(e.message, "mal"); }
     setBusy(false);
   };
-  const enviarFirma = async () => { try { await fn("enviar_firma", { id: doc.id }); avisar("Enviado a firmar"); onCambio(); } catch (e) { avisar(e.message, "mal"); } };
+  const recordar = async () => { try { await fn("recordar_firma", { id: doc.id }); avisar("Aviso enviado"); } catch (e) { avisar(e.message, "mal"); } };
   const filas = useMemo(() => ev || [], [ev]);
   return (
     <Panel titulo={doc.titulo} sub={`${doc.usuarios?.nombre} · ${TIPO[doc.tipo]?.t}`} onClose={onClose}
       pie={<>
         <button className="btn-p" onClick={() => abrir("original")}>Abrir PDF</button>
         {doc.ruta_firmado && <button className="btn-l" onClick={() => abrir("firmado")}>PDF firmado</button>}
-        {doc.ruta_evidencias && <button className="btn-l" onClick={() => abrir("evidencias")}>Certificado de firma</button>}
+        {doc.ruta_evidencias && <button className="btn-l" onClick={() => abrir("evidencias")}>Evidencias</button>}
       </>}>
       <p style={{ margin: "0 0 10px" }}><Estado d={doc} /></p>
-      {doc.requiere === "firma" && doc.estado !== "firmado" && doc.estado !== "anulado" && <button className="btn-l" style={{ marginBottom: 12 }} onClick={enviarFirma}>Enviar a firmar</button>}
+      {doc.requiere === "firma" && doc.estado !== "firmado" && doc.estado !== "anulado" && <button className="btn-l" style={{ marginBottom: 12 }} onClick={recordar}>Recordarle que lo firme</button>}
       <div className="pf" style={{ wordBreak: "break-all" }}>Huella del PDF (SHA-256): {doc.sha256}</div>
       {doc.nombre_archivo && <div className="pf">Archivo original: {doc.nombre_archivo}</div>}
       <h3 style={{ fontSize: 14, margin: "16px 0 6px" }}>Registro</h3>
