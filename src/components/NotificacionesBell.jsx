@@ -18,6 +18,7 @@ const DESTINO = {
   vacaciones_pendiente: "vacaciones", vacaciones_resuelto: "vacaciones",
   // Recepción de pedidos: la trabajadora vuelve a «Recepcionar pedido»; dirección, a Producto → Recepción
   fichaje_resuelto: "fichajes", fichaje_solicitud: "fichajes_admin",
+  documento_nuevo: "documentos", documento_firmado: "documentos_admin",
   recepcion_documento: "recepcion", recepcion_diferencia: "recepcion_admin", recepcion_sin_documento: "recepcion_admin", recepcion_precio: "recepcion_admin",
   cambio_por_responder: "cambio", cambio_resuelto: "cambio", cambio_pendiente_admin: "cambios",
   // Bolsa de turnos: las de la trabajadora llevan a «Turnos para cubrir»; las de dirección, a Personas → Bolsa del panel

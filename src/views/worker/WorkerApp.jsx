@@ -14,6 +14,7 @@ import { MisAvisosView } from "./MisAvisosView.jsx";
 import { CubrirTurnosView } from "./CubrirTurnosView.jsx"; // BOLSA
 import { RecepcionView } from "./RecepcionView.jsx"; // RECEPCION
 import { MisFichajesView } from "./MisFichajesView.jsx"; // FICHAJES
+import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
 import { WorkerView } from "../WorkerView.jsx";
 
 const IcoCaja = ({ size = 20, color = "currentColor" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 7v10l9 4 9-4V7" /><path d="M12 11v10" /></svg>; // RECEPCION
@@ -23,6 +24,7 @@ const TILES = [
   { id: "horario", label: "Mis horarios", sub: "Tu calendario", Ico: IcoCalendar, iconBg: "#EAF4EE", iconFg: "#2D8B4E" },
   { id: "fichajes", label: "Mis fichajes", sub: "Horas de la caja", Ico: IcoCalendar, iconBg: "#EAF0F8", iconFg: "#4A7AB5" }, // FICHAJES
   { id: "revisar", label: "Turno anterior", sub: "Revisar y reportar", Ico: IcoCheck, iconBg: "#FBEDE9", iconFg: "#C44D3F" },
+  { id: "documentos", label: "Mis documentos", sub: "Nóminas y contrato", Ico: IcoReceipt, iconBg: "#F0ECE2", iconFg: "#8A7A54" }, // DOCUMENTOS
   { id: "seguimiento", label: "Mi seguimiento", sub: "Plus y faltas", Ico: IcoBars, iconBg: "#EAF0F8", iconFg: "#4A7AB5" },
   { id: "avisos", label: "Avisos", sub: "Incidencias y plazos", Ico: IcoCheck, iconBg: "#FBF0DA", iconFg: "#B08421" },
   { id: "cambio", label: "Cambiar turno", sub: "Con una compañera", Ico: IcoSwap, iconBg: "#FBEEDC", iconFg: "#C08A2E" },
@@ -30,7 +32,7 @@ const TILES = [
   { id: "facturas", label: "Facturas", sub: "Registrar", Ico: IcoReceipt, iconBg: "#F0EEF6", iconFg: "#8B6DAF" },
   { id: "cuenta", label: "Mi cuenta", sub: "Contraseña", Ico: IcoUser, iconBg: "#F0ECE2", iconFg: "#8A7A54" },
 ];
-const TITULOS = { fichajes: "Mis fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", horario: "Mis horarios", revisar: "Turno anterior", seguimiento: "Mi seguimiento", avisos: "Avisos", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { documentos: "Mis documentos", fichajes: "Mis fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", horario: "Mis horarios", revisar: "Turno anterior", seguimiento: "Mi seguimiento", avisos: "Avisos", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [screen, setScreen] = useState("home");
@@ -38,7 +40,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [porRecepcionar, setPorRecepcionar] = useState({ n: 0, listos: 0 }); // RECEPCION
 
   useEffect(() => {
-    const h = (e) => { const d = e.detail && e.detail.destino; if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); else if (d === "cubrir" && BOLSA_ACTIVA) setScreen("cubrir"); else if (d === "recepcion") setScreen("recepcion"); else if (d === "fichajes") setScreen("fichajes"); };
+    const h = (e) => { const d = e.detail && e.detail.destino; if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); else if (d === "cubrir" && BOLSA_ACTIVA) setScreen("cubrir"); else if (d === "recepcion") setScreen("recepcion"); else if (d === "fichajes") setScreen("fichajes"); else if (d === "documentos") setScreen("documentos"); };
     window.addEventListener("recao-nav", h);
     return () => window.removeEventListener("recao-nav", h);
   }, []);
@@ -109,6 +111,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       </div>
       {screen === "recepcion" && <RecepcionView />}
       {screen === "fichajes" && <MisFichajesView />}
+      {screen === "documentos" && <MisDocumentosView />}
       {screen === "cerrar" && <CerrarTurnoView user={user} />}
       {screen === "cubrir" && <CubrirTurnosView user={user} />}
       {screen === "horario" && <MiHorarioView user={user} />}
