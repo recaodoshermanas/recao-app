@@ -35,6 +35,7 @@ export const AREAS = [
       { id: "resumen", label: "Resumen" },
       { id: "catalogo", label: "Catálogo" },
       { id: "recepcion", label: "Recepción" },
+      { id: "revisar", label: "Productos a revisar" },
       { id: "familias", label: "Familias" },
       { id: "proveedores", label: "Proveedores" },
       { id: "salud", label: "Salud del catálogo" },
@@ -74,7 +75,7 @@ export const DESTINOS = {
   disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
   candidatos: "personas/seleccion", plus: "personas/equipo", bolsa: "personas/bolsa",
   recepcion_admin: "producto/recepcion", fichajes_admin: "personas/fichajes", documentos_admin: "personas/documentos",
-  solicitudes_tec: "tecnologia/solicitudes",
+  solicitudes_tec: "tecnologia/solicitudes", productos_revisar: "producto/revisar",
 };
 
 // Enlaces antiguos de Personas → secciones nuevas

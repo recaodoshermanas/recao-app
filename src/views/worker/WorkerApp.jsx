@@ -12,7 +12,7 @@ import { RevisarTurnoView } from "./RevisarTurnoView.jsx";
 import { MiSeguimientoView } from "./MiSeguimientoView.jsx";
 import { MisAvisosView } from "./MisAvisosView.jsx";
 import { CubrirTurnosView } from "./CubrirTurnosView.jsx"; // BOLSA
-import { RecepcionView } from "./RecepcionView.jsx"; // RECEPCION
+import { RecepcionView, AnadirProductoView } from "./RecepcionView.jsx"; // RECEPCION
 import { MisFichajesView } from "./MisFichajesView.jsx"; // FICHAJES
 import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
 import { WorkerView } from "../WorkerView.jsx";
@@ -32,7 +32,7 @@ const TILES = [
   { id: "facturas", label: "Facturas", sub: "Registrar", Ico: IcoReceipt, iconBg: "#F0EEF6", iconFg: "#8B6DAF" },
   { id: "cuenta", label: "Mi cuenta", sub: "Contraseña", Ico: IcoUser, iconBg: "#F0ECE2", iconFg: "#8A7A54" },
 ];
-const TITULOS = { documentos: "Mis documentos", fichajes: "Mis fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", horario: "Mis horarios", revisar: "Turno anterior", seguimiento: "Mi seguimiento", avisos: "Avisos", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { anadir: "Añadir producto", documentos: "Mis documentos", fichajes: "Mis fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", horario: "Mis horarios", revisar: "Turno anterior", seguimiento: "Mi seguimiento", avisos: "Avisos", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [screen, setScreen] = useState("home");
@@ -99,6 +99,15 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
             </button>
           ); })}
         </div>
+
+        <button onClick={() => setScreen("anadir")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", marginTop: 12, background: "#fff", border: `1.5px solid ${C.char}`, borderRadius: 18, padding: 16, display: "flex", alignItems: "center", gap: 13, textAlign: "left", boxShadow: SHADOW.card }}>
+          <span style={{ width: 38, height: 38, borderRadius: 11, background: C.char, color: C.gold, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: SF, fontSize: 22, flexShrink: 0 }} aria-hidden="true">+</span>
+          <span style={{ flex: 1 }}>
+            <span style={{ display: "block", fontFamily: SF, fontSize: 16, color: C.char }}>Añadir producto</span>
+            <span style={{ display: "block", fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 2 }}>Algo de la tienda que no pasa por caja</span>
+          </span>
+          <IcoRight size={18} color={C.mut} sw={2.4} />
+        </button>
       </div>
     );
   }
@@ -110,6 +119,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
         <div style={{ fontFamily: SF, fontSize: 18, color: C.char }}>{TITULOS[screen]}</div>
       </div>
       {screen === "recepcion" && <RecepcionView />}
+      {screen === "anadir" && <AnadirProductoView onFin={() => setScreen("home")} />}
       {screen === "fichajes" && <MisFichajesView />}
       {screen === "documentos" && <MisDocumentosView />}
       {screen === "cerrar" && <CerrarTurnoView user={user} />}

@@ -8,10 +8,10 @@ import { eur, pct } from "../fmt.js";
 
 const fn = (accion, datos = {}) => sb.fn("recepcion", { accion, ...datos });
 const numero = (v) => { const n = Number(String(v ?? "").replace(",", ".")); return isFinite(n) ? n : null; };
-const MOTIVO = { subida_coste: "Ha subido el coste", producto_nuevo: "Producto nuevo", cambiado_trabajadora: "Nuevo · precio cambiado en tienda" };
+const MOTIVO = { subida_coste: "Ha subido el coste", producto_nuevo: "Producto nuevo", cambiado_trabajadora: "Nuevo · precio cambiado en tienda", coste_corregido: "Coste corregido con la factura" };
 const ESTADO = { esperando_documento: "Esperando factura", por_revisar: "Por recepcionar", confirmada: "Confirmada", con_diferencias: "Con diferencias", descartada: "Descartada" };
 const VIA = { email: "Correo", foto: "Foto", manual: "Manual" };
-const AVISO = { sin_documento: "Sin factura", diferencia: "Diferencia", sin_codigo: "Sin código", sin_asociar: "Sin asociar", stock_error: "Stock", precio: "Precio" };
+const AVISO = { sin_documento: "Sin factura", diferencia: "Diferencia", sin_codigo: "Sin código", sin_asociar: "Sin asociar", stock_error: "Stock", precio: "Precio", coste_sin_verificar: "Coste sin verificar", alta_error: "Alta fallida" };
 const margen = (pvp, coste) => (pvp > 0 && coste != null ? (1 - coste / pvp) * 100 : null);
 
 export function Recepcion() {
