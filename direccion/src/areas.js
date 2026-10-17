@@ -61,7 +61,7 @@ export const AREAS = [
   },
   {
     id: "tecnologia", label: "Tecnología", quien: "Adrián",
-    subs: [{ id: "solicitudes", label: "Solicitudes" }],
+    subs: [{ id: "solicitudes", label: "Solicitudes" }, { id: "como-pedir", label: "Cómo pedir" }],
   },
   // fuera del menú principal: se abre desde el usuario
   { id: "ajustes", label: "Ajustes", oculto: true, subs: [{ id: "general", label: "Ajustes", legado: true }] },
@@ -74,6 +74,7 @@ export const DESTINOS = {
   disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
   candidatos: "personas/seleccion", plus: "personas/equipo", bolsa: "personas/bolsa",
   recepcion_admin: "producto/recepcion", fichajes_admin: "personas/fichajes", documentos_admin: "personas/documentos",
+  solicitudes_tec: "tecnologia/solicitudes",
 };
 
 // Enlaces antiguos de Personas → secciones nuevas

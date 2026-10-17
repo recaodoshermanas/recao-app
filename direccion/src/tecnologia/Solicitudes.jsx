@@ -40,6 +40,31 @@ export function socioDe(user) {
   const s = SOCIOS.find((x) => sinTildes(x.label) === pila || sinTildes(x.id) === pila);
   return s ? s.id : "";
 }
+// Lee el documento que prepara el Claude de cada socio (formato de «Cómo pedir») y rellena los campos
+const CLAVES_DOC = ["titulo", "urgencia", "tipo", "donde", "area"];
+const buscar = (lista, v) => lista.find((x) => sinTildes(v).startsWith(sinTildes(x.label)) || sinTildes(v).includes(sinTildes(x.label)));
+export function leerDocumento(txt) {
+  const campos = {}; const resto = [];
+  String(txt || "").replace(/\r/g, "").split("\n").forEach((l) => {
+    const m = l.replace(/[*_#>`]/g, "").trim().match(/^([A-Za-zÁÉÍÓÚáéíóúÑñ ]{3,20}):\s*(.*)$/);
+    const k = m && sinTildes(m[1]).trim();
+    if (k && CLAVES_DOC.includes(k) && !(k in campos)) {
+      campos[k] = m[2].trim();
+      if (k === "urgencia" && /[,.(—–-]\s*\S/.test(campos[k])) resto.push(l); // el porqué de la urgencia se queda en los detalles
+      return;
+    }
+    resto.push(l);
+  });
+  const out = { descripcion: resto.map((l) => l.replace(/\*\*/g, "")).join("\n").replace(/^\s+|\s+$/g, "") };
+  if (campos.titulo) out.titulo = campos.titulo.replace(/^["«“]|["»”]$/g, "").slice(0, 120);
+  const u = campos.urgencia && buscar(URGENCIAS, campos.urgencia); if (u) out.urgencia = u.id;
+  const t = campos.tipo && buscar(TIPOS, campos.tipo); if (t) out.tipo = t.id;
+  if (campos.donde) { const d = sinTildes(campos.donde); out.donde = d.includes("dos") || d.includes("ambas") ? "ambas" : d.includes("app") ? "app" : d.includes("panel") ? "panel" : "otro"; }
+  const a = campos.area && buscar(AREAS_PLAN, campos.area); if (a) out.area = a.id;
+  return out;
+}
+const filas = (t, min = 4, max = 18) => Math.max(min, Math.min(max, String(t || "").split("\n").length + 1));
+
 const orden = (a, b) => (URG_N[a.urgencia] ?? 2) - (URG_N[b.urgencia] ?? 2) || String(a.creado_en).localeCompare(String(b.creado_en));
 
 // ---- datos ----
@@ -104,14 +129,23 @@ function Fila({ s, nCom, onAbrir }) {
 
 // ---- alta ----
 function Nueva({ yo, onClose, onCreada }) {
-  const [f, setF] = useState({ titulo: "", descripcion: "", pedido_por: yo, urgencia: "normal", tipo: "mejora", donde: "panel", area: "" });
+  const [f, setF] = useState({ titulo: "", descripcion: "", pedido_por: yo, urgencia: "normal", tipo: "mejora", donde: "panel", area: "", enlace: "" });
   const [busy, setBusy] = useState(false);
+  const [doc, setDoc] = useState("");
+  const [pegado, setPegado] = useState(false);
+  const aplicarDoc = () => {
+    if (!doc.trim()) return;
+    const d = leerDocumento(doc);
+    setF((x) => ({ ...x, ...d }));
+    setPegado(true);
+    avisar(d.titulo ? "Campos rellenados: revísalos antes de enviar" : "No he encontrado el título: escríbelo tú");
+  };
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const enviar = async () => {
     if (!f.titulo.trim()) return;
     setBusy(true);
     try {
-      const r = await sb.insert("tec_solicitudes", { ...f, titulo: f.titulo.trim(), descripcion: f.descripcion.trim() || null, pedido_por: f.pedido_por || null, area: f.area || null });
+      const r = await sb.insert("tec_solicitudes", { ...f, titulo: f.titulo.trim(), descripcion: f.descripcion.trim() || null, pedido_por: f.pedido_por || null, area: f.area || null, enlace: f.enlace.trim() || null });
       const n = Array.isArray(r) ? r[0] : r;
       avisar("Solicitud enviada");
       onCreada(n);
@@ -121,8 +155,16 @@ function Nueva({ yo, onClose, onCreada }) {
   return (
     <Panel titulo="Nueva solicitud" sub="Para la app del equipo o el panel de dirección" onClose={onClose} ancho="560px"
       pie={<button className="btn-p" onClick={enviar} disabled={busy || !f.titulo.trim()}>{busy ? "Enviando…" : "Enviar solicitud"}</button>}>
-      <label className="campo">Qué necesitas<input value={f.titulo} onChange={set("titulo")} placeholder="Ej.: que los festivos salgan marcados en Horarios" autoFocus /></label>
-      <label className="campo">Detalles<textarea rows={5} value={f.descripcion} onChange={set("descripcion")} placeholder="Para qué lo quieres y cómo te lo imaginas. Si algo falla: qué hiciste, qué esperabas y qué pasó." /></label>
+      {!pegado && (
+        <div className="sol-pegar">
+          <b>¿Lo has preparado con tu Claude?</b>
+          <p>Pega aquí el documento que te ha dado y se rellenan los campos solos. <a href="#/tecnologia/como-pedir" onClick={onClose}>Cómo prepararlo</a></p>
+          <textarea rows={3} value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="Pega el documento completo…" aria-label="Documento de Claude" />
+          <div className="sol-botones"><button className="btn-l" disabled={!doc.trim()} onClick={aplicarDoc}>Rellenar con el documento</button></div>
+        </div>
+      )}
+      <label className="campo">Qué necesitas<input value={f.titulo} onChange={set("titulo")} placeholder="Ej.: que los festivos salgan marcados en Horarios" autoFocus={!pegado} /></label>
+      <label className="campo">Detalles<textarea rows={filas(f.descripcion, 5)} value={f.descripcion} onChange={set("descripcion")} placeholder="Para qué lo quieres y cómo te lo imaginas. Si algo falla: qué hiciste, qué esperabas y qué pasó." /></label>
       <div className="campo-t"><span>Urgencia</span>
         <div className="seg seg-wrap">{URGENCIAS.map((u) => <button key={u.id} aria-pressed={f.urgencia === u.id} onClick={() => setF({ ...f, urgencia: u.id })}>{u.label}</button>)}</div>
       </div>
@@ -134,6 +176,7 @@ function Nueva({ yo, onClose, onCreada }) {
         <label className="campo">Quién lo pide<select value={f.pedido_por} onChange={set("pedido_por")}><option value="">—</option>{SOCIOS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></label>
         <label className="campo">Área<select value={f.area} onChange={set("area")}><option value="">Sin área</option>{AREAS_PLAN.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}</select></label>
       </div>
+      <label className="campo">Enlace a un documento, chat o captura (opcional)<input type="url" value={f.enlace} onChange={set("enlace")} placeholder="https://…" /></label>
     </Panel>
   );
 }
@@ -159,6 +202,7 @@ function Detalle({ s, onClose, cambiar, recargar }) {
   const [evs, setEvs] = useState(null);
   const [titulo, setTitulo] = useState(s.titulo);
   const [desc, setDesc] = useState(s.descripcion || "");
+  const [enlace, setEnlace] = useState(s.enlace || "");
   const [txt, setTxt] = useState("");
   const [resp, setResp] = useState("");
   const [modoCambios, setModoCambios] = useState(false);
@@ -166,7 +210,7 @@ function Detalle({ s, onClose, cambiar, recargar }) {
   const finRef = useRef(null);
   const cargarEvs = useCallback(() => eventosDe(s.id).then(setEvs).catch(() => setEvs([])), [s.id]);
   useEffect(() => { cargarEvs(); }, [cargarEvs, s.estado]);
-  useEffect(() => { setTitulo(s.titulo); setDesc(s.descripcion || ""); }, [s.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setTitulo(s.titulo); setDesc(s.descripcion || ""); setEnlace(s.enlace || ""); }, [s.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const anotar = async (tipo, texto, estado) => {
     setBusy(true);
@@ -232,7 +276,9 @@ function Detalle({ s, onClose, cambiar, recargar }) {
           <label className="campo">Área<select value={s.area || ""} onChange={(e) => cambiar(s.id, { area: e.target.value || null })}><option value="">Sin área</option>{AREAS_PLAN.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}</select></label>
         </div>
         <label className="campo">Para cuándo (opcional)<input type="date" value={s.fecha_limite || ""} onChange={(e) => cambiar(s.id, { fecha_limite: e.target.value || null })} /></label>
-        <label className="campo">Detalles<textarea rows={4} value={desc} onChange={(e) => setDesc(e.target.value)} onBlur={() => desc !== (s.descripcion || "") && cambiar(s.id, { descripcion: desc.trim() || null })} placeholder="Para qué es y cómo te lo imaginas" /></label>
+        <label className="campo">Detalles<textarea rows={filas(desc)} value={desc} onChange={(e) => setDesc(e.target.value)} onBlur={() => desc !== (s.descripcion || "") && cambiar(s.id, { descripcion: desc.trim() || null })} placeholder="Para qué es y cómo te lo imaginas" /></label>
+        <label className="campo">Enlace (opcional){/^https?:\/\//.test(s.enlace || "") && <a className="sol-enlace" href={s.enlace} target="_blank" rel="noopener noreferrer">Abrir enlace ↗</a>}
+          <input type="url" value={enlace} onChange={(e) => setEnlace(e.target.value)} onBlur={() => enlace.trim() !== (s.enlace || "") && cambiar(s.id, { enlace: enlace.trim() || null })} placeholder="https://…" /></label>
 
         <div className="campo-t bloque"><span>Historial</span>
           {evs === null ? <p className="empty">Cargando…</p> : evs.length === 0 ? <p className="empty">Todavía nada.</p> : (
@@ -249,14 +295,14 @@ function Detalle({ s, onClose, cambiar, recargar }) {
 }
 
 // ---- pantalla ----
-export function TecSolicitudes({ user }) {
+export function TecSolicitudes({ user, extra }) {
   const yo = socioDe(user);
   const { sols, nEv, cargar, cambiar } = useSolicitudes();
   const [vista, setVista] = useState("abiertas");
   const [q, setQ] = useState("");
   const [quien, setQuien] = useState("");
   const [urg, setUrg] = useState("");
-  const [abierta, setAbierta] = useState(null);
+  const [abierta, setAbierta] = useState(() => Number(extra) || null);
   const [nueva, setNueva] = useState(false);
   const [plegados, setPlegados] = useState({ standby: true });
 
@@ -274,7 +320,7 @@ export function TecSolicitudes({ user }) {
       <div className="barra-sec">
         <Pestanas valor={vista} onChange={setVista} etiqueta="Solicitudes"
           opciones={[{ id: "abiertas", label: "Abiertas", n: (sols || []).filter((s) => !CERRADAS.includes(s.estado)).length }, { id: "cerradas", label: "Cerradas" }]} />
-        <div className="acciones"><button className="btn-p" onClick={() => setNueva(true)}>+ Nueva solicitud</button></div>
+        <div className="acciones"><a className="btn-txt" href="#/tecnologia/como-pedir">Cómo pedir</a><button className="btn-p" onClick={() => setNueva(true)}>+ Nueva solicitud</button></div>
       </div>
 
       {vista === "abiertas" && meToca.length > 0 && (
@@ -313,7 +359,7 @@ export function TecSolicitudes({ user }) {
         cerradas.length === 0 ? <p className="empty">Todavía no hay solicitudes cerradas.</p> : <ul className="sol-lista">{cerradas.map((s) => <Fila key={s.id} s={s} nCom={nEv[s.id]} onAbrir={setAbierta} />)}</ul>
       )}
 
-      <p className="sol-nota">Claude ve estas solicitudes directamente: cuando trabaja en una, cambia su estado y deja aquí lo que ha hecho o lo que necesita saber.</p>
+      <p className="sol-nota">Claude ve estas solicitudes directamente: cuando trabaja en una, cambia su estado y deja aquí lo que ha hecho o lo que necesita saber. A quien la pide le llega un aviso (campana y correo) cuando hay una pregunta, cuando está lista para revisar y cuando cambia de estado.</p>
 
       {nueva && <Nueva yo={yo} onClose={() => setNueva(false)} onCreada={(n) => { setNueva(false); cargar(); if (n?.id) setAbierta(n.id); }} />}
       {sel && <Detalle s={sel} onClose={() => setAbierta(null)} cambiar={cambiar} recargar={cargar} />}

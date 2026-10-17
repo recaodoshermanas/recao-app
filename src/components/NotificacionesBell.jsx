@@ -24,6 +24,8 @@ const DESTINO = {
   // Bolsa de turnos: las de la trabajadora llevan a «Turnos para cubrir»; las de dirección, a Personas → Bolsa del panel
   bolsa_resumen: "cubrir", bolsa_urgente: "cubrir", bolsa_descanso_pendiente: "cubrir", bolsa_descanso_ok: "cubrir", bolsa_anulado: "cubrir",
   bolsa_cubierto: "bolsa", bolsa_soltado: "bolsa", bolsa_nadie_puede: "bolsa", bolsa_urgente_admin: "bolsa", bolsa_descanso_limite: "bolsa",
+  // Solicitudes de tecnología (panel de dirección)
+  tec_te_toca: "solicitudes_tec", tec_estado: "solicitudes_tec", tec_comentario: "solicitudes_tec", tec_nueva: "solicitudes_tec",
 };
 
 const IcoBell = ({ color = "#C9C0B0", size = 20 }) => (

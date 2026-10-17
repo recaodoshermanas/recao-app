@@ -52,3 +52,25 @@
   .sol-fila { grid-template-columns: 1fr auto; }
   .sol-num { display: none; }
 }
+
+.sol-pegar { border: 1px dashed var(--ghost); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; display: grid; gap: 8px; background: var(--card); }
+.sol-pegar b { font-size: 14px; }
+.sol-pegar p { margin: 0; font-size: 13px; color: var(--text-2); }
+.sol-pegar a, .sol-enlace { color: var(--text); font-weight: 700; }
+.sol-pegar textarea { font: inherit; font-size: 14px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; width: 100%; resize: vertical; background: var(--bg); color: var(--text); }
+.sol-enlace { font-size: 12.5px; justify-self: start; }
+
+/* Cómo pedir */
+.guia-pasos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+.guia-paso { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+.guia-paso i { font-style: normal; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--amarillo); color: var(--tinta); font-weight: 800; font-size: 13px; margin-bottom: 8px; }
+.guia-paso b { display: block; font-size: 15px; margin-bottom: 4px; }
+.guia-paso p { margin: 0; font-size: 13.5px; color: var(--text-2); line-height: 1.45; }
+.guia-caja { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
+.guia-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.guia-cab h2 { margin: 0; font-size: 17px; }
+.guia-cab small { color: var(--muted); font-size: 12px; }
+.guia-texto { white-space: pre-wrap; font-size: 13.5px; line-height: 1.55; margin: 0; max-height: 520px; overflow: auto; background: var(--bg); border-radius: 12px; padding: 14px; font-family: var(--ui); }
+.guia-caja textarea { width: 100%; min-height: 460px; font: inherit; font-size: 13.5px; line-height: 1.5; border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--bg); color: var(--text); }
+.guia-nota { font-size: 12.5px; color: var(--muted); margin: 12px 0 0; }
+@media (max-width: 760px) { .guia-pasos { grid-template-columns: 1fr; } }
