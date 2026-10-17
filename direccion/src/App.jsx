@@ -18,6 +18,7 @@ import { PlanResumen, Proyectos, PlanTareas, PlanCalendario } from "./plan/Plan.
 import { ProductoResumen, Catalogo, Familias, Proveedores, Salud } from "./producto/Producto.jsx";
 import { Recepcion } from "./producto/Recepcion.jsx";
 import { MarketingResumen, MarketingClientes, MarketingCaptacion, MarketingCampanas, MarketingReputacion } from "./marketing/Marketing.jsx";
+import { TecSolicitudes } from "./tecnologia/Solicitudes.jsx";
 import { Avisos } from "./ui.jsx";
 import { tokenRecuperar, limpiarTokenRecuperar, pedirRecuperacion, cambiarConToken } from "../../src/lib/recuperar.js";
 
@@ -213,6 +214,7 @@ export default function App() {
   else if (area.id === "plan" && sub.id === "proyectos") contenido = <Proyectos user={user} extra={extra} />;
   else if (area.id === "plan" && sub.id === "tareas") contenido = <PlanTareas user={user} />;
   else if (area.id === "plan" && sub.id === "calendario") contenido = <PlanCalendario user={user} />;
+  else if (area.id === "tecnologia") contenido = <TecSolicitudes user={user} />;
   else if (area.id === "finanzas" && sub.id === "resumen") contenido = <FinanzasResumen />;
   else if (area.id === "finanzas" && sub.id === "resultados") contenido = <FinanzasResultados onEditMonth={editarMes} />;
   else if (area.id === "finanzas" && sub.id === "caja") contenido = <FinanzasCaja />;

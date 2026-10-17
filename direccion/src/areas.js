@@ -59,6 +59,10 @@ export const AREAS = [
       { id: "reputacion", label: "Reputación" },
     ],
   },
+  {
+    id: "tecnologia", label: "Tecnología", quien: "Adrián",
+    subs: [{ id: "solicitudes", label: "Solicitudes" }],
+  },
   // fuera del menú principal: se abre desde el usuario
   { id: "ajustes", label: "Ajustes", oculto: true, subs: [{ id: "general", label: "Ajustes", legado: true }] },
 ];
