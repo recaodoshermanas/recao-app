@@ -10,6 +10,19 @@ export const TURNOS = {
   "Permiso":    { label: "Permiso",    horas: "",            tipo: "libre",    bg: "#E4DAF0", fg: "#5a4a7a" },
 };
 
+// Horarios que cambian según el día de la semana (desde el sábado 24/10/2026).
+// La misma regla está en la base de datos (función turno_horas): si se cambia aquí, cambiarla también allí.
+export const VARIANTES_DESDE = "2026-10-24";
+const VARIANTES = { 6: { "Apoyo 1": "11:00-17:00" }, 0: { "Apoyo 2": "16:00-22:00", "Apoyo 3": "17:00-23:00" } };
+export const NOTA_FINDE = "Sábado: Apoyo 1 11:00-17:00 · Domingo: Apoyo 2 16:00-22:00, Apoyo 3 17:00-23:00";
+// Horas del turno un día concreto (fecha "AAAA-MM-DD"); sin fecha, las de siempre
+export function horasTurno(turno, fecha) {
+  const base = TURNOS[turno]?.horas || "";
+  if (!base || !fecha || fecha < VARIANTES_DESDE) return base;
+  const dow = new Date(`${fecha}T12:00:00`).getDay();
+  return VARIANTES[dow]?.[turno] || base;
+}
+
 export const TURNO_OPCIONES = ["Mañana", "Tarde", "Apoyo 1", "Apoyo 2", "Apoyo 3", "Descanso", "Vacaciones", "Baja", "Permiso"];
 
 export function ymd(d) {

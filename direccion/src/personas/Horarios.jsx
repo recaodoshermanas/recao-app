@@ -1,7 +1,7 @@
 // Personas · Horarios: cuadrante semanal con la cobertura integrada.
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
-import { TURNOS, TURNO_OPCIONES } from "../../../src/lib/turnos.js";
+import { TURNOS, TURNO_OPCIONES, horasTurno, NOTA_FINDE } from "../../../src/lib/turnos.js";
 import { requeridosDe, TURNOS_TRABAJO, REGLA_COBERTURA } from "../../../src/lib/cobertura.js";
 import { Panel, useEquipo, avisar, hoyStr, masDias, lunesDe, fechaCorta, Cargando, Avatar } from "../ui.jsx";
 import { BOLSA_ACTIVA, DIAS_ANTELACION, destinoDe, diasHasta } from "../../../src/lib/bolsa.js"; // BOLSA
@@ -171,6 +171,7 @@ export function Horarios() {
         </div>
         <ul className="leyenda-turnos">
           {TURNO_OPCIONES.map((t) => <li key={t}><span className="tchip" style={{ background: TURNOS[t].bg, color: TURNOS[t].fg }}>{ABREV[t]}</span>{t}{TURNOS[t].horas && <small> {TURNOS[t].horas}</small>}</li>)}
+          <li><small>{NOTA_FINDE}</small></li>
         </ul>
       </div>
 
@@ -201,7 +202,7 @@ export function Horarios() {
               return (
                 <button key={t} className={sel ? "sel" : ""} style={{ background: TURNOS[t].bg, color: TURNOS[t].fg }}
                   onClick={() => { guardar(celda.persona.id, celda.fecha, t); setCelda(null); }}>
-                  <b>{t}</b>{TURNOS[t].horas && <small>{TURNOS[t].horas}</small>}
+                  <b>{t}</b>{TURNOS[t].horas && <small>{horasTurno(t, celda.fecha)}</small>}
                 </button>
               );
             })}
@@ -244,7 +245,7 @@ function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {} }) {
               <td key={f} className={`${f === hoy ? "hoy" : ""}${f < hoy ? " pasado" : ""}`}>
                 <button className={`celda ${t ? "" : "vacia"}${pendiente[`${p.id}|${f}`] ? " pend" : ""}`} onClick={() => onCelda({ persona: p, fecha: f })}
                   style={info ? { background: info.bg, color: info.fg } : undefined}
-                  aria-label={`${p.nombre}, ${fechaCorta(f)}: ${t || "sin turno"}`} title={t ? `${t}${info?.horas ? " · " + info.horas : ""}` : "Sin turno"}>
+                  aria-label={`${p.nombre}, ${fechaCorta(f)}: ${t || "sin turno"}`} title={t ? `${t}${info?.horas ? " · " + horasTurno(t, f) : ""}` : "Sin turno"}>
                   {t ? ABREV[t] || t : "+"}
                 </button>
               </td>
@@ -262,7 +263,7 @@ function AsignarHueco({ hueco, trab, prox, mapa, enBolsa, onPublicar, onRetirar,
   Object.entries(mapa).forEach(([k, t]) => { turnoDe[k] = t; });
   const libres = trab.filter((u) => { const t = turnoDe[`${u.id}|${hueco.fecha}`]; return !(t && (TURNOS_TRABAJO.includes(t) || t === "Vacaciones")); });
   return (
-    <Panel titulo={`Cubrir ${hueco.turno}`} sub={`${fechaCorta(hueco.fecha)} · ${TURNOS[hueco.turno].horas}`} onClose={onClose}>
+    <Panel titulo={`Cubrir ${hueco.turno}`} sub={`${fechaCorta(hueco.fecha)} · ${horasTurno(hueco.turno, hueco.fecha)}`} onClose={onClose}>
       {BOLSA_ACTIVA && (enBolsa ? (
         <div className="hueco-acc">
           <span><b>Está en la bolsa</b>{enBolsa.origen === "descanso_comp" ? " como descanso compensatorio" : enBolsa.origen === "cadena" ? " por un cambio de día" : ""}. Si se lo asignas a alguien aquí, se retira de la bolsa solo.</span>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C } from "../../lib/styles.js";
 import { IcoLeft, IcoRight } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
-import { TURNOS, ymd } from "../../lib/turnos.js";
+import { TURNOS, ymd, NOTA_FINDE } from "../../lib/turnos.js";
 import { BOLSA_ACTIVA } from "../../lib/bolsa.js"; // BOLSA
 
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
@@ -85,6 +85,7 @@ export function MiHorarioView({ user }) {
           ); })}
         </div>
       )}
+      {usados.some(t => String(t).startsWith("Apoyo")) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 8 }}>{NOTA_FINDE}</div>}
     </div>
   );
 }

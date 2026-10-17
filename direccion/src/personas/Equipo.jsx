@@ -1,7 +1,7 @@
 // Personas · Equipo: directorio con ficha por persona, plus del mes, horas extra y cuentas.
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
-import { TURNOS } from "../../../src/lib/turnos.js";
+import { TURNOS, horasTurno } from "../../../src/lib/turnos.js";
 import { resumenCalendario } from "../../../src/lib/vacaciones.js";
 import { Panel, Pestanas, useEquipo, avisar, hoyStr, masDias, fechaCorta, Cargando, Avatar, n0 } from "../ui.jsx";
 import { eur } from "../fmt.js";
@@ -65,7 +65,7 @@ function Directorio({ equipo, onFicha }) {
                         {dias.map((f) => { const tt = hor[u.id]?.[f]; const inf = tt && TURNOS[tt]; return <span key={f} className={`ts ${f === hoy ? "hoy" : ""}`} style={inf ? { background: inf.bg, color: inf.fg } : undefined} title={`${fechaCorta(f)}: ${tt || "sin turno"}`}>{tt ? ABREV[tt] : "·"}</span>; })}
                       </div>
                     )}
-                    {u.rol !== "admin" && <p className="te-hoy">{t ? `Hoy: ${t}${TURNOS[t]?.horas ? " · " + TURNOS[t].horas : ""}` : "Hoy no trabaja"}</p>}
+                    {u.rol !== "admin" && <p className="te-hoy">{t ? `Hoy: ${t}${TURNOS[t]?.horas ? " · " + horasTurno(t, hoy) : ""}` : "Hoy no trabaja"}</p>}
                   </button>
                 );
               })}

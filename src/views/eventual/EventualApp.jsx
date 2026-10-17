@@ -11,9 +11,9 @@ import { card, seccion, btnNo, btnSi, btnTexto, ShiftChip, DateBlock, PlazoChip,
 
 const FILTROS = [
   { id: "todos", label: "Todos" },
-  { id: "Apoyo 1", label: "Apoyo 1 · 10–16 h" },
-  { id: "Apoyo 2", label: "Apoyo 2 · 17–23 h" },
-  { id: "Apoyo 3", label: "Apoyo 3 · 17–22 h" },
+  { id: "Apoyo 1", label: "Apoyo 1" },
+  { id: "Apoyo 2", label: "Apoyo 2" },
+  { id: "Apoyo 3", label: "Apoyo 3" },
 ];
 const CLAVE_NORMA = "recao-bolsa-norma-vista";
 function leerNorma() { try { return window.localStorage.getItem(CLAVE_NORMA) === "1"; } catch (e) { return false; } }
@@ -74,7 +74,7 @@ export function EventualApp({ user }) {
     visibles.forEach(o => { const g = grupoSemana(o.fecha); let x = out.find(y => y.titulo === g); if (!x) { x = { titulo: g, items: [] }; out.push(x); } x.items.push(o); });
     return out;
   }, [visibles]);
-  const totalHoras = mios.reduce((t, m) => t + horasDe(m.turno), 0);
+  const totalHoras = mios.reduce((t, m) => t + horasDe(m.turno, m.fecha), 0);
 
   const cerrar = () => { setSel(null); setFase(null); setMot(null); };
 
@@ -195,8 +195,8 @@ export function EventualApp({ user }) {
                       <DateBlock f={o.fecha} />
                       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                         <ShiftChip turno={o.turno} />
-                        <span style={{ fontFamily: F, fontSize: 16.5, fontWeight: 700, color: C.char }}>{horarioDe(o.turno)}</span>
-                        <span style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{horasDe(o.turno)} horas{o.nota ? ` · ${o.nota}` : ""}</span>
+                        <span style={{ fontFamily: F, fontSize: 16.5, fontWeight: 700, color: C.char }}>{horarioDe(o.turno, o.fecha)}</span>
+                        <span style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{horasDe(o.turno, o.fecha)} horas{o.nota ? ` · ${o.nota}` : ""}</span>
                       </div>
                       <PlazoChip f={o.fecha} />
                     </div>
@@ -218,7 +218,7 @@ export function EventualApp({ user }) {
                   <div key={o.id} style={{ ...card, padding: "12px 14px", gap: 10 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: F, fontSize: 14, fontWeight: 700, color: C.char }}>{fechaLarga(o.fecha)}</div>
-                      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 3 }}>{o.turno} · {horarioDe(o.turno)}</div>
+                      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 3 }}>{o.turno} · {horarioDe(o.turno, o.fecha)}</div>
                     </div>
                     <button onClick={() => responder(o, false)} style={{ minHeight: 40, padding: "0 12px", border: `1.5px solid ${C.brd}`, borderRadius: 11, background: "#fff", fontFamily: F, fontSize: 13, fontWeight: 600, color: C.char, cursor: "pointer" }}>Al final sí puedo</button>
                   </div>
@@ -246,8 +246,8 @@ export function EventualApp({ user }) {
                     <DateBlock f={m.fecha} />
                     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                       <ShiftChip turno={m.turno} />
-                      <span style={{ fontFamily: F, fontSize: 16.5, fontWeight: 700, color: C.char }}>{horarioDe(m.turno)}</span>
-                      <span style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{horasDe(m.turno)} horas</span>
+                      <span style={{ fontFamily: F, fontSize: 16.5, fontWeight: 700, color: C.char }}>{horarioDe(m.turno, m.fecha)}</span>
+                      <span style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{horasDe(m.turno, m.fecha)} horas</span>
                     </div>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: F, fontSize: 12.5, fontWeight: 700, color: "#1E7A46" }}><IcoCheck size={15} color="#1E7A46" sw={2.6} />Tuyo</span>
                   </div>
@@ -274,8 +274,8 @@ export function EventualApp({ user }) {
             <div style={{ fontFamily: SF, fontSize: 23, color: C.char }}>¿Te quedas este turno?</div>
             <div style={{ background: C.cream, borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
               <span style={{ fontFamily: F, fontSize: 17, fontWeight: 700, color: C.char }}>{fechaLarga(sel.fecha)}</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}><ShiftChip turno={sel.turno} /><span style={{ fontFamily: F, fontSize: 15, fontWeight: 600, color: C.char }}>{horarioDe(sel.turno)}</span></div>
-              <span style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{horasDe(sel.turno)} horas · Recao Entrenúcleos{sel.nota ? ` · ${sel.nota}` : ""}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}><ShiftChip turno={sel.turno} /><span style={{ fontFamily: F, fontSize: 15, fontWeight: 600, color: C.char }}>{horarioDe(sel.turno, sel.fecha)}</span></div>
+              <span style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{horasDe(sel.turno, sel.fecha)} horas · Recao Entrenúcleos{sel.nota ? ` · ${sel.nota}` : ""}</span>
             </div>
             <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut, lineHeight: 1.5 }}>En cuanto confirmes es tuyo y desaparece de la bolsa. Podrás soltarlo hasta {DIAS_SOLTAR} días antes.</div>
             <button onClick={confirmar} disabled={busy} style={{ ...btnDark, fontSize: 17, opacity: busy ? 0.6 : 1 }}>{busy ? "Cogiendo…" : "Sí, me lo quedo"}</button>
@@ -285,14 +285,14 @@ export function EventualApp({ user }) {
             <span style={{ width: 62, height: 62, borderRadius: "50%", background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", alignSelf: "center" }}><IcoCheck size={32} color={C.goldDark} sw={2.6} /></span>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontFamily: SF, fontSize: 24, color: C.char }}>¡El turno es tuyo!</div>
-              <div style={{ fontFamily: F, fontSize: 15, fontWeight: 600, color: C.char, marginTop: 6 }}>{fechaLarga(sel.fecha)} · {sel.turno}, {horarioDe(sel.turno)}</div>
+              <div style={{ fontFamily: F, fontSize: 15, fontWeight: 600, color: C.char, marginTop: 6 }}>{fechaLarga(sel.fecha)} · {sel.turno}, {horarioDe(sel.turno, sel.fecha)}</div>
             </div>
             <button onClick={() => { cerrar(); setTab("mis"); }} style={{ ...btnDark, fontSize: 17 }}>Ver mis turnos</button>
             <button onClick={cerrar} style={btnTexto}>Seguir mirando</button>
           </>)}
           {fase === "soltar" && (<>
             <div style={{ fontFamily: SF, fontSize: 23, color: C.char }}>¿Sueltas este turno?</div>
-            <div style={{ fontFamily: F, fontSize: 14, color: C.char }}>{fechaLarga(sel.fecha)} · {sel.turno}, {horarioDe(sel.turno)}</div>
+            <div style={{ fontFamily: F, fontSize: 14, color: C.char }}>{fechaLarga(sel.fecha)} · {sel.turno}, {horarioDe(sel.turno, sel.fecha)}</div>
             <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut, lineHeight: 1.5 }}>Vuelve a la bolsa para que lo coja otra compañera y dirección recibe el aviso.</div>
             <button onClick={soltar} disabled={busy} style={{ ...btnDark, fontSize: 17, opacity: busy ? 0.6 : 1 }}>{busy ? "Soltando…" : "Sí, lo suelto"}</button>
             <button onClick={cerrar} style={btnTexto}>No, me lo quedo</button>

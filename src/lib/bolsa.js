@@ -1,5 +1,5 @@
 // Bolsa de turnos · utilidades compartidas (v4)
-import { TURNOS, ymd } from "./turnos.js";
+import { TURNOS, ymd, horasTurno } from "./turnos.js";
 
 // ─────────────────────────────────────────────────────────────────────
 // INTERRUPTOR DE LANZAMIENTO
@@ -27,9 +27,9 @@ const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "
 const MESES_C = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 export function fecha(f) { return new Date(f + "T00:00:00"); }
-export function horarioDe(turno) { const h = TURNOS[turno]?.horas || ""; return h.replace("-", " – "); }
-export function horasDe(turno) {
-  const h = TURNOS[turno]?.horas; if (!h) return 0;
+export function horarioDe(turno, fecha) { const h = horasTurno(turno, fecha); return h.replace("-", " – "); }
+export function horasDe(turno, fecha) {
+  const h = horasTurno(turno, fecha); if (!h) return 0;
   const [a, b] = h.split("-"); const m = (s) => { const [x, y] = s.split(":").map(Number); return x * 60 + y; };
   return Math.round((m(b) - m(a)) / 60);
 }

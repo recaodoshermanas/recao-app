@@ -105,7 +105,7 @@ export function CubrirTurnosView({ user }) {
         </div>
         <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut, lineHeight: 1.5 }}>
           {esApoyo
-            ? <>Tienes <strong style={{ color: C.char }}>prioridad las primeras 48 h</strong>. A cambio libras uno de tus días de apoyo de esa misma semana y se te apuntan <strong style={{ color: C.char }}>2 h extra</strong> (3 h si libras un Apoyo 3).</>
+            ? <>Tienes <strong style={{ color: C.char }}>prioridad las primeras 48 h</strong>. A cambio libras uno de tus días de apoyo de esa misma semana y se te apuntan como extra <strong style={{ color: C.char }}>las horas de diferencia</strong> entre los dos turnos.</>
             : <>Trabajas tu día libre y se te pagan <strong style={{ color: C.char }}>8 h extra</strong>. Si esa semana te quedas sin tu descanso, te proponemos otro día para descansar.</>}
         </div>
       </div>
@@ -131,9 +131,9 @@ export function CubrirTurnosView({ user }) {
                 <DateBlock f={o.fecha} />
                 <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                   <ShiftChip turno={o.turno} />
-                  <span style={{ fontFamily: F, fontSize: 16.5, fontWeight: 700, color: C.char }}>{horarioDe(o.turno)}</span>
+                  <span style={{ fontFamily: F, fontSize: 16.5, fontWeight: 700, color: C.char }}>{horarioDe(o.turno, o.fecha)}</span>
                   <span style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>
-                    {o.origen === "descanso_comp" ? "Descanso de una compañera · " : ""}{esApoyo ? "cambias un día de apoyo" : `${horasDe(o.turno)} h extra`}
+                    {o.origen === "descanso_comp" ? "Descanso de una compañera · " : ""}{esApoyo ? "cambias un día de apoyo" : `${horasDe(o.turno, o.fecha)} h extra`}
                   </span>
                 </div>
                 <PlazoChip f={o.fecha} />
@@ -163,7 +163,7 @@ export function CubrirTurnosView({ user }) {
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
                 <ShiftChip turno={m.turno} />
                 <span style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>
-                  {m.cogido_como === "apoyo_cambio" ? `A cambio libras tu ${m.cambio_turno} del ${fechaCorta(m.cambio_fecha)} · +${horasDe(m.turno) - horasDe(m.cambio_turno)} h` : `+${horasDe(m.turno)} h extra`}
+                  {m.cogido_como === "apoyo_cambio" ? `A cambio libras tu ${m.cambio_turno} del ${fechaCorta(m.cambio_fecha)} · +${horasDe(m.turno, m.fecha) - horasDe(m.cambio_turno, m.cambio_fecha)} h` : `+${horasDe(m.turno, m.fecha)} h extra`}
                 </span>
               </div>
             </div>
@@ -185,7 +185,7 @@ export function CubrirTurnosView({ user }) {
             <div style={{ fontFamily: SF, fontSize: 23, color: C.char }}>Cubres el {fechaCorta(sel.fecha)}</div>
             <div style={{ background: C.cream, borderRadius: 14, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontFamily: F, fontSize: 15, fontWeight: 700, color: C.char, flex: 1 }}>{fechaLarga(sel.fecha)}</span>
-              <ShiftChip turno={sel.turno} /><span style={{ fontFamily: F, fontSize: 13, fontWeight: 600 }}>{horarioDe(sel.turno)}</span>
+              <ShiftChip turno={sel.turno} /><span style={{ fontFamily: F, fontSize: 13, fontWeight: 600 }}>{horarioDe(sel.turno, sel.fecha)}</span>
             </div>
 
             {prev.tipo === "apoyo_cambio" && (<>
@@ -236,7 +236,7 @@ export function CubrirTurnosView({ user }) {
             <div style={{ textAlign: "center" }}>
               <div style={{ fontFamily: SF, fontSize: 24, color: C.char }}>¡Gracias, {(user.nombre || "").split(" ")[0]}!</div>
               <div style={{ fontFamily: F, fontSize: 14, color: C.mut, lineHeight: 1.5, marginTop: 6 }}>
-                {esApoyo && opcion ? `Ya está en tu horario: el ${fechaCorta(sel.fecha)} haces ${sel.turno} y el ${fechaCorta(opcion.fecha)} descansas. +${opcion.extra} h apuntadas.` : `Ya está en tu horario. +${horasDe(sel.turno)} h extra apuntadas.`}
+                {esApoyo && opcion ? `Ya está en tu horario: el ${fechaCorta(sel.fecha)} haces ${sel.turno} y el ${fechaCorta(opcion.fecha)} descansas. +${opcion.extra} h apuntadas.` : `Ya está en tu horario. +${horasDe(sel.turno, sel.fecha)} h extra apuntadas.`}
               </div>
             </div>
             <button onClick={cerrar} style={{ ...btnDark, fontSize: 17 }}>Hecho</button>

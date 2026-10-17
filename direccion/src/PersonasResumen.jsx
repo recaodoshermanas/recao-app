@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { sb } from "../../src/lib/supabase.js";
-import { ymd, TURNOS, TURNO_OPCIONES } from "../../src/lib/turnos.js";
+import { ymd, TURNOS, TURNO_OPCIONES, horasTurno } from "../../src/lib/turnos.js";
 import { huecosCobertura } from "../../src/lib/cobertura.js";
 import { BOLSA_ACTIVA, DIAS_URGENTE } from "../../src/lib/bolsa.js"; // BOLSA
 
@@ -40,7 +40,7 @@ function Turnos({ titulo, filas, nombres }) {
             <li key={h.usuario_id + h.turno}>
               <span className="chip" style={{ background: TURNOS[h.turno]?.bg, color: TURNOS[h.turno]?.fg }}>{h.turno}</span>
               <b>{nombres[h.usuario_id] || "—"}</b>
-              <span className="h">{TURNOS[h.turno]?.horas}</span>
+              <span className="h">{horasTurno(h.turno, h.fecha)}</span>
             </li>
           ))}
         </ul>

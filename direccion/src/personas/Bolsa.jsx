@@ -117,7 +117,7 @@ export function Bolsa() {
                   <header>
                     <div>
                       <b className="b-f">{fechaLarga(o.fecha)}</b>
-                      <div className="b-chips"><Turno t={o.turno} /><small>{horarioDe(o.turno)}</small><Destino t={o.turno} /></div>
+                      <div className="b-chips"><Turno t={o.turno} /><small>{horarioDe(o.turno, o.fecha)}</small><Destino t={o.turno} /></div>
                     </div>
                     <Plazo f={o.fecha} />
                   </header>
@@ -175,7 +175,7 @@ export function Bolsa() {
                       <td className="b-cap">{fechaCorta(o.fecha)}</td>
                       <td><Turno t={o.turno} /></td>
                       <td><span className="b-quien"><Avatar nombre={nombreDe[o.cogido_por] || "?"} size={22} />{corto(nombreDe[o.cogido_por])}</span></td>
-                      <td className="b-como">{o.cogido_como === "apoyo_cambio" ? `cambio de día · +${horasDe(o.turno) - horasDe(o.cambio_turno)} h` : o.cogido_como === "principal_extra" ? `día libre · +${horasDe(o.turno)} h extra` : "eventual"}</td>
+                      <td className="b-como">{o.cogido_como === "apoyo_cambio" ? `cambio de día · +${horasDe(o.turno, o.fecha) - horasDe(o.cambio_turno, o.cambio_fecha)} h` : o.cogido_como === "principal_extra" ? `día libre · +${horasDe(o.turno, o.fecha)} h extra` : "eventual"}</td>
                       <td className="r"><button className="btn-txt peligro" onClick={() => anular(o)}>Anular</button></td>
                     </tr>
                   ))}
@@ -226,7 +226,7 @@ function Publicar({ onClose, onHecho }) {
       pie={<button className="btn-p" disabled={busy || !f.fecha} onClick={publicar}>{busy ? "Publicando…" : "Publicar en la bolsa"}</button>}>
       <div className="fila-campos">
         <label className="campo">Fecha<input type="date" min={hoyYmd()} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} /></label>
-        <label className="campo">Turno<select value={f.turno} onChange={(e) => setF({ ...f, turno: e.target.value })}>{TURNOS_BOLSA.map((t) => <option key={t} value={t}>{t} · {horarioDe(t)}</option>)}</select></label>
+        <label className="campo">Turno<select value={f.turno} onChange={(e) => setF({ ...f, turno: e.target.value })}>{TURNOS_BOLSA.map((t) => <option key={t} value={t}>{t} · {horarioDe(t, f.fecha)}</option>)}</select></label>
       </div>
       <p className="b-va">Lo verán: <Destino t={f.turno} /></p>
       {d != null && d < DIAS_ANTELACION && <p className="b-aviso">Faltan {d} días: menos de las 3 semanas habituales.{d <= 10 ? " Saldrá ya como urgente." : ""}</p>}
