@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C, avatar, SHADOW, btnDark, inp } from "../../lib/styles.js";
 import { IcoLeft, IcoRight } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
-import { TURNOS, TURNO_OPCIONES, ymd } from "../../lib/turnos.js";
+import { TURNOS, TURNO_OPCIONES, ymd, horasTurno } from "../../lib/turnos.js";
 
 const DIAS = ["L", "M", "X", "J", "V", "S", "D"];
 const MESES_C = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -125,7 +125,7 @@ export function HorariosAdminView() {
                 <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                   <span style={{ width: 14, height: 14, borderRadius: 5, background: def.bg }} />
                   <span style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{def.label}</span>
-                  <span style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginLeft: "auto" }}>{def.horas}</span>
+                  <span style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginLeft: "auto" }}>{horasTurno(tk, ymd(dia))}</span>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
                   {gente.map(g => <PersonaChip key={g.id} t={g} onClick={() => setPicker({ uid: g.id, fecha: fechaDia })} />)}
@@ -198,7 +198,7 @@ export function HorariosAdminView() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 9 }}>
               {TURNO_OPCIONES.map(t => { const def = TURNOS[t]; return (
                 <button key={t} onClick={() => setTurno(picker.uid, picker.fecha, t)} style={{ padding: 13, borderRadius: 13, border: `1px solid ${C.brdL}`, background: def.bg, color: def.fg, fontFamily: F, fontSize: 13.5, fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
-                  {def.label}{def.horas ? <div style={{ fontSize: 10.5, fontWeight: 400, marginTop: 2 }}>{def.horas}</div> : null}
+                  {def.label}{def.horas ? <div style={{ fontSize: 10.5, fontWeight: 400, marginTop: 2 }}>{horasTurno(t, picker.fecha)}</div> : null}
                 </button>
               ); })}
             </div>
