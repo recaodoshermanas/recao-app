@@ -6,6 +6,8 @@ import { requeridosDe, TURNOS_TRABAJO, REGLA_COBERTURA } from "../../../src/lib/
 import { Panel, useEquipo, avisar, hoyStr, masDias, lunesDe, fechaCorta, Cargando, Avatar } from "../ui.jsx";
 import { BOLSA_ACTIVA, DIAS_ANTELACION, destinoDe, diasHasta } from "../../../src/lib/bolsa.js"; // BOLSA
 import "./bolsa.css"; // BOLSA
+import { cargarFestivos } from "../../../src/lib/festivos.js"; // FESTIVOS
+import { FestivosPanel } from "./Festivos.jsx"; // FESTIVOS
 
 const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P" };
 const LIBRES = new Set(["Descanso", "Vacaciones", "Baja", "Permiso"]);
@@ -29,6 +31,8 @@ export function Horarios() {
   const [hueco, setHueco] = useState(null); // {fecha, turno}
   const [nuevoEv, setNuevoEv] = useState(null); // {fecha?, turno?}
   const [bolsa, setBolsa] = useState({}); // BOLSA: "fecha|turno" → oferta abierta (próximos 60 días)
+  const [festivos, setFestivos] = useState({}); // FESTIVOS: fecha → { nombre, ambito }
+  const [verFestivos, setVerFestivos] = useState(false);
 
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => masDias(lunes, i)), [lunes]);
 
@@ -42,6 +46,8 @@ export function Horarios() {
   }, [hoy]);
   useEffect(() => { setMapa(null); cargarSemana().catch(() => setMapa({})); }, [cargarSemana]);
   useEffect(() => { cargarProx().catch(() => setProx([])); }, [cargarProx]);
+  const cargarFest = useCallback(() => cargarFestivos(lunes, masDias(lunes, 6)).then(setFestivos).catch(() => setFestivos({})), [lunes]);
+  useEffect(() => { cargarFest(); }, [cargarFest]);
   // BOLSA: turnos abiertos en la bolsa (huecos publicados y descansos compensatorios pendientes)
   const cargarBolsa = useCallback(async () => {
     if (!BOLSA_ACTIVA) return;
@@ -133,6 +139,7 @@ export function Horarios() {
             {lunes !== lunesDe(hoy) && <button className="btn-l" onClick={() => setLunes(lunesDe(hoy))}>Esta semana</button>}
             <button className="btn-l" onClick={() => setLunes(masDias(lunes, 7))} aria-label="Semana siguiente">›</button>
             <button className="btn-l" onClick={() => setNuevoEv({})}>+ Eventual</button>
+            <button className="btn-l" onClick={() => setVerFestivos(true)}>Festivos</button>
           </div>
         </div>
         {hayPend && <p className="b-leyenda-pend"><b>Borde discontinuo dorado</b><span>= descanso compensatorio pendiente. Esa persona libra en cuanto alguien coja su turno en la bolsa; hasta entonces sigue apuntada.</span></p>}
@@ -142,8 +149,9 @@ export function Horarios() {
               <tr>
                 <th />
                 {dias.map((f, i) => (
-                  <th key={f} className={f === hoy ? "hoy" : ""}>
+                  <th key={f} className={`${f === hoy ? "hoy" : ""}${festivos[f] ? " festivo" : ""}`} title={festivos[f] ? `Festivo: ${festivos[f].nombre}` : undefined}>
                     <span className="d">{DIAS[i]}</span><span className="n">{Number(f.slice(8))}</span>
+                    {festivos[f] && <span className="fest">Festivo</span>}
                   </th>
                 ))}
               </tr>
@@ -172,6 +180,7 @@ export function Horarios() {
         <ul className="leyenda-turnos">
           {TURNO_OPCIONES.map((t) => <li key={t}><span className="tchip" style={{ background: TURNOS[t].bg, color: TURNOS[t].fg }}>{ABREV[t]}</span>{t}{TURNOS[t].horas && <small> {TURNOS[t].horas}</small>}</li>)}
           <li><small>{NOTA_FINDE}</small></li>
+          {dias.some((f) => festivos[f]) && <li><span className="tchip fest-t">F</span><small>{dias.filter((f) => festivos[f]).map((f) => `${festivos[f].nombre} (${Number(f.slice(8))})`).join(" · ")}: plus festivo para quien trabaje</small></li>}
         </ul>
       </div>
 
@@ -223,6 +232,7 @@ export function Horarios() {
           onNuevo={() => { setNuevoEv(hueco); setHueco(null); }} />
       )}
 
+      {verFestivos && <FestivosPanel onClose={() => setVerFestivos(false)} onCambio={cargarFest} />}
       {nuevoEv && (
         <NuevoEventual destino={nuevoEv.fecha ? nuevoEv : null} onClose={() => setNuevoEv(null)}
           onCrear={async (nombre) => { await crearEventual(nombre, nuevoEv.fecha ? nuevoEv : null); setNuevoEv(null); }} />

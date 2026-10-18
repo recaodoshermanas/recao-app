@@ -376,3 +376,13 @@ button.enlace { border: 0; background: none; cursor: pointer; padding: 0; font: 
 .nov-previa { margin-top: 16px; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 12px; display: grid; gap: 4px; }
 .nov-previa small { color: var(--muted); font-size: 11.5px; }
 .nov-previa p { margin: 0; font-size: 13.5px; line-height: 1.45; }
+
+/* Festivos */
+.cuadrante thead th.festivo .d { color: var(--rojo, #c0392b); }
+.cuadrante thead th .fest { display: block; margin: 3px auto 0; width: max-content; padding: 0 6px; border-radius: 999px; background: var(--rojo, #c0392b); color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; line-height: 16px; }
+.tchip.fest-t { background: var(--rojo, #c0392b); color: #fff; }
+.fest-mes { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; color: var(--muted); font-size: 13.5px; }
+.fest-chip { padding: 3px 10px; border-radius: 999px; background: #fbe9e6; color: #8a2c1c; font-size: 12.5px; font-weight: 700; }
+.fest-sin { display: block; color: #a8431e; font-size: 12px; font-weight: 700; margin-top: 2px; }
+.fest-l li .pf { display: block; }
+.aviso-l { background: #fff7e0; border: 1px solid #f0d88a; color: #6a4a08; border-radius: 10px; padding: 8px 12px; font-size: 13px; margin: 0 0 12px; }
