@@ -16,6 +16,7 @@ import { RecepcionView, AnadirProductoView } from "./RecepcionView.jsx"; // RECE
 import { MisFichajesView } from "./MisFichajesView.jsx"; // FICHAJES
 import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
 import { WorkerView } from "../WorkerView.jsx";
+import { IR_CORREO } from "../../lib/enlaceAviso.js";
 import { NovedadesEquipo } from "../../components/Novedades.jsx"; // NOVEDADES
 
 const IcoCaja = ({ size = 20, color = "currentColor" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 7v10l9 4 9-4V7" /><path d="M12 11v10" /></svg>; // RECEPCION
@@ -35,15 +36,19 @@ const TILES = [
 ];
 const TITULOS = { anadir: "Añadir producto", documentos: "Mis documentos", fichajes: "Mis fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", horario: "Mis horarios", revisar: "Turno anterior", seguimiento: "Mi seguimiento", avisos: "Avisos", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
+// Enlace de un correo de aviso (?ir=vacaciones): abre esa pantalla. Se guarda hasta que la trabajadora sale de ella,
+// por si la app se monta dos veces mientras carga.
+const PANTALLAS_IR = ["avisos", "vacaciones", "cambio", "cubrir", "recepcion", "fichajes", "documentos"];
+let irInicial = PANTALLAS_IR.includes(IR_CORREO) && (IR_CORREO !== "cubrir" || BOLSA_ACTIVA) ? IR_CORREO : null;
+
 export function WorkerApp({ user, facturas, proveedores, onReload }) {
-  const [screen, setScreen] = useState("home");
+  const [screen, setScreen] = useState(() => irInicial || "home");
+  useEffect(() => { if (screen !== irInicial) irInicial = null; }, [screen]);
   const [porCubrir, setPorCubrir] = useState(0); // BOLSA
   const [porRecepcionar, setPorRecepcionar] = useState({ n: 0, listos: 0 }); // RECEPCION
 
   useEffect(() => {
     const irA = (d) => { if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); else if (d === "cubrir" && BOLSA_ACTIVA) setScreen("cubrir"); else if (d === "recepcion") setScreen("recepcion"); else if (d === "fichajes") setScreen("fichajes"); else if (d === "documentos") setScreen("documentos"); };
-    // Enlace de un correo de aviso: app.elrecao.com/?ir=vacaciones abre esa pantalla (y se limpia la dirección)
-    try { const q = new URLSearchParams(window.location.search); const ir = q.get("ir"); if (ir) { irA(ir); window.history.replaceState(null, "", window.location.pathname + window.location.hash); } } catch (e) { /* noop */ }
     const h = (e) => irA(e.detail && e.detail.destino);
     window.addEventListener("recao-nav", h);
     return () => window.removeEventListener("recao-nav", h);

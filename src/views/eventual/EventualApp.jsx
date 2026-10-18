@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C, btnDark } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
+import { IR_CORREO } from "../../lib/enlaceAviso.js";
 import { NovedadesEquipo } from "../../components/Novedades.jsx"; // NOVEDADES
 import { IcoCheck, IcoCalendar } from "../../lib/icons.jsx";
 import {
@@ -21,9 +22,13 @@ function leerNorma() { try { return window.localStorage.getItem(CLAVE_NORMA) ===
 function guardarNorma(v) { try { if (v) window.localStorage.setItem(CLAVE_NORMA, "1"); else window.localStorage.removeItem(CLAVE_NORMA); } catch (e) { /* sin almacenamiento */ } }
 const tel = TELEFONO_DIRECCION.replace(/\s/g, "");
 
+// Enlace de un correo de aviso: ?ir=mis abre «Mis turnos»; cualquier otro, la bolsa.
+// Se guarda hasta que cambia de pestaña, por si la app se monta dos veces mientras carga.
+let irInicial = IR_CORREO === "mis" ? "mis" : null;
+
 export function EventualApp({ user }) {
-  // Enlace de un correo de aviso: ?ir=mis abre «Mis turnos»; cualquier otro, la bolsa
-  const [tab, setTab] = useState(() => { try { const q = new URLSearchParams(window.location.search); const ir = q.get("ir"); if (ir) window.history.replaceState(null, "", window.location.pathname + window.location.hash); return ir === "mis" ? "mis" : "bolsa"; } catch (e) { return "bolsa"; } });
+  const [tab, setTab] = useState(() => irInicial || "bolsa");
+  useEffect(() => { if (tab !== irInicial) irInicial = null; }, [tab]);
   const [filtro, setFiltro] = useState("todos");
   const [ofertas, setOfertas] = useState([]);       // bolsa_disponibles()
   const [mios, setMios] = useState([]);             // horarios de trabajo futuros
