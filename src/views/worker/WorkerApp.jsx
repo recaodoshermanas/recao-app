@@ -18,6 +18,7 @@ import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
 import { WorkerView } from "../WorkerView.jsx";
 import { IR_CORREO } from "../../lib/enlaceAviso.js";
 import { NovedadesEquipo } from "../../components/Novedades.jsx"; // NOVEDADES
+import { FichajesDudosos } from "../../components/FichajesDudosos.jsx"; // FICHAJES
 
 const IcoCaja = ({ size = 20, color = "currentColor" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 7v10l9 4 9-4V7" /><path d="M12 11v10" /></svg>; // RECEPCION
 const TILES = [
@@ -45,6 +46,8 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [screen, setScreen] = useState(() => irInicial || "home");
   useEffect(() => { if (screen !== irInicial) irInicial = null; }, [screen]);
   const [porCubrir, setPorCubrir] = useState(0); // BOLSA
+  const [mesFichajes, setMesFichajes] = useState(null); // FICHAJES: mes que abre «Mis fichajes» desde el aviso del inicio
+  useEffect(() => { if (screen === "home") setMesFichajes(null); }, [screen]);
   const [porRecepcionar, setPorRecepcionar] = useState({ n: 0, listos: 0 }); // RECEPCION
 
   useEffect(() => {
@@ -80,6 +83,8 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
           </span>
           <IcoRight size={20} color={C.goldSub} sw={2.4} />
         </button>
+
+        <FichajesDudosos estilo={{ marginTop: 12 }} onRevisar={(mes) => { setMesFichajes(mes); setScreen("fichajes"); }} />
 
         <NovedadesEquipo estilo={{ marginTop: 12 }} />
 
@@ -131,7 +136,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       </div>
       {screen === "recepcion" && <RecepcionView />}
       {screen === "anadir" && <AnadirProductoView onFin={() => setScreen("home")} />}
-      {screen === "fichajes" && <MisFichajesView />}
+      {screen === "fichajes" && <MisFichajesView mesInicial={mesFichajes} />}
       {screen === "documentos" && <MisDocumentosView />}
       {screen === "cerrar" && <CerrarTurnoView user={user} />}
       {screen === "cubrir" && <CubrirTurnosView user={user} />}

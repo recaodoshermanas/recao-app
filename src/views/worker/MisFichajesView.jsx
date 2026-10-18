@@ -10,8 +10,8 @@ const dia = (f) => new Date(`${f}T12:00:00`).toLocaleDateString("es-ES", { weekd
 const AVISO = { sin_fichaje: "No fichaste", sin_salida: "Falta la salida", cero: "Fichaje de 0 minutos", larga: "Fichaje demasiado largo", tarde: "Entrada después de la hora", exceso: "Salida después de la hora" };
 const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 14, boxShadow: SHADOW.card };
 
-export function MisFichajesView() {
-  const [mes, setMes] = useState(new Date().toISOString().slice(0, 7));
+export function MisFichajesView({ mesInicial }) {
+  const [mes, setMes] = useState(mesInicial || new Date().toISOString().slice(0, 7));
   const [d, setD] = useState(null);
   const [msg, setMsg] = useState("");
   const [pedir, setPedir] = useState(null); // día para el que se pide corrección
