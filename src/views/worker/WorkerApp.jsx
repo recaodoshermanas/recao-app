@@ -41,7 +41,10 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [porRecepcionar, setPorRecepcionar] = useState({ n: 0, listos: 0 }); // RECEPCION
 
   useEffect(() => {
-    const h = (e) => { const d = e.detail && e.detail.destino; if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); else if (d === "cubrir" && BOLSA_ACTIVA) setScreen("cubrir"); else if (d === "recepcion") setScreen("recepcion"); else if (d === "fichajes") setScreen("fichajes"); else if (d === "documentos") setScreen("documentos"); };
+    const irA = (d) => { if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); else if (d === "cubrir" && BOLSA_ACTIVA) setScreen("cubrir"); else if (d === "recepcion") setScreen("recepcion"); else if (d === "fichajes") setScreen("fichajes"); else if (d === "documentos") setScreen("documentos"); };
+    // Enlace de un correo de aviso: app.elrecao.com/?ir=vacaciones abre esa pantalla (y se limpia la dirección)
+    try { const q = new URLSearchParams(window.location.search); const ir = q.get("ir"); if (ir) { irA(ir); window.history.replaceState(null, "", window.location.pathname + window.location.hash); } } catch (e) { /* noop */ }
+    const h = (e) => irA(e.detail && e.detail.destino);
     window.addEventListener("recao-nav", h);
     return () => window.removeEventListener("recao-nav", h);
   }, []);

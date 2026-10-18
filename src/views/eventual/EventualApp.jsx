@@ -22,7 +22,8 @@ function guardarNorma(v) { try { if (v) window.localStorage.setItem(CLAVE_NORMA,
 const tel = TELEFONO_DIRECCION.replace(/\s/g, "");
 
 export function EventualApp({ user }) {
-  const [tab, setTab] = useState("bolsa");
+  // Enlace de un correo de aviso: ?ir=mis abre «Mis turnos»; cualquier otro, la bolsa
+  const [tab, setTab] = useState(() => { try { const q = new URLSearchParams(window.location.search); const ir = q.get("ir"); if (ir) window.history.replaceState(null, "", window.location.pathname + window.location.hash); return ir === "mis" ? "mis" : "bolsa"; } catch (e) { return "bolsa"; } });
   const [filtro, setFiltro] = useState("todos");
   const [ofertas, setOfertas] = useState([]);       // bolsa_disponibles()
   const [mios, setMios] = useState([]);             // horarios de trabajo futuros

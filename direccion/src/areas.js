@@ -69,9 +69,10 @@ export const AREAS = [
 ];
 
 // Lo que mandan las notificaciones de la app (evento "recao-nav") → dónde se abre aquí
+// El botón de los correos (función notificaciones-email) usa estas mismas rutas: si se cambian aquí, cambiarlas también allí.
 export const DESTINOS = {
   horarios: "personas/horarios", cobertura: "personas/horarios", vacaciones: "personas/solicitudes",
-  cambios: "personas/solicitudes", cierres: "personas/seguimiento", incidencias: "personas/seguimiento",
+  cambios: "personas/solicitudes", cierres: "personas/seguimiento/cierres", incidencias: "personas/seguimiento/incidencias",
   disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
   candidatos: "personas/seleccion", plus: "personas/equipo", bolsa: "personas/bolsa",
   recepcion_admin: "producto/recepcion", fichajes_admin: "personas/fichajes", documentos_admin: "personas/documentos",

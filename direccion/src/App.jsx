@@ -181,7 +181,7 @@ export default function App() {
 
   // Notificaciones: llevan a la pantalla que toca
   useEffect(() => {
-    const h = (e) => { const d = e.detail && DESTINOS[e.detail.destino]; if (d) ir(d); };
+    const h = (e) => { const d = e.detail && DESTINOS[e.detail.destino]; if (d) ir(e.detail.ref ? `${d}/${e.detail.ref}` : d); };
     window.addEventListener("recao-nav", h);
     return () => window.removeEventListener("recao-nav", h);
   }, []);
@@ -218,7 +218,7 @@ export default function App() {
   else if (area.id === "plan" && sub.id === "tareas") contenido = <PlanTareas user={user} />;
   else if (area.id === "plan" && sub.id === "calendario") contenido = <PlanCalendario user={user} />;
   else if (area.id === "tecnologia" && sub.id === "como-pedir") contenido = <TecGuia />;
-  else if (area.id === "tecnologia") contenido = <TecSolicitudes user={user} extra={extra} />;
+  else if (area.id === "tecnologia") contenido = <TecSolicitudes key={extra || "lista"} user={user} extra={extra} />;
   else if (area.id === "finanzas" && sub.id === "resumen") contenido = <FinanzasResumen />;
   else if (area.id === "finanzas" && sub.id === "resultados") contenido = <FinanzasResultados onEditMonth={editarMes} />;
   else if (area.id === "finanzas" && sub.id === "caja") contenido = <FinanzasCaja />;

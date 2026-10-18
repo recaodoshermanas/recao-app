@@ -11,11 +11,12 @@ function hace(ts) {
   return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 }
 
-// A qué sección lleva cada notificación al pulsarla
+// A qué sección lleva cada notificación al pulsarla.
+// El botón de los correos (función notificaciones-email) usa este mismo mapa: si se cambia aquí, cambiarlo también allí.
 const DESTINO = {
   aviso_incidencia: "avisos", resolucion: "avisos", plazo_alegacion: "avisos", acuse_pendiente: "avisos", sancion: "avisos",
-  incidencia_reportada: "disciplina", alegacion_presentada: "disciplina", umbral_cerca: "disciplina", prescripcion_proxima: "disciplina", acuse_5d: "disciplina", cierre_incompleto: "disciplina",
-  vacaciones_pendiente: "vacaciones", vacaciones_resuelto: "vacaciones",
+  incidencia_reportada: "incidencias", alegacion_presentada: "disciplina", umbral_cerca: "disciplina", prescripcion_proxima: "disciplina", acuse_5d: "disciplina", cierre_incompleto: "cierres",
+  vacaciones_pendiente: "vacaciones", vacaciones_resuelto: "vacaciones", vacaciones_conflicto: "vacaciones",
   // Recepción de pedidos: la trabajadora vuelve a «Recepcionar pedido»; dirección, a Producto → Recepción
   fichaje_resuelto: "fichajes", fichaje_solicitud: "fichajes_admin",
   documento_nuevo: "documentos", documento_firmado: "documentos_admin",
@@ -99,7 +100,9 @@ export function NotificacionesBell({ user }) {
 
   const clic = async (n) => {
     const destino = DESTINO[n.tipo];
-    if (destino) { setOpen(false); window.dispatchEvent(new CustomEvent("recao-nav", { detail: { destino } })); }
+    // Las de tecnología llevan a la solicitud concreta (el título empieza por «#N ·»)
+    const ref = destino === "solicitudes_tec" ? (/^#(\d+)/.exec(n.titulo || "") || [])[1] : undefined;
+    if (destino) { setOpen(false); window.dispatchEvent(new CustomEvent("recao-nav", { detail: { destino, ref } })); }
     if (!n.leida) {
       setItems(prev => prev.map(x => x.id === n.id ? { ...x, leida: true } : x));
       try { await sb.update("notificaciones", `id=eq.${n.id}`, { leida: true }); } catch (e) { /* noop */ }
