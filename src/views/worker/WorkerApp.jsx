@@ -16,6 +16,7 @@ import { RecepcionView, AnadirProductoView } from "./RecepcionView.jsx"; // RECE
 import { MisFichajesView } from "./MisFichajesView.jsx"; // FICHAJES
 import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
 import { WorkerView } from "../WorkerView.jsx";
+import { NovedadesEquipo } from "../../components/Novedades.jsx"; // NOVEDADES
 
 const IcoCaja = ({ size = 20, color = "currentColor" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 7v10l9 4 9-4V7" /><path d="M12 11v10" /></svg>; // RECEPCION
 const TILES = [
@@ -71,6 +72,8 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
           </span>
           <IcoRight size={20} color={C.goldSub} sw={2.4} />
         </button>
+
+        <NovedadesEquipo estilo={{ marginTop: 12 }} />
 
         {BOLSA_ACTIVA && porCubrir > 0 && ( // BOLSA
           <button onClick={() => setScreen("cubrir")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", marginTop: 12, background: C.char, border: "none", borderRadius: 15, padding: "15px 18px", display: "flex", alignItems: "center", gap: 13, textAlign: "left" }}>

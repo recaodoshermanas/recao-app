@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C, btnDark } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
+import { NovedadesEquipo } from "../../components/Novedades.jsx"; // NOVEDADES
 import { IcoCheck, IcoCalendar } from "../../lib/icons.jsx";
 import {
   BOLSA_ACTIVA, TELEFONO_DIRECCION, DIAS_SOLTAR, esTurnoTrabajo, horarioDe, horasDe,
@@ -141,6 +142,8 @@ export function EventualApp({ user }) {
       <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut, marginTop: 4, lineHeight: 1.45 }}>
         {pendientes.length === 0 ? "No tienes turnos esperando respuesta." : `${pendientes.length} turno${pendientes.length > 1 ? "s esperan" : " espera"} tu respuesta`}
       </div>
+
+      <NovedadesEquipo estilo={{ marginTop: 16 }} />
 
       <div role="group" aria-label="Secciones" style={{ display: "flex", gap: 4, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 15, padding: 4, marginTop: 16 }}>
         {tabBtn("bolsa", "Disponibles", pendientes.length)}

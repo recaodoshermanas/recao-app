@@ -5,6 +5,7 @@ import { TURNOS, horasTurno } from "../../../src/lib/turnos.js";
 import { resumenCalendario } from "../../../src/lib/vacaciones.js";
 import { Panel, Pestanas, useEquipo, avisar, hoyStr, masDias, fechaCorta, Cargando, Avatar, n0 } from "../ui.jsx";
 import { eur } from "../fmt.js";
+import { Novedades } from "./Novedades.jsx";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const tipoDe = (u) => (u.rol === "admin" ? "Dirección" : u.eventual ? "Eventual" : (u.tipo_turno || u.jornada) === "principal" ? "Principal" : (u.tipo_turno || u.jornada) === "apoyo" ? "Apoyo" : "Equipo");
@@ -21,12 +22,13 @@ export function Equipo({ user }) {
   return (
     <>
       <div className="barra-sec">
-        <Pestanas valor={vista} onChange={setVista} etiqueta="Equipo" opciones={[{ id: "personas", label: "Personas" }, { id: "plus", label: "Plus del mes" }, { id: "horas", label: "Horas extra" }]} />
-        <div className="acciones"><button className="btn-p" onClick={() => setNueva(true)}>+ Nueva cuenta</button></div>
+        <Pestanas valor={vista} onChange={setVista} etiqueta="Equipo" opciones={[{ id: "personas", label: "Personas" }, { id: "plus", label: "Plus del mes" }, { id: "horas", label: "Horas extra" }, { id: "novedades", label: "Novedades" }]} />
+        {vista !== "novedades" && <div className="acciones"><button className="btn-p" onClick={() => setNueva(true)}>+ Nueva cuenta</button></div>}
       </div>
       {vista === "personas" && <Directorio equipo={equipo} onFicha={setFicha} />}
       {vista === "plus" && <Plus equipo={equipo} />}
       {vista === "horas" && <Horas equipo={equipo} />}
+      {vista === "novedades" && <Novedades />}
       {ficha && <Ficha persona={equipo.find((u) => u.id === ficha) || null} yo={user} onClose={() => setFicha(null)} onCambio={recargarEquipo} />}
       {nueva && <NuevaCuenta onClose={() => setNueva(false)} onCreada={async () => { await recargarEquipo(); setNueva(false); }} />}
     </>
