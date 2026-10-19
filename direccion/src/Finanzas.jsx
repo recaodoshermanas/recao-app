@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { supabase } from "../../src/lib/supabase.js";
 import { initTips } from "./charts.js";
 import { eur, eurK, pct, num, mesCorto, mesAnio, parseDate } from "./fmt.js";
+import { CajaFuerte } from "./CajaFuerte.jsx"; // CAJA FUERTE (#11)
 
 const CATS = [
   { id: "mercancia", label: "Compras de mercancía" },
@@ -349,6 +350,7 @@ export function FinanzasCaja() {
   const efSinDestino = (m) => n0(m.epos_efectivo) - n0(m.facturas_efectivo);
   return (
     <>
+      <div className="grid"><div className="c12"><CajaFuerte /></div></div>
       <div className="grid">
         <Kpi titulo="Días con los dos cierres" valor={`${completos.length} de ${dias.length}`} sub={`Últimos ${dias.length} días cerrados`} tono={completos.length < dias.length ? "mal" : ""} />
         <Kpi titulo="Descuadre de efectivo" valor={eur(difEf, 0)} sub="Contado menos Epos en los días con los dos cierres, descontando las facturas pagadas de la caja" tono={Math.abs(difEf) > 50 ? "mal" : ""} />

@@ -4,9 +4,10 @@ import { fmt, fmt2, mkLabel, uid, pn } from "../lib/utils.js";
 import { sb } from "../lib/supabase.js";
 import { useConfirm } from "../hooks/useConfirm.jsx";
 
-const TIPOS_PAGO = [["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"]];
+const TIPOS_PAGO = [["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"], ["caja_fuerte", "Caja fuerte"]];
+const ESTILO_PAGO = { tarjeta: ["#E7EEF7", "#3F6EA5"], efectivo: ["#EAF3EC", "#2E7D4F"], caja_fuerte: ["#F3E9D6", "#6A4A08"] };
 const TURNOS_TRAB = [["mañana", "Mañana"], ["tarde", "Tarde"]];
-const etiquetaPago = (t) => (t === "tarjeta" ? "Tarjeta" : t === "efectivo" ? "Efectivo" : "");
+const etiquetaPago = (t) => (t === "tarjeta" ? "Tarjeta" : t === "efectivo" ? "Efectivo" : t === "caja_fuerte" ? "Caja fuerte" : "");
 const turnoPorHora = () => (new Date().getHours() < 15 ? "mañana" : "tarde");
 
 export function WorkerView({ facturas, proveedores, onReload, user }) {
@@ -88,7 +89,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
                       <div style={{ fontFamily: F, fontSize: "12px", color: C.mut, marginTop: "3px", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                         <span>{new Date(f.fecha).toLocaleDateString("es-ES")}</span>
                         {f.turno && <span style={{ textTransform: "capitalize" }}>· {f.turno}</span>}
-                        {f.tipo_pago && <span style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: f.tipo_pago === "tarjeta" ? "#E7EEF7" : "#EAF3EC", color: f.tipo_pago === "tarjeta" ? "#3F6EA5" : "#2E7D4F" }}>{etiquetaPago(f.tipo_pago)}</span>}
+                        {f.tipo_pago && <span style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: (ESTILO_PAGO[f.tipo_pago] || ESTILO_PAGO.efectivo)[0], color: (ESTILO_PAGO[f.tipo_pago] || ESTILO_PAGO.efectivo)[1] }}>{etiquetaPago(f.tipo_pago)}</span>}
                         {f.nota && <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {f.nota}</span>}
                         {!canEdit && <span style={{ fontStyle: "italic", color: C.mutL }}>· de otra persona</span>}
                       </div>
@@ -126,12 +127,13 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
           <label style={lbl}>Importe (€)</label>
           <input type="number" inputMode="decimal" value={importe} onChange={e => setImporte(e.target.value)} placeholder="0,00" style={{ ...inp, marginBottom: "16px" }} />
           <label style={lbl}>Tipo de pago</label>
-          <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", gap: "8px", marginBottom: tipoPago === "caja_fuerte" ? "8px" : "16px" }}>
             {TIPOS_PAGO.map(([val, label]) => {
               const on = tipoPago === val;
-              return <button key={val} onClick={() => setTipoPago(val)} style={{ flex: 1, padding: "13px", borderRadius: "10px", cursor: "pointer", fontFamily: F, fontSize: "14px", fontWeight: 700, border: on ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{label}</button>;
+              return <button key={val} onClick={() => setTipoPago(val)} style={{ flex: 1, padding: "13px 6px", borderRadius: "10px", cursor: "pointer", fontFamily: F, fontSize: "14px", fontWeight: 700, border: on ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{label}</button>;
             })}
           </div>
+          {tipoPago === "caja_fuerte" && <div style={{ fontFamily: F, fontSize: "12.5px", color: "#6A4A08", background: "#FBF0DA", borderRadius: "10px", padding: "9px 12px", marginBottom: "16px", lineHeight: 1.4 }}>Este dinero sale de la caja fuerte: no sale de la caja registradora ni va al sobre del cierre.</div>}
           <label style={lbl}>Turno en que se metió</label>
           <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
             {TURNOS_TRAB.map(([val, label]) => {

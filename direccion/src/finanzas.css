@@ -79,3 +79,25 @@
   .flineas li { grid-template-columns: 1fr 96px; }
   .flineas select { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* Caja fuerte (Finanzas → Caja) */
+.cf .cf-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 4px 0 14px; }
+.cf .cf-kpis > div { background: var(--bg-2, #F6F1E8); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+.cf .cf-kpis small { font-size: 12px; color: var(--muted); font-weight: 600; }
+.cf .cf-kpis b { font-size: 19px; }
+.cf .cf-kpis span { font-size: 12px; color: var(--muted); }
+.cf .cf-saldo { background: #FBF0DA !important; }
+.cf .cf-saldo b { font-size: 24px; }
+.cf .cf-saldo.bajo { background: #FFF1E0 !important; }
+.cf .cf-saldo.neg { background: #FBE3DE !important; }
+.cf .cf-saldo.neg b { color: var(--down); }
+.cf-alerta { background: #FBE3DE; color: #8A2C1C; border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 700; margin: 0 0 12px; }
+.cf-baja { background: #FFF1E0; color: #7A4A0C; border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 600; margin: 0 0 12px; }
+.cf-vacio { display: grid; gap: 4px; background: var(--bg-2, #F6F1E8); border-radius: 12px; padding: 14px 16px; font-size: 13.5px; color: var(--text-2); margin-bottom: 12px; }
+.cf-chip { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-right: 4px; }
+.cf-chip.in { background: #EAF4EE; color: #1E6B3C; }
+.cf-chip.out { background: #F3E9D6; color: #6A4A08; }
+.cf-movs td.up { color: var(--up); }
+.cf-previa { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; background: var(--bg-2, #F6F1E8); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; margin-top: 6px; }
+.cf-previa b { text-align: right; }
+@media (max-width: 760px) { .cf .cf-kpis { grid-template-columns: 1fr 1fr; } }
