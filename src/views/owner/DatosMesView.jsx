@@ -4,6 +4,7 @@ import { fmt, fmt2, mkLabel, uid, pn, currentMK } from "../../lib/utils.js";
 import { PAQUETERIA, GASTOS_FIJOS_TPL } from "../../lib/constants.js";
 import { sb } from "../../lib/supabase.js";
 import { Sec } from "../../components/Sec.jsx";
+import { AperturaSobres, DescuadreSobres, useSobres } from "./AperturaSobres.jsx"; // SOBRES (#13)
 
 export function DatosMesView({ facturas, monthlyData, config, onReload, initialMonth }) {
   const allMonths = [...new Set([...Object.keys(monthlyData), currentMK])].sort().reverse();
@@ -12,6 +13,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
   useEffect(() => { if (initialMonth) setSelMonth(initialMonth); }, [initialMonth]);
 
   const md = monthlyData[selMonth] || {};
+  const sobres = useSobres(selMonth); // SOBRES (#13): solo lo ven los socios
   const isSummary = !!md.resumen_legacy;
 
   const [ventas, setVentas] = useState("");
@@ -76,6 +78,8 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         </select>
       </div>
 
+      <DescuadreSobres datos={sobres.datos} />
+
       {isSummary && (
         <div style={{ ...crd, border: `2px solid ${C.gold}`, background: "#FFFBF0", marginBottom: "20px" }}>
           <div style={{ fontFamily: F, fontSize: "13px", color: C.char, lineHeight: 1.5 }}>
@@ -83,6 +87,9 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
           </div>
         </div>
       )}
+
+      {sobres.datos !== false && <Sec title="Efectivo" sub="Los sobres de los cierres de caja" />}
+      <AperturaSobres mes={selMonth} datos={sobres.datos} setDatos={sobres.setDatos} />
 
       <Sec title="Facturas proveedores" sub="Registradas por trabajadoras" />
       <div style={crd}>
