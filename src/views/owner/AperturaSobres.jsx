@@ -65,6 +65,14 @@ export function AperturaSobres({ mes, datos, setDatos }) {
     catch (e) { setMsg(e.message || "No se ha podido guardar"); }
     setBusy(false);
   };
+  // Quitar un contado guardado por error: el mes vuelve a quedar sin contar (queda en el historial)
+  const quitar = async () => {
+    if (!window.confirm(`¿Quitar el contado de ${dinero(datos.contado)}? El mes quedará sin contar. Queda registrado en los cambios.`)) return;
+    setBusy(true); setMsg("");
+    try { setDatos(await sb.rpc("sobres_quitar", { p_mes: mes })); }
+    catch (e) { setMsg(e.message || "No se ha podido quitar"); }
+    setBusy(false);
+  };
   const fila = (t, v, fuerte) => <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontFamily: F, fontSize: fuerte ? 15 : 13.5, fontWeight: fuerte ? 700 : 500, color: C.char, padding: "5px 0" }}><span>{t}</span><span>{v}</span></div>;
 
   return (
@@ -115,6 +123,7 @@ export function AperturaSobres({ mes, datos, setDatos }) {
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                 <span style={{ fontFamily: SF, fontSize: 22, color: C.char, flex: 1 }}>{dinero(datos.contado)}</span>
+                <button type="button" disabled={busy} onClick={quitar} style={{ border: "none", background: "none", padding: "8px 6px", fontFamily: F, fontSize: 13, fontWeight: 600, color: ROJO, textDecoration: "underline", cursor: "pointer" }}>Quitar</button>
                 <button type="button" onClick={() => setEditar(true)} style={{ border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Corregir</button>
               </div>
             )}
@@ -138,13 +147,16 @@ export function AperturaSobres({ mes, datos, setDatos }) {
               </div>
             </>
           ) : (
-            datos.nota && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: "#F4EFE6", borderRadius: 10, padding: "9px 12px", marginBottom: 8 }}><b>Nota:</b> {datos.nota}</div>
+            <>
+              {msg && <div role="alert" style={{ fontFamily: F, fontSize: 13, color: ROJO, marginBottom: 8 }}>{msg}</div>}
+              {datos.nota && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: "#F4EFE6", borderRadius: 10, padding: "9px 12px", marginBottom: 8 }}><b>Nota:</b> {datos.nota}</div>}
+            </>
           )}
           {datos.guardado && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 8 }}>Guardado por {datos.guardado.por || "—"} el {cuando(datos.guardado.en)}</div>}
-          {(datos.historial || []).length > 1 && (
+          {(datos.historial || []).length > (guardado ? 1 : 0) && (
             <details style={{ marginTop: 8, fontFamily: F, fontSize: 12.5, color: C.mut }}>
               <summary style={{ cursor: "pointer" }}>Cambios ({datos.historial.length})</summary>
-              {datos.historial.map((h, i) => <div key={i} style={{ padding: "4px 0" }}>{cuando(h.en)} · {h.por || "—"}: {h.antes == null ? "primer contado" : `antes ${dinero(h.antes)}`} → {dinero(h.despues)}</div>)}
+              {datos.historial.map((h, i) => <div key={i} style={{ padding: "4px 0" }}>{cuando(h.en)} · {h.por || "—"}: {h.despues == null ? `quitó el contado de ${dinero(h.antes)}` : <>{h.antes == null ? "sin contado" : `antes ${dinero(h.antes)}`} → {dinero(h.despues)}</>}</div>)}
             </details>
           )}
         </div>
