@@ -23,6 +23,7 @@ const AREAS = [
   { id: "producto", label: "Producto", sub: "Cierres con tareas pendientes, tareas sin hacer" },
   { id: "finanzas", label: "Finanzas", sub: "Caja y descuadres (cuando existan)" },
   { id: "marketing", label: "Marketing", sub: "Reseñas de Google (cuando existan)" },
+  { id: "tecnologia", label: "Tecnología", sub: "Solicitudes en las que estás: te toca, cambios y comentarios. Por WhatsApp llegan aunque tengas «solo lo urgente»" },
 ];
 const CANALES = [{ id: "email", label: "Correo" }, { id: "whatsapp", label: "WhatsApp" }];
 
@@ -54,14 +55,14 @@ function MisAvisosCard() {
 
   if (!d || d.rol !== "admin" || !prefs) return null;
 
-  const area = (a) => prefs.areas?.[a] || { email: true, whatsapp: false };
+  const area = (a) => prefs.areas?.[a] || { email: true, whatsapp: a === "tecnologia" };
   const setArea = (a, canal, v) => setPrefs((p) => ({ ...p, areas: { ...p.areas, [a]: { ...area(a), [canal]: v } } }));
   // Ajuste por tipo: si no hay, manda el del área
   const valorTipo = (t, canal) => {
     const o = prefs.tipos?.[t.tipo]?.[canal];
     if (typeof o === "boolean") return o;
     const base = area(t.area)[canal];
-    return canal === "whatsapp" ? base && (!prefs.solo_urgente_whatsapp || t.urgente) : base;
+    return canal === "whatsapp" ? base && (t.area === "tecnologia" || !prefs.solo_urgente_whatsapp || t.urgente) : base;
   };
   const setTipo = (t, canal, v) => setPrefs((p) => ({ ...p, tipos: { ...(p.tipos || {}), [t.tipo]: { ...(p.tipos?.[t.tipo] || {}), [canal]: v } } }));
 
