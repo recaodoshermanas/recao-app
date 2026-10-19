@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { F, SF, C, SHADOW } from "../../lib/styles.js";
-import { IcoCheck, IcoRight, IcoLeft, IcoCalendar, IcoSun, IcoReceipt, IcoUser, IcoSwap, IcoBars, IcoUsers } from "../../lib/icons.jsx";
+import { IcoCheck, IcoRight, IcoLeft, IcoCalendar, IcoSun, IcoReceipt, IcoSwap, IcoBars, IcoUsers } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js"; // BOLSA
 import { BOLSA_ACTIVA } from "../../lib/bolsa.js"; // BOLSA
+import { TURNOS, horasTurno, ymd } from "../../lib/turnos.js";
 import { CerrarTurnoView } from "./CerrarTurnoView.jsx";
 import { MiHorarioView } from "./MiHorarioView.jsx";
 import { MisVacacionesView } from "./MisVacacionesView.jsx";
@@ -18,112 +19,138 @@ import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
 import { WorkerView } from "../WorkerView.jsx";
 import { IR_CORREO } from "../../lib/enlaceAviso.js";
 import { NovedadesEquipo } from "../../components/Novedades.jsx"; // NOVEDADES
-import { FichajesDudosos } from "../../components/FichajesDudosos.jsx"; // FICHAJES
 
-const IcoCaja = ({ size = 20, color = "currentColor" }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 7v10l9 4 9-4V7" /><path d="M12 11v10" /></svg>; // RECEPCION
-const TILES = [
-  { id: "recepcion", label: "Recepcionar pedido", sub: "Mercancía que llega", Ico: IcoCaja, iconBg: "#FBF0DA", iconFg: "#B08421" }, // RECEPCION
-  ...(BOLSA_ACTIVA ? [{ id: "cubrir", label: "Turnos para cubrir", sub: "Mañana y Tarde", Ico: IcoUsers, iconBg: "#FBF0DA", iconFg: "#B08421" }] : []), // BOLSA
-  { id: "horario", label: "Mis horarios", sub: "Tu calendario", Ico: IcoCalendar, iconBg: "#EAF4EE", iconFg: "#2D8B4E" },
-  { id: "fichajes", label: "Mis fichajes", sub: "Horas de la caja", Ico: IcoCalendar, iconBg: "#EAF0F8", iconFg: "#4A7AB5" }, // FICHAJES
-  { id: "revisar", label: "Turno anterior", sub: "Revisar y reportar", Ico: IcoCheck, iconBg: "#FBEDE9", iconFg: "#C44D3F" },
-  { id: "documentos", label: "Mis documentos", sub: "Nóminas y contrato", Ico: IcoReceipt, iconBg: "#F0ECE2", iconFg: "#8A7A54" }, // DOCUMENTOS
-  { id: "seguimiento", label: "Mi seguimiento", sub: "Plus y faltas", Ico: IcoBars, iconBg: "#EAF0F8", iconFg: "#4A7AB5" },
-  { id: "avisos", label: "Avisos", sub: "Incidencias y plazos", Ico: IcoCheck, iconBg: "#FBF0DA", iconFg: "#B08421" },
-  { id: "cambio", label: "Cambiar turno", sub: "Con una compañera", Ico: IcoSwap, iconBg: "#FBEEDC", iconFg: "#C08A2E" },
-  { id: "vacaciones", label: "Mis vacaciones", sub: "Días y solicitudes", Ico: IcoSun, iconBg: "#E4F5F5", iconFg: "#189595" },
-  { id: "facturas", label: "Facturas", sub: "Registrar", Ico: IcoReceipt, iconBg: "#F0EEF6", iconFg: "#8B6DAF" },
-  { id: "cuenta", label: "Mi cuenta", sub: "Contraseña", Ico: IcoUser, iconBg: "#F0ECE2", iconFg: "#8A7A54" },
+// Inicio de la plantilla (solicitud #10): «Mi turno», «Pendiente», novedades, «En la tienda» (diario) y «Lo tuyo» (de vez en cuando).
+// Iconos en un solo tono tostado; el rojo solo para los números de «Pendiente» y la etiqueta «Nuevo».
+const TOSTADO = "#8A7A54";
+const Ico = ({ children, size = 20, color = TOSTADO }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, display: "block" }}>{children}</svg>;
+const IcoCaja = (p) => <Ico {...p}><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3" /><path d="M12 12l8-4.5" /><path d="M12 12v9" /><path d="M12 12L4 7.5" /></Ico>;
+const IcoFactura = (p) => <Ico {...p}><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2" /><path d="M9 8h6" /><path d="M9 12h6" /></Ico>;
+const IcoMas = (p) => <Ico {...p}><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M12 8v8" /><path d="M8 12h8" /></Ico>;
+const IcoLista = (p) => <Ico {...p}><path d="M9 6h11" /><path d="M9 12h11" /><path d="M9 18h11" /><path d="M4 6l1 1 2-2" /><path d="M4 12l1 1 2-2" /><path d="M4 18l1 1 2-2" /></Ico>;
+const IcoDoc = (p) => <Ico {...p}><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2" /><path d="M9 13h6" /><path d="M9 17h6" /></Ico>;
+
+const EN_TIENDA = [
+  { id: "recepcion", label: "Recepcionar pedido", Ico: IcoCaja },
+  { id: "facturas", label: "Facturas", Ico: IcoFactura },
+  { id: "anadir", label: "Añadir producto", Ico: IcoMas },
+  { id: "revisar", label: "Turno anterior", Ico: IcoLista },
 ];
-const TITULOS = { anadir: "Añadir producto", documentos: "Mis documentos", fichajes: "Mis fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", horario: "Mis horarios", revisar: "Turno anterior", seguimiento: "Mi seguimiento", avisos: "Avisos", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const LO_TUYO = [
+  { id: "horarios", label: "Horarios y fichajes", Ico: (p) => <IcoCalendar size={20} color={TOSTADO} sw={1.9} {...p} /> },
+  { id: "vacaciones", label: "Vacaciones", Ico: (p) => <IcoSun size={20} color={TOSTADO} sw={1.9} {...p} /> },
+  { id: "cambio", label: "Cambiar turno", Ico: (p) => <IcoSwap size={20} color={TOSTADO} sw={1.9} {...p} /> },
+  ...(BOLSA_ACTIVA ? [{ id: "cubrir", label: "Turnos para cubrir", Ico: (p) => <IcoUsers size={20} color={TOSTADO} sw={1.9} {...p} /> }] : []), // BOLSA
+  { id: "documentos", label: "Mis documentos", Ico: IcoDoc },
+  { id: "seguimiento", label: "Mi seguimiento", sub: "Avisos, plus y faltas", Ico: (p) => <IcoBars size={20} color={TOSTADO} sw={1.9} {...p} /> },
+];
+const TITULOS = { anadir: "Añadir producto", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
+// A dónde lleva cada destino de la campana o del correo (?ir=…) en la organización nueva: [pantalla, pestaña]
+const DESTINOS = {
+  avisos: ["seguimiento", "avisos"], seguimiento: ["seguimiento", null], fichajes: ["horarios", "fichajes"], horario: ["horarios", "horarios"],
+  vacaciones: ["vacaciones"], cambio: ["cambio"], recepcion: ["recepcion"], documentos: ["documentos"], cuenta: ["cuenta"],
+  ...(BOLSA_ACTIVA ? { cubrir: ["cubrir"] } : {}),
+};
 // Enlace de un correo de aviso (?ir=vacaciones): abre esa pantalla. Se guarda hasta que la trabajadora sale de ella,
 // por si la app se monta dos veces mientras carga.
-const PANTALLAS_IR = ["avisos", "vacaciones", "cambio", "cubrir", "recepcion", "fichajes", "documentos"];
-let irInicial = PANTALLAS_IR.includes(IR_CORREO) && (IR_CORREO !== "cubrir" || BOLSA_ACTIVA) ? IR_CORREO : null;
+let irInicial = DESTINOS[IR_CORREO] ? IR_CORREO : null;
+
+const horasQuedan = (iso) => Math.max(1, Math.ceil((new Date(iso).getTime() - Date.now()) / 3600000));
 
 export function WorkerApp({ user, facturas, proveedores, onReload }) {
-  const [screen, setScreen] = useState(() => irInicial || "home");
-  useEffect(() => { if (screen !== irInicial) irInicial = null; }, [screen]);
+  const [screen, setScreen] = useState(() => (irInicial ? DESTINOS[irInicial][0] : "home"));
+  const [pestana, setPestana] = useState(() => (irInicial ? DESTINOS[irInicial][1] : null)); // pestaña de «Horarios y fichajes» o «Mi seguimiento»
+  useEffect(() => { if (irInicial && screen !== DESTINOS[irInicial][0]) irInicial = null; }, [screen]);
+  const ir = (destino) => { const d = DESTINOS[destino]; if (!d) return; setPestana(d[1] || null); setScreen(d[0]); };
+  const abrir = (id) => { setPestana(null); setScreen(id); };
+
   const [porCubrir, setPorCubrir] = useState(0); // BOLSA
-  const [mesFichajes, setMesFichajes] = useState(null); // FICHAJES: mes que abre «Mis fichajes» desde el aviso del inicio
-  useEffect(() => { if (screen === "home") setMesFichajes(null); }, [screen]);
   const [porRecepcionar, setPorRecepcionar] = useState({ n: 0, listos: 0 }); // RECEPCION
+  const [avisos, setAvisos] = useState([]); // avisos de incidencia por responder (sin alegación y con plazo abierto)
+  const [dudosos, setDudosos] = useState([]); // FICHAJES: fichajes dudosos de los últimos 14 días
+  const [turnoHoy, setTurnoHoy] = useState(null);
+  const [mesFichajes, setMesFichajes] = useState(null); // FICHAJES: mes que abre «Fichajes» desde «Pendiente»
+  useEffect(() => { if (screen === "home") setMesFichajes(null); }, [screen]);
 
   useEffect(() => {
-    const irA = (d) => { if (d === "avisos") setScreen("avisos"); else if (d === "vacaciones") setScreen("vacaciones"); else if (d === "cambio") setScreen("cambio"); else if (d === "cubrir" && BOLSA_ACTIVA) setScreen("cubrir"); else if (d === "recepcion") setScreen("recepcion"); else if (d === "fichajes") setScreen("fichajes"); else if (d === "documentos") setScreen("documentos"); };
-    const h = (e) => irA(e.detail && e.detail.destino);
+    const h = (e) => ir(e.detail && e.detail.destino);
     window.addEventListener("recao-nav", h);
     return () => window.removeEventListener("recao-nav", h);
   }, []);
 
-  // BOLSA: cuántos turnos puede cubrir ahora mismo (sin contar los que ya rechazó)
-  useEffect(() => {
-    if (!BOLSA_ACTIVA || screen !== "home") return;
-    sb.rpc("bolsa_disponibles").then(r => setPorCubrir((r || []).filter(x => x.destino === "plantilla" && !x.rechazado).length)).catch(() => {});
-  }, [screen]);
-
-  // RECEPCION: pedidos pendientes de recepcionar (y cuántos ya tienen su factura)
+  // Lo pendiente del inicio: se recarga cada vez que vuelve al inicio
   useEffect(() => {
     if (screen !== "home") return;
-    sb.fn("recepcion", { accion: "inicio" }).then(r => { const p = r.pendientes || []; setPorRecepcionar({ n: p.length, listos: p.filter(x => x.estado === "por_revisar" && x.via === "email").length }); }).catch(() => {});
-  }, [screen]);
+    if (BOLSA_ACTIVA) sb.rpc("bolsa_disponibles").then(r => setPorCubrir((r || []).filter(x => x.destino === "plantilla" && !x.rechazado).length)).catch(() => {}); // BOLSA
+    sb.fn("recepcion", { accion: "inicio" }).then(r => { const p = r.pendientes || []; setPorRecepcionar({ n: p.length, listos: p.filter(x => x.estado === "por_revisar" && x.via === "email").length }); }).catch(() => {}); // RECEPCION
+    sb.fn("disciplina", { action: "mis_avisos" }).then(r => setAvisos((r.avisos || []).filter(a => a.estado === "emitido" && !a.alegacion_en && a.plazo_alegacion && new Date(a.plazo_alegacion) > new Date()))).catch(() => {});
+    sb.rpc("mis_fichajes_dudosos").then(r => setDudosos(Array.isArray(r) ? r : [])).catch(() => {}); // FICHAJES
+    sb.select("horarios", `select=turno&usuario_id=eq.${user.id}&fecha=eq.${ymd(new Date())}`).then(r => setTurnoHoy((r && r[0] && r[0].turno) || null)).catch(() => {});
+  }, [screen, user.id]);
 
   if (screen === "home") {
     const hoy = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+    const def = turnoHoy && TURNOS[turnoHoy];
+    const horas = def && def.tipo !== "libre" ? horasTurno(turnoHoy, ymd(new Date())) : "";
+    const subturno = horas ? `${turnoHoy} · ${horas.replace("-", " – ")}` : "Tus tareas de hoy y cerrar el turno";
+    const plazo = avisos.length ? avisos.map(a => a.plazo_alegacion).sort()[0] : null;
+    const pendiente = [
+      avisos.length && { id: "avisos", n: avisos.length, texto: avisos.length > 1 ? "Avisos por responder" : "Aviso por responder", sub: `Quedan ${horasQuedan(plazo)} h`, urgente: true, onClick: () => ir("avisos") },
+      porRecepcionar.n && { id: "recepcion", n: porRecepcionar.n, texto: `${porRecepcionar.n > 1 ? "Pedidos" : "Pedido"} por recepcionar${porRecepcionar.listos ? ` · ${porRecepcionar.listos} ya ${porRecepcionar.listos > 1 ? "tienen" : "tiene"} su factura` : ""}`, onClick: () => abrir("recepcion") }, // RECEPCION
+      BOLSA_ACTIVA && porCubrir && { id: "cubrir", n: porCubrir, texto: `${porCubrir > 1 ? "Turnos" : "Turno"} por cubrir en tus días libres`, onClick: () => abrir("cubrir") }, // BOLSA
+      dudosos.length && { id: "fichajes", n: dudosos.length, texto: `${dudosos.length > 1 ? "Fichajes" : "Fichaje"} que revisar`, onClick: () => { setMesFichajes(dudosos[0].fecha.slice(0, 7)); ir("fichajes"); } }, // FICHAJES (#4)
+    ].filter(Boolean);
+    const seccion = { fontFamily: F, fontSize: 11, color: C.mutL, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, margin: "18px 2px 8px" };
+    const caja = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, overflow: "hidden" };
     return (
-      <div style={{ padding: "18px 16px", maxWidth: 540, margin: "0 auto" }}>
+      <div style={{ padding: "18px 16px 28px", maxWidth: 540, margin: "0 auto" }}>
         <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 14 }}>{hoy}</div>
 
-        <button onClick={() => setScreen("cerrar")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", background: C.gold, border: "none", borderRadius: 20, padding: 20, display: "flex", alignItems: "center", gap: 15, boxShadow: SHADOW.hero, textAlign: "left" }}>
+        <button onClick={() => abrir("cerrar")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", background: C.gold, border: "none", borderRadius: 20, padding: 18, display: "flex", alignItems: "center", gap: 15, boxShadow: SHADOW.hero, textAlign: "left" }}>
           <span style={{ width: 46, height: 46, borderRadius: 14, background: C.goldDark, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IcoCheck size={24} color={C.gold} sw={2.2} /></span>
           <span style={{ flex: 1 }}>
             <span style={{ display: "block", fontFamily: SF, fontSize: 21, color: C.goldDark }}>Mi turno</span>
-            <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.goldSub, marginTop: 2 }}>Tus tareas de hoy y cerrar el turno</span>
+            <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.goldSub, marginTop: 2 }}>{subturno}</span>
           </span>
           <IcoRight size={20} color={C.goldSub} sw={2.4} />
         </button>
 
-        <FichajesDudosos estilo={{ marginTop: 12 }} onRevisar={(mes) => { setMesFichajes(mes); setScreen("fichajes"); }} />
-
-        <NovedadesEquipo estilo={{ marginTop: 12 }} />
-
-        {BOLSA_ACTIVA && porCubrir > 0 && ( // BOLSA
-          <button onClick={() => setScreen("cubrir")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", marginTop: 12, background: C.char, border: "none", borderRadius: 15, padding: "15px 18px", display: "flex", alignItems: "center", gap: 13, textAlign: "left" }}>
-            <span style={{ width: 34, height: 34, borderRadius: "999px", background: C.gold, color: C.goldDark, fontFamily: SF, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{porCubrir}</span>
-            <span style={{ flex: 1, fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.gold }}>turno{porCubrir > 1 ? "s" : ""} de Mañana o Tarde por cubrir en tus días libres</span>
-            <IcoRight size={18} color={C.gold} sw={2.4} />
-          </button>
+        {pendiente.length > 0 && (
+          <div style={{ ...caja, marginTop: 12 }}>
+            <div style={{ fontFamily: F, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, color: C.red, padding: "11px 16px 4px" }}>Pendiente</div>
+            {pendiente.map((p, i) => (
+              <button key={p.id} type="button" onClick={p.onClick} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", gap: 11, padding: "11px 16px", border: "none", borderTop: i ? `1px solid ${C.brdL}` : "none", background: p.urgente ? "#FBEDE9" : "#fff", cursor: "pointer", textAlign: "left" }}>
+                <span style={{ minWidth: 24, height: 24, padding: "0 7px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12.5, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{p.n}</span>
+                <span style={{ flex: 1, fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{p.texto}{p.sub && <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#A3362B" }}>{p.sub}</span>}</span>
+                <IcoRight size={17} color={p.urgente ? "#A3362B" : C.mutL} sw={2.4} />
+              </button>
+            ))}
+          </div>
         )}
 
-        {porRecepcionar.n > 0 && ( // RECEPCION
-          <button onClick={() => setScreen("recepcion")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", marginTop: 12, background: C.char, border: "none", borderRadius: 15, padding: "15px 18px", display: "flex", alignItems: "center", gap: 13, textAlign: "left" }}>
-            <span style={{ width: 34, height: 34, borderRadius: "999px", background: C.gold, color: C.goldDark, fontFamily: SF, fontSize: 17, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{porRecepcionar.n}</span>
-            <span style={{ flex: 1, fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.gold }}>pedido{porRecepcionar.n > 1 ? "s" : ""} por recepcionar{porRecepcionar.listos ? ` · ${porRecepcionar.listos} ya ${porRecepcionar.listos > 1 ? "tienen" : "tiene"} su factura` : ""}</span>
-            <IcoRight size={18} color={C.gold} sw={2.4} />
-          </button>
-        )}
+        <NovedadesEquipo compacta estilo={{ marginTop: 12 }} />
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
-          {TILES.map(t => { const Ico = t.Ico; return (
-            <button key={t.id} onClick={() => setScreen(t.id)} style={{ position: "relative", textAlign: "left", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 18, padding: 16, cursor: "pointer", boxShadow: SHADOW.card }}>
-              <span style={{ width: 38, height: 38, borderRadius: 11, background: t.iconBg, display: "flex", alignItems: "center", justifyContent: "center" }}><Ico size={20} color={t.iconFg} /></span>
-              {t.id === "recepcion" && porRecepcionar.n > 0 && <span style={{ position: "absolute", top: 12, right: 12, minWidth: 22, height: 22, padding: "0 6px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{porRecepcionar.n}</span>}
-              {t.id === "cubrir" && porCubrir > 0 && <span style={{ position: "absolute", top: 12, right: 12, minWidth: 22, height: 22, padding: "0 6px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{porCubrir}</span>}
-              <div style={{ fontFamily: SF, fontSize: 16, color: C.char, marginTop: 12 }}>{t.label}</div>
-              <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 2 }}>{t.sub}</div>
+        <div style={seccion}>En la tienda</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {EN_TIENDA.map(t => (
+            <button key={t.id} type="button" onClick={() => abrir(t.id)} style={{ display: "flex", alignItems: "center", gap: 11, minHeight: 58, padding: "12px 14px", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 15, cursor: "pointer", textAlign: "left", boxShadow: SHADOW.card }}>
+              <t.Ico />
+              <span style={{ fontFamily: F, fontSize: 14, fontWeight: 600, color: C.char, lineHeight: 1.25 }}>{t.label}</span>
             </button>
-          ); })}
+          ))}
         </div>
 
-        <button onClick={() => setScreen("anadir")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", marginTop: 12, background: "#fff", border: `1.5px solid ${C.char}`, borderRadius: 18, padding: 16, display: "flex", alignItems: "center", gap: 13, textAlign: "left", boxShadow: SHADOW.card }}>
-          <span style={{ width: 38, height: 38, borderRadius: 11, background: C.char, color: C.gold, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: SF, fontSize: 22, flexShrink: 0 }} aria-hidden="true">+</span>
-          <span style={{ flex: 1 }}>
-            <span style={{ display: "block", fontFamily: SF, fontSize: 16, color: C.char }}>Añadir producto</span>
-            <span style={{ display: "block", fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 2 }}>Algo de la tienda que no pasa por caja</span>
-          </span>
-          <IcoRight size={18} color={C.mut} sw={2.4} />
-        </button>
+        <div style={seccion}>Lo tuyo</div>
+        <div style={caja}>
+          {LO_TUYO.map((t, i) => (
+            <button key={t.id} type="button" onClick={() => abrir(t.id)} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", gap: 12, minHeight: 50, padding: "11px 16px", border: "none", borderTop: i ? `1px solid ${C.brdL}` : "none", background: "#fff", cursor: "pointer", textAlign: "left" }}>
+              <t.Ico />
+              <span style={{ flex: 1, fontFamily: F, fontSize: 14.5, color: C.char }}>{t.label}{t.sub && <span style={{ display: "block", fontSize: 11.5, color: C.mutL, marginTop: 1 }}>{t.sub}</span>}</span>
+              <IcoRight size={17} color={C.mutL} sw={2.4} />
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -131,23 +158,64 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderBottom: `1px solid ${C.brdL}`, position: "sticky", top: 52, background: C.cream, zIndex: 8 }}>
-        <button onClick={() => setScreen("home")} style={{ border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IcoLeft size={18} color={C.char} sw={2.4} /></button>
+        <button onClick={() => setScreen("home")} aria-label="Volver al inicio" style={{ border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IcoLeft size={18} color={C.char} sw={2.4} /></button>
         <div style={{ fontFamily: SF, fontSize: 18, color: C.char }}>{TITULOS[screen]}</div>
       </div>
       {screen === "recepcion" && <RecepcionView />}
       {screen === "anadir" && <AnadirProductoView onFin={() => setScreen("home")} />}
-      {screen === "fichajes" && <MisFichajesView mesInicial={mesFichajes} />}
+      {screen === "horarios" && <HorariosYFichajes user={user} pestana={pestana} mesFichajes={mesFichajes} />}
       {screen === "documentos" && <MisDocumentosView />}
       {screen === "cerrar" && <CerrarTurnoView user={user} />}
       {screen === "cubrir" && <CubrirTurnosView user={user} />}
-      {screen === "horario" && <MiHorarioView user={user} />}
       {screen === "revisar" && <RevisarTurnoView user={user} />}
-      {screen === "seguimiento" && <MiSeguimientoView user={user} />}
-      {screen === "avisos" && <MisAvisosView user={user} />}
+      {screen === "seguimiento" && <Seguimiento user={user} pestana={pestana} />}
       {screen === "cambio" && <CambioTurnoView user={user} />}
       {screen === "vacaciones" && <MisVacacionesView user={user} />}
       {screen === "facturas" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={onReload} user={user} />}
       {screen === "cuenta" && <MiCuentaView />}
     </div>
+  );
+}
+
+// Pestañas oscuras como las de la bolsa
+function Pestanas({ valor, onChange, opciones }) {
+  return (
+    <div style={{ padding: "14px 16px 0", maxWidth: 540, margin: "0 auto" }}>
+      <div role="tablist" style={{ display: "flex", gap: 4, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 14, padding: 4 }}>
+        {opciones.map(o => { const on = valor === o.id; return (
+          <button key={o.id} role="tab" aria-selected={on} type="button" onClick={() => onChange(o.id)} style={{ flex: 1, minHeight: 42, border: "none", borderRadius: 11, cursor: "pointer", background: on ? C.char : "transparent", color: on ? C.gold : C.mut, fontFamily: F, fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            {o.label}{o.n > 0 && <span style={{ background: C.red, color: "#fff", borderRadius: 999, padding: "0 7px", fontSize: 11.5, lineHeight: "18px" }}>{o.n}</span>}
+          </button>
+        ); })}
+      </div>
+    </div>
+  );
+}
+
+function HorariosYFichajes({ user, pestana, mesFichajes }) {
+  const [tab, setTab] = useState(pestana || "horarios");
+  return (
+    <>
+      <Pestanas valor={tab} onChange={setTab} opciones={[{ id: "horarios", label: "Horarios" }, { id: "fichajes", label: "Fichajes" }]} />
+      {tab === "horarios" ? <MiHorarioView user={user} /> : <MisFichajesView mesInicial={mesFichajes} />}
+    </>
+  );
+}
+
+// «Mi seguimiento»: Avisos (incidencias, prueba, alegación y resolución) y Plus y faltas. Con un aviso abierto se abre en Avisos.
+function Seguimiento({ user, pestana }) {
+  const [abiertos, setAbiertos] = useState(null);
+  const [tab, setTab] = useState(pestana);
+  useEffect(() => {
+    sb.fn("disciplina", { action: "mis_avisos" })
+      .then(r => { const n = (r.avisos || []).filter(a => a.estado === "emitido" && !a.alegacion_en && a.plazo_alegacion && new Date(a.plazo_alegacion) > new Date()).length; setAbiertos(n); setTab(t => t || (n ? "avisos" : "plus")); })
+      .catch(() => { setAbiertos(0); setTab(t => t || "plus"); });
+  }, []);
+  if (!tab) return <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 30 }}>Cargando…</div>;
+  return (
+    <>
+      <Pestanas valor={tab} onChange={setTab} opciones={[{ id: "avisos", label: "Avisos", n: abiertos }, { id: "plus", label: "Plus y faltas" }]} />
+      {tab === "avisos" ? <MisAvisosView user={user} /> : <MiSeguimientoView user={user} />}
+    </>
   );
 }

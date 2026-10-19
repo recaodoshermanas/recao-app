@@ -99,7 +99,10 @@ export function Header({ user, onLogout }) {
         <img src={LOGO} alt="Recao" style={{ height: 22, display: "block", filter: "brightness(0) invert(1)" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontFamily: F, fontSize: 12, color: "#C9C0B0" }}>{user && user.nombre}</span>
-          <span style={{ width: 30, height: 30, borderRadius: "999px", background: av.bg, color: av.fg, fontFamily: SF, fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>{av.inicial}</span>
+          {user && user.rol === "trabajadora" && !user.eventual
+            // Plantilla: la inicial abre «Mi cuenta» (solicitud #10)
+            ? <button type="button" aria-label="Mi cuenta" title="Mi cuenta" onClick={() => window.dispatchEvent(new CustomEvent("recao-nav", { detail: { destino: "cuenta" } }))} style={{ width: 30, height: 30, padding: 0, border: "none", cursor: "pointer", borderRadius: "999px", background: av.bg, color: av.fg, fontFamily: SF, fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>{av.inicial}</button>
+            : <span style={{ width: 30, height: 30, borderRadius: "999px", background: av.bg, color: av.fg, fontFamily: SF, fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>{av.inicial}</span>}
           {user && <NotificacionesBell user={user} />}
           <button onClick={onLogout} style={{ background: "transparent", border: "none", color: "#8A8070", fontFamily: F, fontSize: 12, cursor: "pointer", padding: "4px 6px" }}>Salir</button>
         </div>
