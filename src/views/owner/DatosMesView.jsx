@@ -6,6 +6,7 @@ import { sb } from "../../lib/supabase.js";
 import { Sec } from "../../components/Sec.jsx";
 import { AperturaSobres, DescuadreSobres, useSobres } from "./AperturaSobres.jsx"; // SOBRES (#13)
 import { EposCierres } from "./EposCierres.jsx"; // #15
+import { SalariosMes } from "./SalariosMes.jsx"; // #18
 
 export function DatosMesView({ facturas, monthlyData, config, onReload, initialMonth }) {
   const allMonths = [...new Set([...Object.keys(monthlyData), currentMK])].sort().reverse();
@@ -26,6 +27,9 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
   const [repartoSocios, setRepartoSocios] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [salNuevo, setSalNuevo] = useState(null); // #18: null cargando · true tarjetas por trabajadora · false lista de antes
+  const [salV2, setSalV2] = useState([]);
+  useEffect(() => { setSalNuevo(null); }, [selMonth]);
 
   useEffect(() => {
     const d = monthlyData[selMonth] || {};
@@ -50,13 +54,13 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
       const payload = {
         mes: selMonth,
         ventas_epos: pn(ventas),
-        paqueteria, gastos_fijos: gastosFijos, salarios,
+        paqueteria, gastos_fijos: gastosFijos, salarios: salNuevo ? salV2 : salarios,
         otros_gastos: otrosGastos, inversiones,
         reparto_socios: pn(repartoSocios),
         resumen_legacy: null,
       };
       await sb.upsert("datos_mes", payload, "mes");
-      if (salarios.length > 0) {
+      if (!salNuevo && salarios.length > 0) {
         await sb.upsert("config", { key: "salarios_template", value: salarios }, "key");
       }
       await onReload();
@@ -117,7 +121,8 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
       </div>
 
       <Sec title="Salarios" />
-      <div style={crd}>
+      <SalariosMes mes={selMonth} guardado={md.salarios} onCambio={setSalV2} onModo={setSalNuevo} />
+      {salNuevo === false && <div style={crd}>
         {salarios.map(s => (
           <div key={s.id} style={{ display: "flex", gap: "8px", marginBottom: "8px", alignItems: "center" }}>
             <input value={s.nombre} onChange={e => setSalarios(p => p.map(x => x.id === s.id ? { ...x, nombre: e.target.value } : x))} placeholder="Nombre" style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: "13px", marginBottom: 0 }} />
@@ -126,7 +131,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
           </div>
         ))}
         <button onClick={() => setSalarios(p => [...p, { id: uid(), nombre: "", amount: 0 }])} style={{ border: `1.5px dashed ${C.brd}`, background: "none", fontFamily: F, fontSize: "12px", color: C.mut, padding: "10px", borderRadius: "8px", width: "100%", cursor: "pointer" }}>+ Añadir salario</button>
-      </div>
+      </div>}
 
       <Sec title="Gastos fijos" />
       <div style={crd}>
@@ -167,7 +172,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         <div style={crd}><input type="number" inputMode="decimal" value={repartoSocios} onChange={e => setRepartoSocios(e.target.value)} placeholder="0" style={{ ...inp, marginBottom: 0 }} /></div>
       </div>
 
-      <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "16px", border: "none", borderRadius: "12px", background: saving ? "#D8D0C4" : C.char, color: saving ? "#A09888" : C.gold, fontFamily: SF, fontSize: "16px", cursor: saving ? "default" : "pointer", marginTop: "8px", marginBottom: "40px", boxShadow: "0 4px 16px rgba(0,0,0,0.15)" }}>
+      <button onClick={handleSave} disabled={saving || salNuevo === null} style={{ width: "100%", padding: "16px", border: "none", borderRadius: "12px", background: saving ? "#D8D0C4" : C.char, color: saving ? "#A09888" : C.gold, fontFamily: SF, fontSize: "16px", cursor: saving ? "default" : "pointer", marginTop: "8px", marginBottom: "40px", boxShadow: "0 4px 16px rgba(0,0,0,0.15)" }}>
         {saving ? "Guardando..." : saved ? "✓ Guardado" : "Guardar datos del mes"}
       </button>
     </div>
