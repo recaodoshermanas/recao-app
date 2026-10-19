@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { sb } from "../../src/lib/supabase.js";
 import { Panel, avisar, hoyStr, fechaCorta, Cargando } from "./ui.jsx";
 import { eur, mesAnio } from "./fmt.js";
+import { ExtrasSobres } from "../../src/views/owner/ExtrasSobres.jsx"; // #17
 
 const TIPOS = {
   reparto: { label: "Reparto", chip: "rep" }, extra: { label: "Extra", chip: "ext" }, compra: { label: "Compra", chip: "com" },
@@ -25,6 +26,7 @@ export function EfectivoSobres() {
     catch (e) { setFallo(/socios/i.test(e.message || "") ? "socios" : "error"); }
   }, [mes]);
   useEffect(() => { cargar(); }, [cargar]);
+  const refrescar = async () => { try { setD(await sb.rpc("efectivo_sobres_mes", { p_mes: mes })); } catch (e) { /* se ve al recargar */ } };
 
   if (fallo === "socios") return <div className="card"><h2>Efectivo de sobres</h2><p className="empty">Esta sección es solo para los socios.</p></div>;
   if (fallo) return <div className="card"><h2>Efectivo de sobres</h2><p className="empty">No se ha podido cargar.</p></div>;
@@ -60,6 +62,7 @@ export function EfectivoSobres() {
           <button className="btn-txt" onClick={() => setPanel({ config: true })}>Importes del reparto</button>
         </div>
         <p className="sub">Las compras sueltas y reparaciones se apuntan en Facturas → Nueva factura con el tipo de pago «Efectivo sobres» y salen aquí solas.</p>
+        <div style={{ border: "1px solid var(--line, #EBE3D5)", borderRadius: 14, padding: "14px 16px", margin: "10px 0 14px" }}><ExtrasSobres mes={d.mes_sobres} onCambio={refrescar} /></div>
         {d.salidas.length === 0 ? <p className="empty">Sin salidas este mes.</p> : (
           <div className="tabla-scroll">
             <table className="ranking es-tabla">
@@ -72,7 +75,7 @@ export function EfectivoSobres() {
                     <td>{s.tipo === "reparto" ? s.persona : s.tipo === "extra" ? <>{s.persona}{s.concepto ? <span className="pf">{s.concepto}</span> : null}</> : s.tipo === "banco" ? `${s.banco}${s.concepto ? ` · ${s.concepto}` : ""}` : (s.concepto || "—")}{s.cambios > 0 && <span className="pf">Corregido</span>}</td>
                     <td>{s.quien || "—"}</td>
                     <td className="r b">−{eur(s.importe, 2)}</td>
-                    <td className="r" style={{ whiteSpace: "nowrap" }}>{s.origen === "factura" ? <span className="pf">Se corrige en la factura</span> : s.origen === "apertura" ? <span className="pf">Se cambia en la Apertura de sobres</span> : <button className="btn-l" onClick={() => setPanel({ editar: s })}>Corregir</button>}</td>
+                    <td className="r" style={{ whiteSpace: "nowrap" }}>{s.origen === "factura" ? <span className="pf">Se corrige en la factura</span> : s.origen === "extras" ? <span className="pf">Se cambia en «Extras de trabajadoras»</span> : <button className="btn-l" onClick={() => setPanel({ editar: s })}>Corregir</button>}</td>
                   </tr>
                 ))}
               </tbody>

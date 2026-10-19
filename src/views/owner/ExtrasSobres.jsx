@@ -1,6 +1,6 @@
-// Apertura de sobres → «Extras a pagar con los sobres» (solicitud #17). Solo los 4 socios.
+// Finanzas → Efectivo de sobres → «Extras de trabajadoras» (solicitud #17). Solo los 4 socios.
 // Lista fija (desde octubre de 2026) + cambios solo de este mes + extras puntuales. «Editar lista fija» vale de este mes en adelante.
-// Cuentan como gasto de personal de este mes y salen del efectivo de los sobres el día 1 del mes siguiente (cuando la apertura está guardada).
+// Los de la nómina de un mes (M) salen ya puestos en Efectivo de sobres de M+1 (los sobres de M se abren el día 1) y cuentan como gasto de personal de M.
 import { useCallback, useEffect, useState } from "react";
 import { F, SF, C, inp, lbl } from "../../lib/styles.js";
 import { fmt2 } from "../../lib/utils.js";
@@ -55,7 +55,7 @@ function FormExtra({ d, titulo, onGuardar, onCerrar, busy }) {
   );
 }
 
-export function ExtrasSobres({ mes, contado }) {
+export function ExtrasSobres({ mes, contado = null, onCambio }) {
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -67,20 +67,21 @@ export function ExtrasSobres({ mes, contado }) {
 
   const accion = async (p) => {
     setBusy(true); setMsg("");
-    try { setD(await sb.rpc("sobres_extras_accion", { p_mes: mes, p })); setBusy(false); return true; }
+    try { setD(await sb.rpc("sobres_extras_accion", { p_mes: mes, p })); setBusy(false); onCambio?.(); return true; }
     catch (e) { setMsg(e.message || "No se ha podido guardar"); setBusy(false); return false; }
   };
   const lineas = d.lineas || [];
   const antes = mes < d.desde;
+  if (antes && !lineas.length) return <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>Los extras fijos de trabajadoras empiezan con la nómina de {mesTxt(d.desde)}: salen ya puestos aquí, en el mes siguiente.</div>;
 
   return (
-    <div style={{ marginTop: 14, borderTop: `1px solid ${C.brdL}`, paddingTop: 12 }}>
+    <div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-        <span style={{ fontFamily: SF, fontSize: 16, color: C.char, flex: 1 }}>Extras a pagar con los sobres</span>
+        <span style={{ fontFamily: SF, fontSize: 16, color: C.char, flex: 1 }}>Extras de trabajadoras · nómina de {mesTxt(mes)}</span>
         <span style={{ fontFamily: F, fontSize: 14, fontWeight: 800, color: C.char }}>{fmt2(Number(d.total))}</span>
       </div>
       <div style={{ fontFamily: F, fontSize: 12, color: C.mut, margin: "2px 0 8px", lineHeight: 1.4 }}>
-        {antes ? `La lista fija empieza en ${mesTxt(d.desde)}.` : "No cambian el esperado ni la diferencia. Cuentan como gasto de personal de este mes y, cuando la apertura está guardada, salen solos en Efectivo de sobres el día 1."}
+        {antes ? `La lista fija empieza en ${mesTxt(d.desde)}.` : `Se pagan con los sobres de ${mesTxt(mes)} y ya vienen puestos. Lo que cambies aquí vale solo para este mes; la lista fija, de este mes en adelante. Cuentan como gasto de personal de ${mesTxt(mes)}.`}
       </div>
       {lineas.length === 0 && <div style={{ fontFamily: F, fontSize: 13, color: C.mut, padding: "4px 0" }}>Sin extras este mes.</div>}
       {lineas.map((l) => (

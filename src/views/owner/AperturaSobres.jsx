@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react";
 import { F, SF, C, inp, lbl, crd } from "../../lib/styles.js";
 import { fmt2 } from "../../lib/utils.js";
 import { sb } from "../../lib/supabase.js";
-import { ExtrasSobres } from "./ExtrasSobres.jsx"; // #17
 
 const ROJO = "#B3261E";
 const dinero = (v) => (v == null || v === "" ? "–" : fmt2(Number(v)));
@@ -160,7 +159,6 @@ export function AperturaSobres({ mes, datos, setDatos }) {
               {datos.historial.map((h, i) => <div key={i} style={{ padding: "4px 0" }}>{cuando(h.en)} · {h.por || "—"}: {h.despues == null ? `quitó el contado de ${dinero(h.antes)}` : <>{h.antes == null ? "sin contado" : `antes ${dinero(h.antes)}`} → {dinero(h.despues)}</>}</div>)}
             </details>
           )}
-          <ExtrasSobres mes={mes} contado={datos.contado} />
         </div>
       )}
     </div>
