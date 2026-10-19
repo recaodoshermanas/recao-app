@@ -10,14 +10,14 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 async function loadPerfil(authId, token) {
   try {
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/usuarios?select=id,email,nombre,rol,activo,eventual,jornada&auth_id=eq.${authId}`,
+      `${SUPABASE_URL}/rest/v1/usuarios?select=id,email,nombre,rol,activo,eventual,jornada,es_socio&auth_id=eq.${authId}`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token || SUPABASE_KEY}` } }
     );
     if (!r.ok) return null;
     const rows = await r.json();
     const u = rows?.[0];
     if (!u || !u.activo) return null;
-    return { id: u.id, email: u.email, nombre: u.nombre, rol: u.rol, eventual: !!u.eventual, jornada: u.jornada || null };
+    return { id: u.id, email: u.email, nombre: u.nombre, rol: u.rol, eventual: !!u.eventual, jornada: u.jornada || null, es_socio: !!u.es_socio };
   } catch (_) {
     return null;
   }

@@ -23,6 +23,7 @@ export const AREAS = [
       { id: "resumen", label: "Resumen" },
       { id: "resultados", label: "Cuenta de resultados" },
       { id: "caja", label: "Caja" },
+      { id: "sobres", label: "Efectivo de sobres" },
       { id: "compras", label: "Compras" },
       { id: "facturas", label: "Facturas", legado: true },
       { id: "cierre", label: "Cierre de mes", legado: true },

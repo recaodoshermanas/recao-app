@@ -232,7 +232,9 @@ export function FinanzasResultados({ onEditMonth }) {
   const filas = [
     { k: "ventas", l: "Ventas (con IVA)" }, { k: "paqueteria", l: "Paquetería" }, { k: "ingresos", l: "Ingresos", b: true },
     ...CATS.map((c) => ({ k: c.id, l: c.label, neg: true })),
-    { k: "gastos", l: "Gastos", b: true, neg: true }, { k: "resultado", l: "Resultado", b: true, r: true },
+    { k: "gastos", l: "Gastos", b: true, neg: true }, { k: "resultado", l: "Beneficio del negocio", b: true, r: true },
+    // Solo los socios (#14): el reparto no es gasto, va debajo del beneficio
+    ...(d.socio ? [{ k: "reparto_sobres", l: "Reparto a socios", neg: true }, { k: "resultado_tras_reparto", l: "Resultado después del reparto", b: true, r2: true }] : []),
   ];
   const margenFilas = [
     { l: "Venta sin IVA (Epos)", f: (m) => m.epos_sin_iva },
@@ -255,9 +257,9 @@ export function FinanzasResultados({ onEditMonth }) {
             <thead><tr><th />{meses.map((m) => <th key={m.mes} className={m.mes === mes.mes ? "sel" : ""}><button onClick={() => setSel(m.mes)}>{mesCorto(m.mes)}<small>{String(parseDate(m.mes).getFullYear()).slice(2)}</small></button></th>)}</tr></thead>
             <tbody>
               {filas.map((f) => (
-                <tr key={f.k} className={`${f.b ? "b" : ""}${f.r ? " r" : ""}`}>
+                <tr key={f.k} className={`${f.b ? "b" : ""}${f.r ? " r" : ""}${f.r2 ? " r tras" : ""}`}>
                   <th>{f.l}</th>
-                  {meses.map((m) => <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${f.r ? (m.resultado >= 0 ? " up" : " down") : ""}`}>{val(m, n0(m[f.k]))}</td>)}
+                  {meses.map((m) => <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${f.r ? (m.resultado >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}`}>{f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k]))}</td>)}
                 </tr>
               ))}
               <tr className="sep"><th colSpan={meses.length + 1}>Margen real según Epos (sin IVA)</th></tr>
@@ -301,6 +303,7 @@ function DetalleMes({ mes, onCambio, onEditMonth }) {
         <h3 className="fh3">Salarios</h3>
         <ul className="pq-l">
           {(mes.salarios_det || []).filter((s) => n0(s.amount)).map((s) => <li key={s.id}><span>{s.nombre || "Sin nombre"}</span><span>{eur(n0(s.amount), 2)}</span></li>)}
+          {n0(mes.extras) > 0 && <li><span>Extras a trabajadoras (efectivo de sobres)</span><span>{eur(n0(mes.extras), 2)}</span></li>}
         </ul>
         <h3 className="fh3">Gastos fijos</h3>
         <ul className="pq-l">

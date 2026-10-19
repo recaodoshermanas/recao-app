@@ -7,6 +7,7 @@ import { Pulso } from "./Pulso.jsx";
 import { PersonasResumen } from "./PersonasResumen.jsx";
 import { Legado } from "./Legado.jsx";
 import { FinanzasResumen, FinanzasResultados, FinanzasCaja, FinanzasCompras } from "./Finanzas.jsx";
+import { EfectivoSobres } from "./EfectivoSobres.jsx"; // #14
 import { Horarios } from "./personas/Horarios.jsx";
 import { Solicitudes } from "./personas/Solicitudes.jsx";
 import { Seguimiento } from "./personas/Seguimiento.jsx";
@@ -222,6 +223,7 @@ export default function App() {
   else if (area.id === "finanzas" && sub.id === "resumen") contenido = <FinanzasResumen />;
   else if (area.id === "finanzas" && sub.id === "resultados") contenido = <FinanzasResultados onEditMonth={editarMes} />;
   else if (area.id === "finanzas" && sub.id === "caja") contenido = <FinanzasCaja />;
+  else if (area.id === "finanzas" && sub.id === "sobres") contenido = <EfectivoSobres />;
   else if (area.id === "finanzas" && sub.id === "compras") contenido = <FinanzasCompras />;
   else contenido = <Legado area={area.id} sub={sub.id} datos={datos} user={user} mesFoco={mesFoco} onEditMonth={editarMes} />;
 

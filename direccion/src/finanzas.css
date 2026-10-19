@@ -101,3 +101,30 @@
 .cf-previa { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; background: var(--bg-2, #F6F1E8); border-radius: 12px; padding: 12px 14px; font-size: 13.5px; margin-top: 6px; }
 .cf-previa b { text-align: right; }
 @media (max-width: 760px) { .cf .cf-kpis { grid-template-columns: 1fr 1fr; } }
+
+/* Efectivo de sobres (Finanzas) y líneas del reparto en la Cuenta de resultados */
+.fpl tr.tras td.neg-fuerte { background: #B3261E !important; color: #fff !important; font-weight: 800; }
+.es .es-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 4px 0 14px; }
+.es .es-kpis > div { background: var(--bg-2, #F6F1E8); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+.es .es-kpis small { font-size: 12px; color: var(--muted); font-weight: 600; }
+.es .es-kpis b { font-size: 19px; }
+.es .es-kpis span { font-size: 12px; color: var(--muted); }
+.es .es-saldo { background: #FBF0DA !important; }
+.es .es-saldo b { font-size: 24px; }
+.es .es-saldo.neg { background: #B3261E !important; }
+.es .es-saldo.neg small, .es .es-saldo.neg b { color: #fff; }
+.es-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.es-aviso { background: #FFF1E0; color: #7A4A0C; border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 600; margin: 0 0 12px; }
+.es-rojo { background: #FBE3DE; color: #8A2C1C; border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 700; margin: 0 0 12px; }
+.es-chip { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: #F0ECE2; color: #5E5444; }
+.es-chip.rep { background: #EDE4F5; color: #5A3A7A; }
+.es-chip.ext { background: #E7EEF7; color: #2F5C8F; }
+.es-chip.com { background: #F3E9D6; color: #6A4A08; }
+.es-chip.ban { background: #EAF4EE; color: #1E6B3C; }
+.es-chip.cf { background: #FBF0DA; color: #7A5410; }
+.es-tabla td .pf { display: block; }
+.es-fila { display: grid; grid-template-columns: 1fr 140px; align-items: center; gap: 10px; }
+.es-hist { margin-top: 14px; font-size: 12.5px; color: var(--muted); display: grid; gap: 4px; }
+.es-hist b { color: var(--text); }
+.es-resumen { margin-top: 10px; }
+@media (max-width: 760px) { .es .es-kpis { grid-template-columns: 1fr 1fr; } }

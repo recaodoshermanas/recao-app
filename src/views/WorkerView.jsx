@@ -5,9 +5,10 @@ import { sb } from "../lib/supabase.js";
 import { useConfirm } from "../hooks/useConfirm.jsx";
 
 const TIPOS_PAGO = [["efectivo", "Efectivo"], ["tarjeta", "Tarjeta"], ["caja_fuerte", "Caja fuerte"]];
-const ESTILO_PAGO = { tarjeta: ["#E7EEF7", "#3F6EA5"], efectivo: ["#EAF3EC", "#2E7D4F"], caja_fuerte: ["#F3E9D6", "#6A4A08"] };
+const TIPO_SOBRES = ["efectivo_sobres", "Efectivo sobres"]; // #14: solo los socios
+const ESTILO_PAGO = { tarjeta: ["#E7EEF7", "#3F6EA5"], efectivo: ["#EAF3EC", "#2E7D4F"], caja_fuerte: ["#F3E9D6", "#6A4A08"], efectivo_sobres: ["#EDE4F5", "#5A3A7A"] };
 const TURNOS_TRAB = [["mañana", "Mañana"], ["tarde", "Tarde"]];
-const etiquetaPago = (t) => (t === "tarjeta" ? "Tarjeta" : t === "efectivo" ? "Efectivo" : t === "caja_fuerte" ? "Caja fuerte" : "");
+const etiquetaPago = (t) => (t === "tarjeta" ? "Tarjeta" : t === "efectivo" ? "Efectivo" : t === "caja_fuerte" ? "Caja fuerte" : t === "efectivo_sobres" ? "Efectivo sobres" : "");
 const turnoPorHora = () => (new Date().getHours() < 15 ? "mañana" : "tarde");
 
 export function WorkerView({ facturas, proveedores, onReload, user }) {
@@ -127,12 +128,13 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
           <label style={lbl}>Importe (€)</label>
           <input type="number" inputMode="decimal" value={importe} onChange={e => setImporte(e.target.value)} placeholder="0,00" style={{ ...inp, marginBottom: "16px" }} />
           <label style={lbl}>Tipo de pago</label>
-          <div style={{ display: "flex", gap: "8px", marginBottom: tipoPago === "caja_fuerte" ? "8px" : "16px" }}>
-            {TIPOS_PAGO.map(([val, label]) => {
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: tipoPago === "caja_fuerte" || tipoPago === "efectivo_sobres" ? "8px" : "16px" }}>
+            {(user?.es_socio ? [...TIPOS_PAGO, TIPO_SOBRES] : TIPOS_PAGO).map(([val, label]) => {
               const on = tipoPago === val;
-              return <button key={val} onClick={() => setTipoPago(val)} style={{ flex: 1, padding: "13px 6px", borderRadius: "10px", cursor: "pointer", fontFamily: F, fontSize: "14px", fontWeight: 700, border: on ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{label}</button>;
+              return <button key={val} onClick={() => setTipoPago(val)} style={{ flex: 1, minWidth: user?.es_socio ? "40%" : 0, padding: "13px 6px", borderRadius: "10px", cursor: "pointer", fontFamily: F, fontSize: "14px", fontWeight: 700, border: on ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{label}</button>;
             })}
           </div>
+          {tipoPago === "efectivo_sobres" && <div style={{ fontFamily: F, fontSize: "12.5px", color: "#5A3A7A", background: "#F3EDF8", borderRadius: "10px", padding: "9px 12px", marginBottom: "16px", lineHeight: 1.4 }}>Compra suelta o reparación pagada con el efectivo de los sobres: sale sola en Finanzas → Efectivo de sobres.</div>}
           {tipoPago === "caja_fuerte" && <div style={{ fontFamily: F, fontSize: "12.5px", color: "#6A4A08", background: "#FBF0DA", borderRadius: "10px", padding: "9px 12px", marginBottom: "16px", lineHeight: 1.4 }}>Este dinero sale de la caja fuerte: no sale de la caja registradora ni va al sobre del cierre.</div>}
           <label style={lbl}>Turno en que se metió</label>
           <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
