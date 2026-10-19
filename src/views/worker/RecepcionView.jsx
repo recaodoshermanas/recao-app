@@ -360,12 +360,91 @@ function SinCodigo({ productos: iniciales, onTerminar }) {
   );
 }
 
+// ---------- 11 · Poner código a productos que ya existen y no lo tienen (solicitud #12) ----------
+const fnCod = (accion, datos = {}) => sb.fn("codigos", { accion, ...datos });
+const sinAcentos = (t) => String(t ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+function FilaPonerCodigo({ p, abierto, onAbrir, onHecho }) {
+  const [codigo, setCodigo] = useState("");
+  const [noLleva, setNoLleva] = useState(false);
+  const [estado, setEstado] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (!codigo || codigo.length < 8) { setEstado(""); return; } if (!eanOk(codigo)) { setEstado(codigo.length >= 13 || codigo.length === 8 ? "malo" : ""); return; } setEstado("mirando"); const t = setTimeout(() => fn("comprobar_codigo", { codigo }).then((r) => setEstado(r.producto ? "existe" : "nuevo")).catch(() => setEstado("nuevo")), 300); return () => clearTimeout(t); }, [codigo]);
+  const guardar = async () => {
+    setBusy(true); setMsg("");
+    try {
+      if (noLleva) { await fnCod("no_lleva", { product_id: p.id }); onHecho(p.id, "sin"); }
+      else {
+        const r = await fnCod("poner", { product_id: p.id, codigo });
+        if (r.duplicado) { setMsg(`Ese código ya lo tiene «${r.duplicado.nombre}». No lo he guardado: se lo he mandado a dirección.`); setBusy(false); return; }
+        onHecho(p.id, "ok");
+      }
+    } catch (e) { setMsg(e.message || "No se ha podido guardar"); }
+    setBusy(false);
+  };
+  const listo = noLleva || estado === "nuevo";
+  return (
+    <div style={{ ...card, padding: abierto ? 16 : "12px 16px", gap: abierto ? 10 : 0, border: `1px solid ${abierto ? "#E0B94A" : C.brdL}` }}>
+      <button type="button" onClick={onAbrir} aria-expanded={abierto} style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", width: "100%" }}>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontFamily: F, fontSize: 14.5, fontWeight: 700, color: C.char }}>{p.nombre}</span>
+          <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.mut }}>{[p.proveedor, p.categoria, p.pvp ? eur(p.pvp) : null].filter(Boolean).join(" · ")}</span>
+        </span>
+        <IcoRight size={16} color={C.mutL} sw={2.4} />
+      </button>
+      {abierto && (
+        <>
+          <CampoCodigo id={`pc-${p.id}`} codigo={codigo} setCodigo={setCodigo} sinCodigo={noLleva} setSinCodigo={setNoLleva} estado={estado === "existe" ? "malo" : estado} />
+          {!noLleva && estado === "existe" && <div style={{ fontFamily: F, fontSize: 12.5, color: "#A3362B", fontWeight: 600 }}>Ese código ya lo tiene otro producto. Si lo guardas, se lo mando a dirección para que lo revise.</div>}
+          <Aviso msg={msg} tipo={/mandado/.test(msg) ? "bien" : "mal"} />
+          <button type="button" disabled={busy || !(listo || estado === "existe")} onClick={guardar} style={{ ...btnDark, minHeight: 46, opacity: busy || !(listo || estado === "existe") ? 0.5 : 1 }}>{busy ? "Guardando…" : noLleva ? "Guardar: no lleva código" : "Guardar código"}</button>
+        </>
+      )}
+    </div>
+  );
+}
+function PonerCodigos({ onVolver }) {
+  const [lista, setLista] = useState(null);
+  const [buscar, setBuscar] = useState("");
+  const [abierto, setAbierto] = useState(null);
+  const [hechos, setHechos] = useState({ ok: 0, sin: 0 });
+  useEffect(() => { fnCod("lista").then((r) => setLista(r.productos || [])).catch(() => setLista([])); }, []);
+  if (!lista) return <Cargando />;
+  const q = sinAcentos(buscar).trim();
+  const filtrada = q ? lista.filter((p) => sinAcentos(`${p.nombre} ${p.proveedor || ""} ${p.categoria || ""}`).includes(q)) : lista;
+  const MAX = 60;
+  return (
+    <div style={{ padding: "16px 16px 28px", display: "flex", flexDirection: "column", gap: 12, maxWidth: 540, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: SF, fontSize: 22, color: C.char }}>Poner código</div>
+          <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{lista.length} producto{lista.length === 1 ? "" : "s"} de la tienda sin código de barras</div>
+        </div>
+        <button type="button" onClick={onVolver} style={{ ...btnPeq, height: 38 }}>Volver</button>
+      </div>
+      {(hechos.ok > 0 || hechos.sin > 0) && <Aviso tipo="bien" msg={[hechos.ok ? `${hechos.ok} con código nuevo` : null, hechos.sin ? `${hechos.sin} marcado${hechos.sin === 1 ? "" : "s"} sin código` : null].filter(Boolean).join(" · ") + " ✓"} />}
+      <input type="search" value={buscar} onChange={(e) => { setBuscar(e.target.value); setAbierto(null); }} placeholder="Busca por nombre, proveedor o categoría" aria-label="Buscar producto" style={inp} />
+      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.45 }}>Coge el producto de la estantería, búscalo aquí y pásale la pistola. Si de verdad no lleva código (pan del día, fruta, obrador…), márcalo y sale de la lista.</div>
+      {filtrada.length === 0 && <div style={{ fontFamily: F, fontSize: 14, color: C.mut }}>{lista.length ? "No hay ninguno con ese nombre." : "Todos los productos tienen ya su código ✓"}</div>}
+      {filtrada.slice(0, MAX).map((p) => (
+        <FilaPonerCodigo key={p.id} p={p} abierto={abierto === p.id} onAbrir={() => setAbierto(abierto === p.id ? null : p.id)}
+          onHecho={(id, tipo) => { setLista((l) => l.filter((x) => x.id !== id)); setHechos((h) => ({ ...h, [tipo]: h[tipo] + 1 })); setAbierto(null); }} />
+      ))}
+      {filtrada.length > MAX && <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, textAlign: "center" }}>Y {filtrada.length - MAX} más: escribe para buscar.</div>}
+    </div>
+  );
+}
+
 // ---------- 9 · Añadir producto desde el inicio ----------
 export function AnadirProductoView({ onFin }) {
   const [provs, setProvs] = useState(null);
   const [hecho, setHecho] = useState(null);
   const [clave, setClave] = useState(0);
+  const [poner, setPoner] = useState(false); // #12: poner código a productos que ya existen
+  const [sinCod, setSinCod] = useState(null);
   useEffect(() => { fn("inicio").then((r) => setProvs(r.proveedores || [])).catch(() => setProvs([])); }, []);
+  useEffect(() => { if (!poner) fnCod("lista").then((r) => setSinCod((r.productos || []).length)).catch(() => {}); }, [poner]);
+  if (poner) return <PonerCodigos onVolver={() => setPoner(false)} />;
   if (!provs) return <Cargando />;
   if (hecho) return (
     <div style={{ padding: "36px 16px 24px", display: "flex", flexDirection: "column", gap: 14, maxWidth: 540, margin: "0 auto" }}>
@@ -378,7 +457,23 @@ export function AnadirProductoView({ onFin }) {
       <button type="button" onClick={onFin} style={btnDark}>Volver al inicio</button>
     </div>
   );
-  return <FichaProducto key={clave} modo="fuera" proveedores={provs} onCerrar={onFin} onListo={(r) => { if (r.existente) onFin(); else setHecho(r); }} />;
+  return (
+    <>
+      {sinCod > 0 && (
+        <div style={{ padding: "16px 16px 0", maxWidth: 540, margin: "0 auto" }}>
+          <button type="button" onClick={() => setPoner(true)} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", background: "#fff", border: "1.5px solid #E0B94A", borderRadius: 16, cursor: "pointer", textAlign: "left" }}>
+            <span style={{ minWidth: 34, height: 26, padding: "0 8px", boxSizing: "border-box", borderRadius: 999, background: "#FBF0DA", color: "#7A5410", fontFamily: F, fontSize: 13, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{sinCod}</span>
+            <span style={{ flex: 1 }}>
+              <span style={{ display: "block", fontFamily: F, fontSize: 14.5, fontWeight: 700, color: C.char }}>¿Ya existe pero no tiene código?</span>
+              <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.mut }}>Ponle el código a los productos de la tienda que no lo tienen</span>
+            </span>
+            <IcoRight size={18} color={C.mutL} sw={2.4} />
+          </button>
+        </div>
+      )}
+      <FichaProducto key={clave} modo="fuera" proveedores={provs} onCerrar={onFin} onListo={(r) => { if (r.existente) onFin(); else setHecho(r); }} />
+    </>
+  );
 }
 
 // ---------- una línea del pedido ----------
