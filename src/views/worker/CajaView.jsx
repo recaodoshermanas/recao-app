@@ -227,6 +227,60 @@ function VentasHoy({ hist, cola, onAnular, onCerrar }) {
   );
 }
 
+
+// ---------- cierre de caja (como el de Epos) ----------
+function CierreZ({ onCerrar }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+  const cargar = useCallback(() => { setErr(""); setD(null); sb.rpc("caja_cierre").then(setD).catch((e) => setErr(e.message || "No se ha podido calcular")); }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+  const hora = (ts) => new Date(ts).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  const fila = (t, v, fuerte, color) => (
+    <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: fuerte ? 16 : 14, fontWeight: fuerte ? 700 : 400, color: color || C.char, padding: "4px 0" }}><span>{t}</span><span>{v}</span></div>
+  );
+  const bloque = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 14, padding: "10px 14px" };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 60, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "20px 12px", overflowY: "auto" }} onClick={onCerrar}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.cream, borderRadius: 20, padding: 16, width: "100%", maxWidth: 520, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ fontFamily: SF, fontSize: 20, color: C.char }}>Cierre de caja · Caja 1</div>
+          <button type="button" onClick={onCerrar} style={{ ...btnGhost, padding: "8px 14px" }}>Cerrar</button>
+        </div>
+        {err ? <div style={{ fontFamily: F, fontSize: 13.5, color: "#A3362B" }}>{err}</div> : !d ? <div style={{ fontFamily: F, fontSize: 14, color: C.mut, padding: 10 }}>Calculando…</div> : (<>
+          <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>Desde {new Date(d.desde).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} hasta ahora ({hora(d.hasta)})</div>
+          <div style={bloque}>
+            <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, color: C.mut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Ventas</div>
+            {fila(`Epos${d.epos?.hasta ? ` (hasta ${String(d.epos.hasta).slice(11, 16)})` : ""}`, `${eur(d.epos.efectivo)} · ${eur(d.epos.tarjeta)}`)}
+            {(Number(d.papel.efectivo) || Number(d.papel.tarjeta)) ? fila("Papel", `${eur(d.papel.efectivo)} · ${eur(d.papel.tarjeta)}`) : null}
+            {fila("App", `${eur(d.app.efectivo)} · ${eur(d.app.tarjeta)}`)}
+            <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, textAlign: "right" }}>efectivo · tarjeta</div>
+            <div style={{ borderTop: `1px solid ${C.brdL}`, marginTop: 6, paddingTop: 6 }}>
+              {fila("Efectivo que debe haber vendido", eur(d.ventas_efectivo), true)}
+              {fila("Tarjeta que debe haber (datáfono)", eur(d.ventas_tarjeta), true)}
+              {fila("Total ventas", eur(d.ventas_total))}
+            </div>
+          </div>
+          <div style={bloque}>
+            <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, color: C.mut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Efectivo en el cajón</div>
+            {fila("Fondo de caja", eur(d.fondo))}
+            {fila("+ Ventas en efectivo", eur(d.ventas_efectivo))}
+            {(d.pagos_efectivo || []).map((p, i) => fila(`− Pago ${p.proveedor}`, eur(p.importe), false, "#A3362B"))}
+            <div style={{ borderTop: `1px solid ${C.brdL}`, marginTop: 6, paddingTop: 6 }}>{fila("Debe haber en el cajón", eur(d.efectivo_cajon), true)}</div>
+          </div>
+          <div style={{ background: C.char, borderRadius: 14, padding: "14px 16px", textAlign: "center" }}>
+            <div style={{ fontFamily: F, fontSize: 12, color: "#C9BFA8", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Al sobre (dejando {eur(d.fondo)} de fondo)</div>
+            <div style={{ fontFamily: SF, fontSize: 36, color: C.gold }}>{eur(d.al_sobre)}</div>
+          </div>
+          <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: "#FBF0DA", borderRadius: 12, padding: "10px 12px", lineHeight: 1.45 }}>
+            Después haz el cierre de <b>Mi turno</b> como siempre, con estos datos en <b>Caja 1</b>: efectivo <b>{eur(d.ventas_efectivo)}</b> y tarjeta <b>{eur(d.ventas_tarjeta)}</b>.{(d.pagos_efectivo || []).length ? " Marca los pagos a proveedor en Caja 1." : ""}
+          </div>
+          <button type="button" onClick={cargar} style={{ ...btnGhost }}>Actualizar</button>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
 // ---------- pantalla principal ----------
 export function CajaView() {
   const [catalogo, setCatalogo] = useState(() => leer(K_CAT, null)?.items || null);
@@ -342,9 +396,10 @@ export function CajaView() {
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 12px 150px", display: "flex", flexDirection: "column", gap: 10 }}>
       <Escaner activo={camara && !modal && !hecho} onCodigo={codigoLeido} />
-      <div style={{ display: "flex", gap: 8 }}>
-        <button type="button" onClick={() => setModal("buscar")} style={{ ...btnGhost, flex: 2, height: 50, fontSize: 15 }}>🔎 Buscar por nombre</button>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => setModal("buscar")} style={{ ...btnGhost, flex: 2, height: 50, fontSize: 15 }}>🔎 Buscar</button>
         <button type="button" onClick={() => setModal("hoy")} style={{ ...btnGhost, flex: 1, height: 50 }}>Ventas de hoy</button>
+        <button type="button" onClick={() => setModal("cierre")} style={{ ...btnGhost, flex: 1, height: 50 }}>Cierre de caja</button>
         <button type="button" onClick={() => setCamara(!camara)} aria-pressed={camara} style={{ ...btnGhost, height: 50, padding: "0 12px" }}>{camara ? "Cámara: sí" : "Cámara: no"}</button>
       </div>
       {aviso && <div role="status" style={{ fontFamily: F, fontSize: 14, fontWeight: 600, borderRadius: 12, padding: "10px 12px", background: aviso.tipo === "mal" ? "#FBEAE7" : "#EAF4EE", color: aviso.tipo === "mal" ? "#A3362B" : "#1E6B3C" }}>{aviso.texto}</div>}
@@ -389,6 +444,7 @@ export function CajaView() {
 
       {modal === "buscar" && <Buscador catalogo={catalogo} onCerrar={() => setModal(null)} onElegir={(p) => { anadir(p, p.al_peso ? 1 : 1); setModal(null); mostrar(`${p.nombre} · ${eur(p.precio)}${p.al_peso ? " /kg: ajusta los kilos" : ""}`); }} />}
       {modal === "cobrar" && <Cobro total={total} onCerrar={() => setModal(null)} onCobrar={cobrar} />}
+      {modal === "cierre" && <CierreZ onCerrar={() => setModal(null)} />}
       {modal === "hoy" && <VentasHoy hist={hist} cola={cola} onAnular={anular} onCerrar={() => setModal(null)} />}
       {hecho && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
