@@ -168,6 +168,7 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const provElegido = !dentro ? (proveedores || []).find((p) => p.nombre === provSel) : null;
+  const sinCosteFuera = !dentro && !coste.trim();
 
   // ¿existe el código?
   useEffect(() => {
@@ -187,7 +188,7 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
   useEffect(() => {
     const t = setTimeout(() => {
       fn("precio_sugerido", { nombre, recepcion_id: recepcion?.id, supplier_id: dentro ? proveedor?.supplier_id : provElegido?.supplier_id, proveedor: dentro ? proveedor?.nombre : provElegido?.nombre, coste_sin_iva: coste ? numero(coste) : null, marcado: marcado === true, precio_marcado: marcado ? numero(pMarcado) || null : null })
-        .then((r) => { setSug(r); if (!tocado && r.pvp != null) setPvp(dinero(r.pvp)); }).catch(() => {});
+        .then((r) => { setSug(r); if (!tocado) setPvp(r.pvp != null ? dinero(r.pvp) : ""); }).catch(() => {});
     }, 450);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,9 +205,11 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
     if (dentro && !(numero(uds) > 0)) { setMsg("Pon las unidades recibidas"); return; }
     if (marcado === null) { setMsg("Dime si viene con el precio marcado"); return; }
     if (marcado && !(numero(pMarcado) > 0)) { setMsg("Pon el precio marcado"); return; }
-    if (!(numero(coste) > 0)) { setMsg("Pon el precio de coste"); return; }
-    if (!(numero(pvp) > 0)) { setMsg("Falta el precio de venta"); return; }
-    const datos = { nombre: nombre.trim(), codigo: sinCodigo ? null : codigo, sin_codigo: sinCodigo, marcado, precio_marcado: marcado ? numero(pMarcado) : null, coste: numero(coste), pvp: numero(pvp), pvp_sugerido: sug?.pvp ?? null, unidades: dentro ? numero(uds) : null };
+    // #20: fuera de pedido el coste es opcional (si no se sabe, se deja vacío y dirección lo revisa)
+    if (dentro && !(numero(coste) > 0)) { setMsg("Pon el precio de coste"); return; }
+    if (!dentro && coste.trim() && !(numero(coste) > 0)) { setMsg("Ese coste no es válido. Si no lo sabes, déjalo vacío"); return; }
+    if (!(numero(pvp) > 0)) { setMsg(sinCosteFuera ? "Pon un precio de venta para poder venderlo ya" : "Falta el precio de venta"); return; }
+    const datos = { nombre: nombre.trim(), codigo: sinCodigo ? null : codigo, sin_codigo: sinCodigo, marcado, precio_marcado: marcado ? numero(pMarcado) : null, coste: coste.trim() ? numero(coste) : null, pvp: numero(pvp), pvp_sugerido: sug?.pvp ?? null, unidades: dentro ? numero(uds) : null };
     if (modo === "pedido") { onListo({ nuevo: datos }); return; }
     setBusy(true);
     try {
@@ -246,9 +249,9 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
       </div>
       {marcado && <div><label style={lbl} htmlFor="fp-pm">Precio marcado</label><input id="fp-pm" inputMode="decimal" value={pMarcado} onChange={(e) => setPMarcado(e.target.value)} placeholder="0,00" style={{ ...inp, maxWidth: 160, fontWeight: 700 }} /></div>}
       <div>
-        {L(5, "Precio de coste")}
+        {L(5, dentro ? "Precio de coste" : "Precio de coste (si lo sabes)")}
         <input id="fp-5" inputMode="decimal" value={coste} onChange={(e) => setCoste(e.target.value)} placeholder="0,00" style={{ ...inp, maxWidth: 160, fontWeight: 700 }} />
-        <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 6 }}>El precio de la línea tal como sale en la factura. Si trae dos precios, pon el que <b>no lleva IVA</b>.{!dentro ? " Si no tienes factura, pon el que sepas: dirección lo revisa." : ""}</div>
+        <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 6 }}>{dentro ? <>El precio de la línea tal como sale en la factura. Si trae dos precios, pon el que <b>no lleva IVA</b>.</> : <>Si tienes la factura, el de la línea <b>sin IVA</b>. Si no lo sabes, <b>déjalo vacío</b>: dirección lo revisa y se coge de la factura cuando llegue.</>}</div>
       </div>
       <div style={{ border: `1.5px solid ${C.grn}`, borderRadius: 14, padding: 14, background: "#fff", display: "flex", flexDirection: "column", gap: 6 }}>
         <label style={{ ...lbl, marginBottom: 0 }} htmlFor="fp-pvp">Precio de venta</label>
@@ -257,8 +260,14 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
           <span style={{ fontFamily: F, fontSize: 15, color: C.char }}>€</span>
           {tocado && sug?.pvp != null && Math.abs(numero(pvp) - sug.pvp) > 0.001 && <button type="button" onClick={() => { setPvp(dinero(sug.pvp)); setTocado(false); }} style={{ background: "none", border: "none", fontFamily: F, fontSize: 12.5, color: C.mut, textDecoration: "underline", cursor: "pointer" }}>Volver a {eur(sug.pvp)}</button>}
         </div>
-        {sug?.nota && <div style={{ fontFamily: F, fontSize: 12.5, color: C.char }}>{sug.nota}</div>}
-        <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Sale solo. Si lo cambias, dirección lo revisa.</div>
+        {sinCosteFuera && sug?.pvp == null ? (
+          <div style={{ fontFamily: F, fontSize: 12.5, color: C.char }}>Sin coste no puedo calcularlo: pon un <b>precio momentáneo</b> para poder venderlo ya. Dirección decide el precio final.</div>
+        ) : (
+          <>
+            {sug?.nota && <div style={{ fontFamily: F, fontSize: 12.5, color: C.char }}>{sug.nota}</div>}
+            <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Sale solo. Si lo cambias, dirección lo revisa.</div>
+          </>
+        )}
       </div>
       <Aviso msg={msg} />
       <button type="button" disabled={busy} onClick={guardar} style={{ ...btnDark, background: C.grn, color: "#fff", fontSize: 17, padding: 16, opacity: busy ? 0.6 : 1 }}>{busy ? "Dando de alta…" : modo === "pedido" ? "Añadir al pedido" : modo === "espera" ? "Añadir al pedido y dar de alta" : "Dar de alta"}</button>

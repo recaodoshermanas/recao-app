@@ -24,7 +24,7 @@ const pct = (x) => (x == null ? "—" : `${String(x).replace(".", ",")} %`);
 function motivos(a) {
   const m = [];
   if (!a.revisado) m.push(["alta", "Alta reciente"]);
-  if (a.estado_coste === "sin_verificar") m.push(["coste", "Coste sin verificar"]);
+  if (a.estado_coste === "sin_verificar") m.push(["coste", a.coste_sin_iva == null && a.coste_introducido == null ? "Pendiente de coste" : "Coste sin verificar"]);
   if (!a.revisado && a.margen_bajo) m.push(["margen", "Margen bajo"]);
   if (!a.revisado && a.pvp_origen === "trabajadora") m.push(["precio", "Precio cambiado en tienda"]);
   if (!a.supplier_id) m.push(["prov", "Sin proveedor"]);
@@ -281,7 +281,7 @@ function Nuevos({ d, P, U, cargar, otras }) {
                     </td>
                     <td>{a._m.map(([k, t]) => chip(k, t))}</td>
                     <td className="r">{a.coste_sin_iva != null ? eur(a.coste_sin_iva, 3) : "—"}{a.coste_introducido != null && a.coste_introducido !== a.coste_sin_iva && <span className="pf">puso {String(a.coste_introducido).replace(".", ",")}{a.interpretacion ? ` (${a.interpretacion})` : ""}</span>}</td>
-                    <td className="r">{eur(p?.sale_price ?? a.pvp, 2)}<span className="pf">{PVP_ORIGEN[a.pvp_origen] || ""}{a.pvp_origen === "trabajadora" && a.pvp_calculado != null ? ` · el sistema daba ${eur(a.pvp_calculado, 2)}` : ""}</span></td>
+                    <td className="r">{eur(p?.sale_price ?? a.pvp, 2)}<span className="pf">{a.estado_coste === "sin_verificar" && a.coste_sin_iva == null && a.coste_introducido == null ? "precio momentáneo · " : ""}{PVP_ORIGEN[a.pvp_origen] || ""}{a.pvp_origen === "trabajadora" && a.pvp_calculado != null ? ` · el sistema daba ${eur(a.pvp_calculado, 2)}` : ""}</span></td>
                     <td style={{ minWidth: 220 }}>
                       {tieneCoste && (
                         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>

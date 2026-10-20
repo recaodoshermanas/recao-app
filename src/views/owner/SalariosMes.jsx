@@ -2,6 +2,7 @@
 // Tarjeta: nómina (fija de configuración o a mano) + horas extras × precio + plus del mes + extras manuales, y los extras
 // que se pagan con los sobres (#17). Al guardar, cada línea de datos_mes.salarios lleva amount = nómina + horas + plus + manuales
 // y el desglose; los extras de sobres NO van en amount porque ya cuentan en Personal desde Efectivo de sobres (no se cuentan dos veces).
+// Esporádicas (#21): quien tenga horas extras en el mes y no sea de plantilla sale aparte con horas × precio; su línea lleva esporadica: true.
 import { useEffect, useMemo, useState } from "react";
 import { F, SF, C, inp, crd } from "../../lib/styles.js";
 import { fmt2, uid } from "../../lib/utils.js";
@@ -31,7 +32,7 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
 
   const filas = useMemo(() => {
     if (!live || !live.nuevo) return [];
-    const g = new Map((guardado || []).filter((s) => s.v === 2).map((s) => [s.usuario_id, s]));
+    const g = new Map((guardado || []).filter((s) => s.v === 2 && !s.esporadica).map((s) => [s.usuario_id, s]));
     return live.trabajadoras.map((t) => {
       const manual = t.nomina_fija == null;
       const nom = manual ? num(nominas[t.usuario_id]) : Number(t.nomina_fija);
@@ -45,6 +46,16 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
     });
   }, [live, nominas, extras, guardado]);
 
+  // Esporádicas: las del mes y, si había alguna guardada que ya no tiene horas, se ve a 0 h hasta que se guarde (entonces desaparece)
+  const espo = useMemo(() => {
+    if (!live || !live.nuevo) return [];
+    const g = new Map((guardado || []).filter((s) => s.v === 2 && s.esporadica).map((s) => [s.usuario_id, s]));
+    const vivas = (live.esporadicas || []).map((t) => { const s = g.get(t.usuario_id); return { ...t, horas: Number(t.horas), importe_horas: Number(t.importe_horas), cambiado: !!s && r2(s.horas) !== r2(t.horas), quitada: false }; });
+    const ids = new Set(vivas.map((t) => t.usuario_id));
+    const idas = [...g.values()].filter((s) => !ids.has(s.usuario_id)).map((s) => ({ usuario_id: s.usuario_id, nombre: s.nombre, horas: 0, importe_horas: 0, cambiado: true, quitada: true }));
+    return [...vivas, ...idas].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es"));
+  }, [live, guardado]);
+
   // Lo que se guarda en datos_mes.salarios
   useEffect(() => {
     if (!live || !live.nuevo) return;
@@ -54,13 +65,17 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
       precio_hora: Number(live.precio_hora), plus: Number(f.t.plus),
       extras: f.ex.filter((e) => e.concepto?.trim() && Number.isFinite(e.valor) && e.valor > 0).map((e) => ({ id: e.id, concepto: e.concepto.trim(), importe: e.valor })),
       extras_sobres: f.sobres,
-    })));
-  }, [filas]); // eslint-disable-line react-hooks/exhaustive-deps
+    })).concat(espo.filter((e) => !e.quitada).map((e) => ({
+      id: `${mes}-${e.usuario_id}`, v: 2, esporadica: true, usuario_id: e.usuario_id, nombre: e.nombre, amount: r2(e.importe_horas),
+      nomina: null, nomina_manual: false, horas: e.horas, importe_horas: r2(e.importe_horas), precio_hora: Number(live.precio_hora), plus: 0, extras: [], extras_sobres: 0,
+    }))));
+  }, [filas, espo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (live === null) return <div style={{ ...crd, fontFamily: F, fontSize: 13, color: C.mut }}>Cargando salarios…</div>;
   if (!live || !live.nuevo) return null;
 
-  const totBase = r2(filas.reduce((a, f) => a + f.base, 0));
+  const totEspo = r2(espo.filter((e) => !e.quitada).reduce((a, e) => a + e.importe_horas, 0));
+  const totBase = r2(filas.reduce((a, f) => a + f.base, 0) + totEspo);
   const totSobres = r2(filas.reduce((a, f) => a + f.sobres, 0));
   const incompleto = filas.some((f) => f.falta);
   const fila = (t, v, extra = {}) => <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontFamily: F, fontSize: 13, color: C.char, padding: "3px 0", ...extra }}><span>{t}</span><span style={{ whiteSpace: "nowrap" }}>{v}</span></div>;
@@ -68,11 +83,6 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
 
   return (
     <div>
-      {live.horas_fuera.length > 0 && (
-        <div style={{ ...crd, background: "#FFF1E0", border: "none", fontFamily: F, fontSize: 13, color: "#7A4A0C" }}>
-          Hay horas extras de gente que no está en la lista y no se suman: {live.horas_fuera.map((h) => `${h.nombre} (${txt(h.horas)} h)`).join(", ")}.
-        </div>
-      )}
       {filas.map((f) => (
         <div key={f.t.usuario_id} style={{ ...crd, border: f.falta ? `2px solid ${ROJO}` : crd.border }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
@@ -104,8 +114,23 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
           )}
         </div>
       ))}
+      {espo.length > 0 && (
+        <>
+          <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: C.mut, textTransform: "uppercase", letterSpacing: "0.04em", margin: "14px 2px 6px" }}>Esporádicas</div>
+          {espo.map((e) => (
+            <div key={e.usuario_id} style={{ ...crd, opacity: e.quitada ? 0.6 : 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                <span style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{e.nombre}</span>
+                <span style={{ fontFamily: F, fontSize: 15, fontWeight: 800, color: C.char }}>{fmt2(e.importe_horas)}</span>
+              </div>
+              {e.cambiado && <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: "#7A4A0C", background: "#FFF1E0", borderRadius: 8, padding: "5px 8px", marginBottom: 6 }}>{e.quitada ? "Ya no tiene horas extras este mes: al guardar desaparece." : "Han cambiado desde el último guardado: al guardar se actualizan."}</div>}
+              {fila(`Horas extras: ${txt(e.horas)} h × ${fmt2(live.precio_hora)}`, fmt2(e.importe_horas))}
+            </div>
+          ))}
+        </>
+      )}
       <div style={{ ...crd, background: "#F4EFE6", border: "none" }}>
-        {fila("Nóminas, horas, plus y extras manuales", fmt2(totBase))}
+        {fila(totEspo > 0 ? "Nóminas, horas, plus, extras manuales y esporádicas" : "Nóminas, horas, plus y extras manuales", fmt2(totBase))}
         {totSobres > 0 && fila("Extras pagados con los sobres", fmt2(totSobres))}
         {fila("Total salarios del mes", fmt2(r2(totBase + totSobres)), { fontSize: 15, fontWeight: 800, borderTop: `1px solid ${C.brdL}`, marginTop: 4, paddingTop: 6 })}
         {incompleto && <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: ROJO, marginTop: 4 }}>Incompleto: falta alguna nómina. Se puede guardar igual.</div>}
