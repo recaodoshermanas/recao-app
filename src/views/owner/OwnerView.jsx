@@ -58,6 +58,7 @@ export function OwnerView({ facturas, monthlyData, proveedores, config, onReload
     const nav = (dest) => {
       const enEquipo = ["recepcion", "disciplina", "vacaciones", "cambios", "cobertura", "cierres", "incidencias", "horarios", "horas", "usuarios", "candidatos"];
       if (enEquipo.includes(dest)) { setMundo("equipo"); setTab(dest); }
+      if (dest === "facturas") { setMundo("finanzas"); setTab("facturas"); } // #24: facturas pendientes de importe
     };
     const h = (e) => { const d = e.detail && e.detail.destino; if (d) nav(d); };
     window.addEventListener("recao-nav", h);

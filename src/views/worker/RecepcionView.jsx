@@ -18,6 +18,13 @@ const importeNoCuadra = (l) => { const i = importeLinea(l); return l.importe_doc
 const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 18, padding: 16, boxShadow: SHADOW.card, display: "flex", flexDirection: "column", gap: 10 };
 const chip = (bg, fg) => ({ fontFamily: F, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: bg, color: fg });
 const CHIPS = { email: ["#EAF0F8", "#2F5C8F", "EMAIL"], foto: ["#FBF0DA", "#7A5410", "FOTO"], manual: ["#F0ECE2", "#5E5444", "MANUAL"] };
+// #24: desde el sábado 24, al confirmar se apunta sola la factura en «Facturas»
+const FACTURAS_DESDE = "2026-10-24";
+const hoyMadrid = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" });
+const PAGOS_REC = [["tarjeta", "Tarjeta / transferencia"], ["efectivo", "Efectivo (caja)"], ["caja_fuerte", "Caja fuerte"], ["banco", "Banco"]];
+const ETQ_PAGO = Object.fromEntries(PAGOS_REC);
+const claveProv = (t) => String(t ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const importeNum = (v) => { let t = String(v ?? "").trim().replace(/\s|€/g, "").replace(/[−–]/g, "-"); if (t.includes(",")) t = t.replace(/\./g, "").replace(",", "."); const n = Number(t); return t !== "" && Number.isFinite(n) ? n : NaN; };
 const btnPeq = { ...btnGhost, padding: "0 14px", height: 44, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 };
 
 // Foto → JPEG reducido en base64 (las fotos del móvil pesan mucho)
@@ -578,6 +585,19 @@ function Revisar({ datos, onHecho, onVolver }) {
   const [detalleAbierto, setDetalleAbierto] = useState(!(prov && prov.revision === false) || manual);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(datos.aviso || "");
+  // factura y forma de pago (#24, #26)
+  const conFactura = hoyMadrid() >= FACTURAS_DESDE;
+  const [facImporte, setFacImporte] = useState(rec.total != null ? dinero(rec.total) : "");
+  const [sinImporte, setSinImporte] = useState(false);
+  const [pago, setPago] = useState(null);
+  const [pagoAuto, setPagoAuto] = useState(false);
+  useEffect(() => {
+    sb.select("proveedor_pago_defecto", "select=nombre,pago").then((r) => {
+      const d = (r || []).find((x) => claveProv(x.nombre) === claveProv(rec.proveedor) || (prov?.nombre && claveProv(x.nombre) === claveProv(prov.nombre)));
+      if (d && ETQ_PAGO[d.pago]) { setPago((p) => p ?? d.pago); setPagoAuto(true); }
+    }).catch(() => {});
+  }, [rec.proveedor, prov?.nombre]);
+  const facImporteN = importeNum(facImporte);
   const cambiar = (i, cambio) => setLineas((ls) => ls.map((l, k) => (k === i ? { ...l, ...cambio } : l)));
   const pendientes = lineas.filter((l) => l.tipo === "venta" && !l.producto && l.emparejado !== "nuevo" && numero(l.q) > 0).length;
   const difs = lineas.filter((l) => l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-6).length;
@@ -593,14 +613,19 @@ function Revisar({ datos, onHecho, onVolver }) {
   const confirmar = async () => {
     if (pendientes) { setMsg(`Falta decir qué producto es en ${pendientes} línea${pendientes > 1 ? "s" : ""}`); setDetalleAbierto(true); return; }
     if (!lineas.some((l) => numero(l.q) > 0)) { setMsg("No hay nada que recepcionar"); return; }
+    if (conFactura && !pago) { setMsg("Elige cómo se ha pagado la factura"); return; }
+    if (conFactura && !sinImporte && !(Number.isFinite(facImporteN) && facImporteN !== 0)) { setMsg("Pon el importe total de la factura o marca «No sé el importe»"); return; }
     setBusy(true); setMsg("");
     try {
+      // #24: importe y forma de pago se guardan antes; al confirmar, la factura se crea sola en «Facturas»
+      if (conFactura) await sb.rpc("recepcion_factura_preparar", { p_id: rec.id, p_pago: pago, p_importe: sinImporte ? null : Math.round(facImporteN * 100) / 100, p_sin_importe: sinImporte });
       const r = await fn("confirmar", {
         id: rec.id,
         lineas: lineas.map((l) => ({ id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, unidades_por: l.unidades_por, descripcion: l.descripcion, nuevo: l.emparejado === "nuevo" && !l.product_id ? l.nuevo : undefined, coste_sin_iva: l.emparejado === "nuevo" ? undefined : l.coste_txt ? numero(l.coste_txt) : manual && l.coste_ref != null ? l.coste_ref : undefined })),
       });
+      if (conFactura) { try { const fs = await sb.select("facturas_proveedores", `select=id,importe,tipo_pago&recepcion_id=eq.${rec.id}`); r.factura = fs[0] || { error: true }; } catch { /* la factura se ve en «Facturas» */ } }
       onHecho(r);
-    } catch (e) { setMsg(e.message || "No se ha podido confirmar"); }
+    } catch (e) { setMsg((e.message || "No se ha podido confirmar").replace(/^RPC \S+: \d+ /, "").replace(/^.*"message":"([^"]+)".*$/, "$1")); }
     setBusy(false);
   };
   const descartar = async () => {
@@ -672,6 +697,26 @@ function Revisar({ datos, onHecho, onVolver }) {
           Suma de las líneas {eur(sumaLineas)} · total de la factura sin IVA {eur(rec.total_base)}{Math.abs(sumaLineas - Number(rec.total_base)) > 0.05 ? ": no cuadra, revisa los precios" : ""}
         </div>
       )}
+      <div style={card}>
+        <div style={{ fontFamily: F, fontSize: 15, fontWeight: 700, color: C.char }}>Factura y pago</div>
+        {!conFactura && <div style={{ fontFamily: F, fontSize: 12.5, color: "#2F5C8F", background: "#EAF0F8", borderRadius: 10, padding: "8px 10px" }}>Hasta el sábado 24 esto es solo de prueba: la factura todavía no se apunta sola, sigue apuntándola en «Facturas».</div>}
+        <label style={{ ...lbl, marginBottom: 0 }}>Importe total a pagar, con IVA (€)</label>
+        <input inputMode="decimal" value={sinImporte ? "" : facImporte} disabled={sinImporte} onChange={(e) => setFacImporte(e.target.value)} placeholder={sinImporte ? "Pendiente de importe" : "0,00"} style={{ ...inp, marginBottom: 0, ...(sinImporte ? { background: "#FDEBD3", borderColor: "#E8913A" } : {}) }} />
+        {!sinImporte && rec.total != null && facImporte && Number.isFinite(facImporteN) && Math.abs(facImporteN - Number(rec.total)) > 0.005 && <div style={{ fontFamily: F, fontSize: 12, color: "#1E6B3C" }}>Corregido: en el documento se había leído {eur(rec.total)}.</div>}
+        <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{rec.total != null ? "Es el total que se ha leído del documento: corrígelo si no es lo que se paga (por ejemplo, si el repartidor descuenta algo). " : ""}Abonos en negativo.</div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: F, fontSize: 13.5, color: C.char, cursor: "pointer" }}>
+          <input type="checkbox" checked={sinImporte} onChange={(e) => setSinImporte(e.target.checked)} style={{ width: 18, height: 18 }} />
+          No sé el importe (queda pendiente y se avisa a dirección)
+        </label>
+        <label style={{ ...lbl, marginBottom: 0, marginTop: 4 }}>¿Cómo se ha pagado?</label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {PAGOS_REC.map(([v, t]) => {
+            const on = pago === v;
+            return <button key={v} type="button" onClick={() => setPago(v)} aria-pressed={on} style={{ flex: "1 1 40%", padding: "12px 6px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 14, fontWeight: 700, border: on ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{t}</button>;
+          })}
+        </div>
+        {pagoAuto && <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Sale ya puesta la forma de pago de este proveedor. Cámbiala si hoy se ha pagado de otra forma.</div>}
+      </div>
       {difs > 0 && <div style={{ fontFamily: F, fontSize: 12.5, color: "#A3362B" }}>{difs} línea{difs > 1 ? "s" : ""} no coincide{difs > 1 ? "n" : ""} con el documento: queda apuntado para reclamar.</div>}
       <button type="button" disabled={busy} onClick={confirmar} style={{ ...btnDark, background: C.grn, color: "#fff", fontSize: 18, padding: 16, opacity: busy ? 0.6 : 1 }}>{busy ? "Guardando…" : "Confirmar recepción"}</button>
       <button type="button" onClick={descartar} style={{ background: "none", border: "none", fontFamily: F, fontSize: 13, color: C.mut, textDecoration: "underline", cursor: "pointer" }}>Descartar este pedido</button>
@@ -696,6 +741,7 @@ function Hecho({ r, onFin }) {
       </div>
       <div style={card}>
         {r.prueba ? fila(true, "Guardado. Modo prueba: el stock de la caja empieza a sumar tras el inventario.") : r.stock?.aplicado ? fila(true, "Stock sumado en la caja") : fila(false, r.stock?.errores?.length ? "No se ha podido sumar todo el stock: dirección ya está avisada" : "Guardado. El stock de la caja aún no se suma automáticamente.")}
+        {r.factura?.error ? fila(false, "No encuentro la factura en «Facturas»: apúntala a mano y avisa a dirección.") : r.factura?.id ? fila(true, r.factura.importe == null ? "Factura apuntada en «Facturas» como pendiente de importe: dirección ya está avisada" : `Factura apuntada en «Facturas»: ${eur(r.factura.importe)}${r.factura.tipo_pago ? ` · ${ETQ_PAGO[r.factura.tipo_pago] || r.factura.tipo_pago}` : ""}`) : null}
         {r.diferencias?.length ? fila(false, `${r.diferencias.length} diferencia${r.diferencias.length > 1 ? "s" : ""} apuntada${r.diferencias.length > 1 ? "s" : ""} para reclamar: ${r.diferencias.map((d) => `${d.descripcion} (${fmt(d.recibido - d.doc)})`).join(", ")}`) : fila(true, "Todo coincide con el documento")}
         {r.altas?.length ? fila(true, `${r.altas.length} producto${r.altas.length > 1 ? "s" : ""} nuevo${r.altas.length > 1 ? "s" : ""} dado${r.altas.length > 1 ? "s" : ""} de alta en la caja: ${r.altas.map((a) => `${a.nombre} (${eur(a.pvp)})`).join(", ")}`) : null}
         {r.fallos_alta?.length ? fila(false, `No se ha podido dar de alta: ${r.fallos_alta.join("; ")}. Dirección ya está avisada.`) : null}

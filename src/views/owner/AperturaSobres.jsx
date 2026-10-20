@@ -90,7 +90,7 @@ export function AperturaSobres({ mes, datos, setDatos }) {
       {abierta && (
         <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${C.brdL}` }}>
           <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.45, margin: "12px 0 8px" }}>
-            Los sobres que se abren el día 1 son los de este mes. El esperado se calcula solo con los cierres de caja de las dos cajas y cambia si se corrige algún cierre.
+            Los sobres que se abren el día 1 son los de este mes. El esperado se calcula solo con los cierres de caja de las dos cajas y cambia si se corrige algún cierre. Desde el 24 de octubre, las facturas pagadas en efectivo de caja restan por su fecha, sin engancharlas al cierre.
           </div>
           {fila("Efectivo vendido (cierres de caja)", dinero(datos.efectivo))}
           {fila("Pagos a proveedor hechos con ese efectivo", Number(datos.pagos) ? `−${dinero(datos.pagos)}` : dinero(0))}
@@ -104,7 +104,7 @@ export function AperturaSobres({ mes, datos, setDatos }) {
                   {(datos.detalle || []).map((r) => (
                     <tr key={`${r.fecha}-${r.caja}`} style={{ borderTop: `1px solid ${C.brdL}` }}>
                       <td style={{ padding: "5px 6px", textTransform: "capitalize" }}>{dia(r.fecha)}</td>
-                      <td style={{ padding: "5px 6px" }}>Caja {r.caja}</td>
+                      <td style={{ padding: "5px 6px" }}>{r.caja ? `Caja ${r.caja}` : "Facturas en efectivo"}</td>
                       <td style={{ padding: "5px 6px", textAlign: "right" }}>{dinero(r.efectivo)}</td>
                       <td style={{ padding: "5px 6px", textAlign: "right", color: C.mut }}>{Number(r.pagos) ? `−${dinero(r.pagos)}` : "–"}</td>
                       <td style={{ padding: "5px 6px", textAlign: "right", fontWeight: 700 }}>{dinero(r.neto)}</td>

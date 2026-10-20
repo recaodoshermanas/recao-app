@@ -72,7 +72,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
   const setGF = (k, v) => setGastosFijos(p => ({ ...p, [k]: pn(v) }));
   const setPQ = (k, v) => setPaqueteria(p => ({ ...p, [k]: pn(v) }));
   const facturasMonth = facturas.filter(f => f.fecha.startsWith(selMonth));
-  const totalFacturas = facturasMonth.reduce((s, f) => s + parseFloat(f.importe), 0);
+  const totalFacturas = facturasMonth.reduce((s, f) => s + (Number(f.importe) || 0), 0);
 
   return (
     <div style={{ padding: "20px", maxWidth: 540, margin: "0 auto", paddingBottom: "60px" }}>

@@ -64,7 +64,8 @@ export function PLView({ facturas, monthlyData, onEditMonth }) {
                     </SubSection>
                     <SubSection title="Facturas proveedores">
                       {facsMes.length === 0 && <div style={{ fontFamily: F, fontSize: "12px", color: C.mut, padding: "6px 0" }}>Sin facturas</div>}
-                      {facsMes.map(f => (<Row key={f.id} label={f.proveedor} val={parseFloat(f.importe)} />))}
+                      {facsMes.filter(f => f.importe != null).map(f => (<Row key={f.id} label={`${f.proveedor}${f.tipo_pago === "banco" ? " · Banco" : ""}`} val={Number(f.importe)} />))}
+                      {facsMes.some(f => f.importe == null) && <div style={{ fontFamily: F, fontSize: "12px", color: "#9A4A00", padding: "6px 0" }}>{facsMes.filter(f => f.importe == null).length} pendiente(s) de importe: no cuentan hasta que se ponga el importe</div>}
                       <Row label="Total facturas" val={c.totalFacturas} bold />
                     </SubSection>
                     <SubSection title="Salarios">

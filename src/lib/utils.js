@@ -22,7 +22,7 @@ export function calcMonth(facturas, md, mk) {
   }
   if (!md) return { totalIngresos: 0, totalGastos: 0, resultado: 0, margen: 0, totalFacturas: 0, totalSalarios: 0, totalGastosFijos: 0, totalOtros: 0, totalInversiones: 0, reparto: 0, isSummary: false };
   const facs = facturas.filter(f => f.fecha?.startsWith(mk));
-  const tFac = facs.reduce((s, f) => s + parseFloat(f.importe), 0);
+  const tFac = facs.reduce((s, f) => s + (Number(f.importe) || 0), 0); // pendientes de importe (#24) no suman
   const tIng = parseFloat(md.ventas_epos || 0) + Object.values(md.paqueteria || {}).reduce((s, v) => s + parseFloat(v), 0);
   const tSal = (md.salarios || []).reduce((s, e) => s + parseFloat(e.amount), 0);
   const tFij = Object.values(md.gastos_fijos || {}).reduce((s, v) => s + parseFloat(v), 0);
