@@ -9,6 +9,12 @@ const eur = (x) => (x == null || isNaN(x) ? "" : Number(x).toLocaleString("es-ES
 const numero = (v) => { const n = Number(String(v ?? "").replace(",", ".")); return isFinite(n) ? n : 0; };
 const dinero = (x) => (x == null || isNaN(x) ? "" : Number(x).toFixed(2).replace(".", ","));
 const fmt = (x) => (x == null ? "" : Number.isInteger(Number(x)) ? String(Number(x)) : String(Math.round(Number(x) * 100) / 100).replace(".", ","));
+// Productos al peso (#19): kilos, €/kg sin IVA editable e importe; sin bultos ni unidades
+const alPeso = (l) => !!l.producto?.al_peso && l.emparejado !== "nuevo";
+const precioKg = (l) => (l.coste_txt != null && l.coste_txt !== "" ? numero(l.coste_txt) : l.base_unit != null ? Number(l.base_unit) : null);
+const kgFactura = (l) => (l.cant_doc != null ? Number(l.cant_doc) : numero(l.q));
+const importeLinea = (l) => { const p = precioKg(l); return p == null ? null : Math.round(kgFactura(l) * p * 100) / 100; };
+const importeNoCuadra = (l) => { const i = importeLinea(l); return l.importe_doc != null && i != null && Math.abs(i - Number(l.importe_doc)) > 0.02; };
 const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 18, padding: 16, boxShadow: SHADOW.card, display: "flex", flexDirection: "column", gap: 10 };
 const chip = (bg, fg) => ({ fontFamily: F, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: bg, color: fg });
 const CHIPS = { email: ["#EAF0F8", "#2F5C8F", "EMAIL"], foto: ["#FBF0DA", "#7A5410", "FOTO"], manual: ["#F0ECE2", "#5E5444", "MANUAL"] };
@@ -481,7 +487,7 @@ function Linea({ l, manual, onCambio, onAsociar }) {
   const dif = l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-6;
   const titulo = l.nuevo?.nombre || l.producto?.nombre || l.descripcion;
   const sinProducto = l.tipo === "venta" && !l.producto && l.emparejado !== "nuevo";
-  const borde = dif ? `1.5px solid ${C.red}` : sinProducto ? "1.5px solid #E0B94A" : `1px solid ${C.brdL}`;
+  const borde = dif || (alPeso(l) && importeNoCuadra(l)) ? `1.5px solid ${C.red}` : sinProducto ? "1.5px solid #E0B94A" : `1px solid ${C.brdL}`;
   return (
     <div style={{ background: "#fff", borderRadius: 14, padding: "10px 12px", border: borde, display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -490,20 +496,41 @@ function Linea({ l, manual, onCambio, onAsociar }) {
           {l.emparejado === "nuevo" && !l.product_id && l.nuevo?.auto && <div style={{ fontFamily: F, fontSize: 12, color: "#6B4A0C" }}>No lo tenemos: se da de alta solo al confirmar{l.precio_marcado != null ? ` (precio marcado ${eur(l.precio_marcado)})` : ""}. <button type="button" onClick={() => onAsociar("buscar")} style={{ background: "none", border: "none", padding: 0, fontFamily: F, fontSize: 12, color: "#6B4A0C", textDecoration: "underline", cursor: "pointer" }}>No, es otro producto</button></div>}
           {l.emparejado === "nuevo" && !l.product_id && !l.nuevo?.auto && l.nuevo && <div style={{ fontFamily: F, fontSize: 12, color: "#6B4A0C" }}>PVP {eur(l.nuevo.pvp)}{l.nuevo.sin_codigo ? " · sin código" : l.nuevo.codigo ? ` · ${l.nuevo.codigo}` : ""} · se da de alta al confirmar. <button type="button" onClick={() => onAsociar("editar")} style={{ background: "none", border: "none", padding: 0, fontFamily: F, fontSize: 12, color: "#6B4A0C", textDecoration: "underline", cursor: "pointer" }}>Cambiar</button></div>}
           {l.descripcion && l.descripcion !== titulo && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>{l.via === "foto" ? "Leído: «" + l.descripcion + "»" : l.descripcion}</div>}
-          {l.cant_doc != null && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Factura: {fmt(l.cant_doc)}{Number(l.unidades_por) > 1 ? ` × ${fmt(l.unidades_por)} uds` : ""}{l.base_unit != null ? ` · ${eur(l.base_unit)}/ud sin IVA` : ""}</div>}
+          {l.cant_doc != null && !alPeso(l) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Factura: {fmt(l.cant_doc)}{Number(l.unidades_por) > 1 ? ` × ${fmt(l.unidades_por)} uds` : ""}{l.base_unit != null ? ` · ${eur(l.base_unit)}/ud sin IVA` : ""}</div>}
           {l.tipo !== "venta" && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>No es de venta: no suma stock</div>}
-          {dif && <div style={{ fontFamily: F, fontSize: 11.5, color: "#A3362B", fontWeight: 600 }}>El documento dice {fmt(l.uds_doc)}</div>}
+          {dif && <div style={{ fontFamily: F, fontSize: 11.5, color: "#A3362B", fontWeight: 600 }}>El documento dice {fmt(l.uds_doc)}{alPeso(l) ? " kg" : ""}</div>}
         </div>
-        {l.tipo === "venta" && <Cantidad valor={l.q} etiqueta={titulo} onCambio={(v) => onCambio({ q: v })} />}
+        {l.tipo === "venta" && (alPeso(l) ? (
+          <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontFamily: F, fontSize: 11, color: C.mut, flexShrink: 0 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input aria-label={`Kilos de ${titulo}`} inputMode="decimal" value={l.q} onChange={(e) => onCambio({ q: e.target.value })} onFocus={(e) => e.target.select()}
+                style={{ width: 70, height: 44, boxSizing: "border-box", textAlign: "center", border: `1px solid ${C.brdL}`, borderRadius: 10, fontFamily: F, fontSize: 17, fontWeight: 700, color: C.char }} />
+              <span style={{ fontFamily: F, fontSize: 14, fontWeight: 700, color: C.char }}>kg</span>
+            </span>
+            kilos recibidos
+          </label>
+        ) : <Cantidad valor={l.q} etiqueta={titulo} onCambio={(v) => onCambio({ q: v })} />)}
       </div>
-      {l.tipo === "venta" && l.cant_doc != null && !l.unidades_conocidas && l.emparejado !== "nuevo" && (
+      {l.tipo === "venta" && alPeso(l) && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, alignItems: "end", background: importeNoCuadra(l) ? "#FBEAE7" : "#F7F2E9", borderRadius: 12, padding: "8px 10px" }}>
+          <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Kilos factura<div style={{ fontSize: 16, fontWeight: 700, color: C.char }}>{fmt(kgFactura(l))} kg</div></div>
+          <label style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>€/kg sin IVA
+            <input inputMode="decimal" aria-label={`Precio por kilo sin IVA de ${titulo}`} value={l.coste_txt ?? (l.base_unit != null ? dinero(l.base_unit) : "")} onChange={(e) => onCambio({ coste_txt: e.target.value })} onFocus={(e) => e.target.select()} placeholder="0,00"
+              style={{ display: "block", width: "100%", boxSizing: "border-box", height: 40, marginTop: 2, textAlign: "center", border: `1.5px solid ${l.coste_txt != null && l.base_unit != null && Math.abs(numero(l.coste_txt) - Number(l.base_unit)) > 0.0005 ? C.grn : C.brd}`, borderRadius: 10, fontFamily: F, fontSize: 16, fontWeight: 700, color: C.char, background: "#fff" }} />
+          </label>
+          <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, textAlign: "right" }}>Importe<div style={{ fontSize: 16, fontWeight: 700, color: C.char }}>{eur(importeLinea(l))}</div></div>
+          {importeNoCuadra(l) && <div style={{ gridColumn: "1 / -1", fontFamily: F, fontSize: 12, fontWeight: 700, color: "#A3362B" }}>No cuadra con la factura: la línea dice {eur(l.importe_doc)}. Revisa el precio por kilo.</div>}
+          {l.coste_txt != null && l.base_unit != null && Math.abs(numero(l.coste_txt) - Number(l.base_unit)) > 0.0005 && <div style={{ gridColumn: "1 / -1", fontFamily: F, fontSize: 12, color: "#1E6B3C" }}>Corregido (se había leído {dinero(l.base_unit)} €/kg). Al confirmar, este es el coste que va a la caja.</div>}
+        </div>
+      )}
+      {l.tipo === "venta" && l.cant_doc != null && !l.unidades_conocidas && l.emparejado !== "nuevo" && !alPeso(l) && (
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: F, fontSize: 12.5, color: "#6B4A0C" }}>
           ¿Cuántas unidades trae cada una de la factura?
           <input inputMode="numeric" value={l.unidades_por_txt ?? fmt(l.unidades_por)} onChange={(e) => { const u = numero(e.target.value) || 1; onCambio({ unidades_por_txt: e.target.value, unidades_por: u, q: fmt(Number(l.cant_doc) * u), uds_doc: Number(l.cant_doc) * u }); }}
             style={{ width: 56, height: 36, textAlign: "center", border: `1px solid ${C.brd}`, borderRadius: 10, fontFamily: F, fontSize: 15 }} aria-label="Unidades por bulto" />
         </label>
       )}
-      {manual && l.tipo === "venta" && l.emparejado !== "nuevo" && (
+      {manual && l.tipo === "venta" && l.emparejado !== "nuevo" && !alPeso(l) && (
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: F, fontSize: 12.5, color: C.mut }}>
           Coste (sin IVA)
           <input inputMode="decimal" value={l.coste_txt ?? ""} onChange={(e) => onCambio({ coste_txt: e.target.value })} placeholder={l.coste_ref != null ? fmt(l.coste_ref) : "0,00"} style={{ width: 80, height: 36, textAlign: "center", border: `1px solid ${C.brd}`, borderRadius: 10, fontFamily: F, fontSize: 15 }} aria-label="Coste sin IVA" />
@@ -546,6 +573,9 @@ function Revisar({ datos, onHecho, onVolver }) {
   const pendientes = lineas.filter((l) => l.tipo === "venta" && !l.producto && l.emparejado !== "nuevo" && numero(l.q) > 0).length;
   const difs = lineas.filter((l) => l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-6).length;
   const total = lineas.filter((l) => l.tipo === "venta").reduce((s, l) => s + numero(l.q), 0);
+  // Suma de líneas (cantidad de la factura × precio, con las correcciones) frente al total sin IVA del documento
+  const conPrecio = lineas.filter((l) => l.cant_doc != null && precioKg(l) != null);
+  const sumaLineas = !manual && conPrecio.length ? Math.round(conPrecio.reduce((s, l) => s + Number(l.cant_doc) * Number(l.unidades_por || 1) * precioKg(l), 0) * 100) / 100 : null;
 
   const anadir = (p) => {
     setLineas((ls) => [...ls, { id: null, via: rec.via, descripcion: p.nombre, producto: p, product_id: p.id, tipo: "venta", emparejado: "ok", anadida: true, q: "1", coste_ref: p.coste != null ? Math.round(p.coste * 100) / 100 : null }]);
@@ -628,6 +658,11 @@ function Revisar({ datos, onHecho, onVolver }) {
         </>
       )}
 
+      {sumaLineas != null && rec.total_base != null && (
+        <div style={{ fontFamily: F, fontSize: 12.5, color: Math.abs(sumaLineas - Number(rec.total_base)) > 0.05 ? "#A3362B" : C.mut, fontWeight: Math.abs(sumaLineas - Number(rec.total_base)) > 0.05 ? 700 : 400 }}>
+          Suma de las líneas {eur(sumaLineas)} · total de la factura sin IVA {eur(rec.total_base)}{Math.abs(sumaLineas - Number(rec.total_base)) > 0.05 ? ": no cuadra, revisa los precios" : ""}
+        </div>
+      )}
       {difs > 0 && <div style={{ fontFamily: F, fontSize: 12.5, color: "#A3362B" }}>{difs} línea{difs > 1 ? "s" : ""} no coincide{difs > 1 ? "n" : ""} con el documento: queda apuntado para reclamar.</div>}
       <button type="button" disabled={busy} onClick={confirmar} style={{ ...btnDark, background: C.grn, color: "#fff", fontSize: 18, padding: 16, opacity: busy ? 0.6 : 1 }}>{busy ? "Guardando…" : "Confirmar recepción"}</button>
       <button type="button" onClick={descartar} style={{ background: "none", border: "none", fontFamily: F, fontSize: 13, color: C.mut, textDecoration: "underline", cursor: "pointer" }}>Descartar este pedido</button>
