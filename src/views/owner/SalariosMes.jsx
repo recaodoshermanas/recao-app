@@ -2,6 +2,8 @@
 // Tarjeta: nómina (fija de configuración o a mano) + horas extras × precio + plus del mes + extras manuales, y los extras
 // que se pagan con los sobres (#17). Al guardar, cada línea de datos_mes.salarios lleva amount = nómina + horas + plus + manuales
 // y el desglose; los extras de sobres NO van en amount porque ya cuentan en Personal desde Efectivo de sobres (no se cuentan dos veces).
+// Plus (#18, opción A2 de Migue): el plus que se paga de verdad es el «Desempeño» de los sobres, así que el plus calculado por la app
+// se enseña solo como referencia y NO suma (ni en la tarjeta ni en amount); el Desempeño entra por los extras de sobres.
 // Esporádicas (#21): quien tenga horas extras en el mes y no sea de plantilla sale aparte con horas × precio; su línea lleva esporadica: true.
 import { useEffect, useMemo, useState } from "react";
 import { F, SF, C, inp, crd } from "../../lib/styles.js";
@@ -39,9 +41,9 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
       const ex = (extras[t.usuario_id] || []).map((e) => ({ ...e, valor: num(e.importe) }));
       const sumEx = ex.reduce((a, e) => a + (Number.isFinite(e.valor) ? e.valor : 0), 0);
       const sobres = t.extras_sobres.reduce((a, e) => a + Number(e.importe), 0);
-      const base = r2((Number.isFinite(nom) ? nom : 0) + Number(t.importe_horas) + Number(t.plus) + sumEx);
+      const base = r2((Number.isFinite(nom) ? nom : 0) + Number(t.importe_horas) + sumEx);
       const s = g.get(t.usuario_id);
-      const cambiado = !!s && (r2(s.horas) !== r2(t.horas) || r2(s.plus) !== r2(t.plus) || (!manual && r2(s.nomina) !== r2(t.nomina_fija)));
+      const cambiado = !!s && (r2(s.horas) !== r2(t.horas) || Number(s.plus) > 0 || (!manual && r2(s.nomina) !== r2(t.nomina_fija)));
       return { t, manual, nom, ex, sumEx, sobres: r2(sobres), base, total: r2(base + sobres), falta: manual && !Number.isFinite(nom), cambiado };
     });
   }, [live, nominas, extras, guardado]);
@@ -62,7 +64,7 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
     onCambio(filas.map((f) => ({
       id: `${mes}-${f.t.usuario_id}`, v: 2, usuario_id: f.t.usuario_id, nombre: f.t.nombre, amount: f.base,
       nomina: Number.isFinite(f.nom) ? f.nom : null, nomina_manual: f.manual, horas: Number(f.t.horas), importe_horas: Number(f.t.importe_horas),
-      precio_hora: Number(live.precio_hora), plus: Number(f.t.plus),
+      precio_hora: Number(live.precio_hora), plus: 0, plus_calculado: Number(f.t.plus),
       extras: f.ex.filter((e) => e.concepto?.trim() && Number.isFinite(e.valor) && e.valor > 0).map((e) => ({ id: e.id, concepto: e.concepto.trim(), importe: e.valor })),
       extras_sobres: f.sobres,
     })).concat(espo.filter((e) => !e.quitada).map((e) => ({
@@ -97,7 +99,7 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
             </div>
           ) : fila("Nómina (líquido)", fmt2(f.nom))}
           {fila(`Horas extras: ${txt(f.t.horas)} h × ${fmt2(live.precio_hora)}`, fmt2(f.t.importe_horas))}
-          {fila("Plus del mes", fmt2(f.t.plus))}
+          {fila(<span>Plus calculado por la app <span style={{ fontSize: 11.5 }}>(referencia: se paga como Desempeño con los sobres, no suma aquí)</span></span>, fmt2(f.t.plus), { color: C.mut })}
           {f.ex.map((e, i) => (
             <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0" }}>
               <input value={e.concepto} onChange={(ev) => setEx(f.t.usuario_id, f.ex.map((x, j) => (j === i ? { ...x, concepto: ev.target.value } : x)))} placeholder="Concepto del extra" style={{ ...inp, flex: 1, padding: "6px 8px", fontSize: 13, marginBottom: 0 }} />
@@ -130,7 +132,7 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
         </>
       )}
       <div style={{ ...crd, background: "#F4EFE6", border: "none" }}>
-        {fila(totEspo > 0 ? "Nóminas, horas, plus, extras manuales y esporádicas" : "Nóminas, horas, plus y extras manuales", fmt2(totBase))}
+        {fila(totEspo > 0 ? "Nóminas, horas, extras manuales y esporádicas" : "Nóminas, horas y extras manuales", fmt2(totBase))}
         {totSobres > 0 && fila("Extras pagados con los sobres", fmt2(totSobres))}
         {fila("Total salarios del mes", fmt2(r2(totBase + totSobres)), { fontSize: 15, fontWeight: 800, borderTop: `1px solid ${C.brdL}`, marginTop: 4, paddingTop: 6 })}
         {incompleto && <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: ROJO, marginTop: 4 }}>Incompleto: falta alguna nómina. Se puede guardar igual.</div>}
