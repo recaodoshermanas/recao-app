@@ -60,6 +60,41 @@ export function TecGuia() {
         {editar ? <textarea value={borrador} onChange={(e) => setBorrador(e.target.value)} aria-label="Instrucciones" /> : <pre className="guia-texto">{g.texto || "Todavía no hay instrucciones."}</pre>}
         <p className="guia-nota">Si cambias algo aquí (una norma nueva, una línea roja), los demás usarán la versión nueva la próxima vez que las copien.</p>
       </section>
+      <Automatizacion />
     </div>
+  );
+}
+
+// Claude atiende la cola solo: cada solicitud nueva (o que vuelve a «por hacer») lanza su tarea programada al momento.
+// La llave de la tarea la genera Adrián en claude.ai/code/routines y se guarda aquí; nunca se vuelve a mostrar.
+function Automatizacion() {
+  const [e, setE] = useState(null);
+  const [llave, setLlave] = useState("");
+  const [busy, setBusy] = useState(false);
+  const cargar = () => sb.rpc("tec_auto_estado").then(setE).catch(() => setE(false));
+  useEffect(() => { cargar(); }, []);
+  if (!e) return null;
+  const guardar = async (valor) => {
+    setBusy(true);
+    try { setE(await sb.rpc("tec_auto_guardar_token", { p_token: valor })); setLlave(""); avisar(valor ? "Automatización conectada" : "Automatización desconectada"); }
+    catch (er) { avisar(er.message || "No se ha podido guardar", "mal"); }
+    setBusy(false);
+  };
+  const ok = e.ultimo_status === 200;
+  return (
+    <section className="guia-caja" style={{ marginTop: 14 }}>
+      <div className="guia-cab">
+        <div><h2>Claude atiende la cola solo</h2><small>{e.conectada ? "Conectada" : "Sin conectar"}{e.ultimo_en ? ` · último aviso ${hace(e.ultimo_en)}${e.ultimo_status ? (ok ? " · recibido" : ` · error ${e.ultimo_status}`) : ""}` : ""}</small></div>
+      </div>
+      <p className="guia-nota" style={{ marginTop: 0 }}>Cuando entra una solicitud, se responde una pregunta o se piden cambios, Claude se pone con ella al momento: la construye, la publica y la deja en revisión. Si toca borrar o cambiar datos existentes, o permisos y seguridad, se para y pide el OK de Adrián en la propia solicitud.</p>
+      {e.ultimo_error && <p className="guia-nota" style={{ color: "#A3362B" }}>El último aviso falló: {e.ultimo_error}</p>}
+      {e.puede && (
+        <div className="sol-botones" style={{ flexWrap: "wrap", alignItems: "center" }}>
+          <input type="password" autoComplete="off" value={llave} onChange={(ev) => setLlave(ev.target.value)} placeholder={e.conectada ? "Pega una llave nueva para cambiarla" : "Pega aquí la llave de la tarea (sk-ant-oat01-…)"} aria-label="Llave de la tarea" style={{ flex: "1 1 280px", font: "inherit", fontSize: 13.5, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--bg)", color: "var(--text)" }} />
+          <button className="btn-p" disabled={busy || !llave.trim()} onClick={() => guardar(llave)}>{busy ? "Guardando…" : "Conectar"}</button>
+          {e.conectada && <button className="btn-txt" disabled={busy} onClick={() => guardar("")}>Desconectar</button>}
+        </div>
+      )}
+    </section>
   );
 }
