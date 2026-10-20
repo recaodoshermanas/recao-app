@@ -14,6 +14,7 @@ import { MiSeguimientoView } from "./MiSeguimientoView.jsx";
 import { MisAvisosView } from "./MisAvisosView.jsx";
 import { CubrirTurnosView } from "./CubrirTurnosView.jsx"; // BOLSA
 import { RecepcionView, AnadirProductoView } from "./RecepcionView.jsx"; // RECEPCION
+import { CajaView } from "./CajaView.jsx"; // CAJA (caída de Epos)
 import { MisFichajesView } from "./MisFichajesView.jsx"; // FICHAJES
 import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
 import { WorkerView } from "../WorkerView.jsx";
@@ -44,7 +45,7 @@ const LO_TUYO = [
   { id: "documentos", label: "Mis documentos", Ico: IcoDoc },
   { id: "seguimiento", label: "Mi seguimiento", sub: "Avisos, plus y faltas", Ico: (p) => <IcoBars size={20} color={TOSTADO} sw={1.9} {...p} /> },
 ];
-const TITULOS = { anadir: "Añadir producto", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { caja: "Caja", anadir: "Añadir producto", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 // A dónde lleva cada destino de la campana o del correo (?ir=…) en la organización nueva: [pantalla, pestaña]
 const DESTINOS = {
@@ -107,6 +108,15 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       <div style={{ padding: "18px 16px 28px", maxWidth: 540, margin: "0 auto" }}>
         <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 14 }}>{hoy}</div>
 
+        <button type="button" onClick={() => abrir("caja")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", background: C.char, border: "none", borderRadius: 20, padding: "16px 18px", display: "flex", alignItems: "center", gap: 15, marginBottom: 12, textAlign: "left" }}>
+          <span style={{ width: 46, height: 46, borderRadius: 14, background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22 }} aria-hidden="true">🛒</span>
+          <span style={{ flex: 1 }}>
+            <span style={{ display: "block", fontFamily: SF, fontSize: 21, color: C.gold }}>Caja</span>
+            <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: "#C9BFA8", marginTop: 2 }}>Cobrar mientras Epos no funciona</span>
+          </span>
+          <IcoRight size={20} color={C.gold} sw={2.4} />
+        </button>
+
         <button onClick={() => abrir("cerrar")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", background: C.gold, border: "none", borderRadius: 20, padding: 18, display: "flex", alignItems: "center", gap: 15, boxShadow: SHADOW.hero, textAlign: "left" }}>
           <span style={{ width: 46, height: 46, borderRadius: 14, background: C.goldDark, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IcoCheck size={24} color={C.gold} sw={2.2} /></span>
           <span style={{ flex: 1 }}>
@@ -161,6 +171,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
         <button onClick={() => setScreen("home")} aria-label="Volver al inicio" style={{ border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><IcoLeft size={18} color={C.char} sw={2.4} /></button>
         <div style={{ fontFamily: SF, fontSize: 18, color: C.char }}>{TITULOS[screen]}</div>
       </div>
+      {screen === "caja" && <CajaView />}
       {screen === "recepcion" && <RecepcionView />}
       {screen === "anadir" && <AnadirProductoView onFin={() => setScreen("home")} />}
       {screen === "horarios" && <HorariosYFichajes user={user} pestana={pestana} mesFichajes={mesFichajes} />}
