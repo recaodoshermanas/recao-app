@@ -31,6 +31,9 @@ const chip = (bg, fg) => ({ fontFamily: F, fontSize: 11, fontWeight: 700, paddin
 const CHIPS = { email: ["#EAF0F8", "#2F5C8F", "EMAIL"], foto: ["#FBF0DA", "#7A5410", "FOTO"], manual: ["#F0ECE2", "#5E5444", "MANUAL"] };
 // #24: desde el sábado 24, al confirmar se apunta sola la factura en «Facturas»
 const FACTURAS_DESDE = "2026-10-24";
+// fecha del documento leída (doc_fecha, "AAAA-MM-DD") → "20/10"
+const fechaDoc = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}` : "sin fecha");
+const tipoDoc = (t) => (t === "albaran" ? "Albarán" : t === "factura" ? "Factura" : null);
 const hoyMadrid = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" });
 const PAGOS_REC = [["tarjeta", "Tarjeta / transferencia"], ["efectivo", "Efectivo (caja)"], ["caja_fuerte", "Caja fuerte"], ["banco", "Banco"]];
 const ETQ_PAGO = Object.fromEntries(PAGOS_REC);
@@ -746,7 +749,7 @@ function Revisar({ datos, onHecho, onVolver }) {
           <span style={{ fontFamily: SF, fontSize: 22, color: C.char, flex: 1 }}>{rec.proveedor}</span>
           {CHIPS[rec.via] && <span style={chip(CHIPS[rec.via][0], CHIPS[rec.via][1])}>{CHIPS[rec.via][2]}</span>}
         </div>
-        <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{[rec.doc_tipo === "albaran" ? "Albarán" : rec.doc_tipo === "factura" ? "Factura" : null, rec.doc_numero, rec.total != null ? eur(rec.total) : null].filter(Boolean).join(" · ") || (manual ? "Sin factura: apunta lo que ha llegado" : "")}</div>
+        <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{[tipoDoc(rec.doc_tipo), rec.doc_numero, (rec.doc_tipo || rec.doc_numero || rec.doc_fecha) ? fechaDoc(rec.doc_fecha) : null, rec.total != null ? eur(rec.total) : null].filter(Boolean).join(" · ") || (manual ? "Sin factura: apunta lo que ha llegado" : "")}</div>
       </div>
       {rec.prueba && <div style={{ fontFamily: F, fontSize: 12.5, background: "#EAF0F8", color: "#2F5C8F", borderRadius: 12, padding: "8px 12px" }}>Modo prueba hasta el inventario: se guarda todo, pero el stock de la caja aún no cambia. Los productos nuevos sí se dan de alta en la caja.</div>}
       <Aviso msg={msg} tipo={msg && /ya estaba/.test(msg) ? "bien" : "mal"} />
@@ -834,6 +837,9 @@ function Hecho({ r, onFin }) {
 }
 
 // ---------- vista principal ----------
+// pendientes: por fecha del documento, del más antiguo al más reciente; los que aún no tienen fecha, al final
+const ordenPend = (ls) => [...ls].sort((a, b) => (a.doc_fecha && b.doc_fecha ? a.doc_fecha.localeCompare(b.doc_fecha) || a.id - b.id : a.doc_fecha ? -1 : b.doc_fecha ? 1 : 0));
+
 export function RecepcionView({ onContar }) {
   const [vista, setVista] = useState("lista"); // lista | proveedor | leyendo | revisar | hecho
   const [datos, setDatos] = useState(null);
@@ -851,7 +857,7 @@ export function RecepcionView({ onContar }) {
   const destinoFoto = useRef(null); // {proveedor, recepcion_id}
 
   const cargar = useCallback(async () => {
-    try { const r = await fn("inicio"); setLista(r.pendientes || []); setProvs(r.proveedores || []); setPrueba(!!r.prueba); setSinCodigo(r.sin_codigo || 0); onContar && onContar((r.pendientes || []).length); }
+    try { const r = await fn("inicio"); setLista(ordenPend(r.pendientes || [])); setProvs(r.proveedores || []); setPrueba(!!r.prueba); setSinCodigo(r.sin_codigo || 0); onContar && onContar((r.pendientes || []).length); }
     catch (e) { setMsg(e.message || "No se han podido cargar los pedidos"); setLista([]); }
   }, [onContar]);
   useEffect(() => { cargar(); }, [cargar]);
@@ -953,7 +959,8 @@ export function RecepcionView({ onContar }) {
               </>
             ) : (
               <>
-                {r.via === "email" && <div style={{ fontFamily: F, fontSize: 13, color: "#1E6B3C", fontWeight: 600 }}>Factura recibida{r.doc_numero ? ` · ${r.doc_numero}` : ""}</div>}
+                {r.via === "email" && <div style={{ fontFamily: F, fontSize: 13, color: "#1E6B3C", fontWeight: 600 }}>Factura recibida</div>}
+                <div style={{ fontFamily: F, fontSize: 13.5, color: C.char, fontWeight: 600 }}>{[tipoDoc(r.doc_tipo) || "Documento", r.doc_numero, fechaDoc(r.doc_fecha)].filter(Boolean).join(" · ")}</div>
                 <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{r.lineas} producto{r.lineas === 1 ? "" : "s"}{r.total != null ? ` · ${eur(r.total)}` : ""}{r.via !== "email" ? " · sin terminar" : ""}</div>
                 <button type="button" onClick={() => abrir(r.id)} style={{ ...btnDark, padding: 13 }}>{r.via === "email" ? "Revisar y recepcionar" : "Seguir"}</button>
               </>

@@ -183,7 +183,15 @@ function ListaAvisos({ lista, onCambio }) {
   );
 }
 
-function Pedidos({ lista, onCambio }) {
+function Pedidos({ lista: base, onCambio }) {
+  // fecha y tipo del documento leído (#33); la función «recepcion» aún no los manda en esta lista
+  const [docs, setDocs] = useState({});
+  useEffect(() => {
+    const ids = base.map((r) => r.id);
+    if (!ids.length) return;
+    sb.rpc("recepcion_fechas_documento", { p_ids: ids }).then((ls) => setDocs(Object.fromEntries((ls || []).map((x) => [x.id, x])))).catch(() => {});
+  }, [base]);
+  const lista = useMemo(() => base.map((r) => ({ ...r, doc_tipo: r.doc_tipo ?? docs[r.id]?.doc_tipo, doc_fecha: r.doc_fecha ?? docs[r.id]?.doc_fecha })), [base, docs]);
   const reintentar = async (r) => { try { const x = await fn("aplicar_stock", { id: r.id }); avisar(x.ok ? `Stock sumado (${x.productos} productos)` : `Faltan ${x.errores.length} productos`, x.ok ? "ok" : "mal"); onCambio(); } catch (e) { avisar(e.message, "mal"); } };
   if (!lista.length) return <p className="empty">Todavía no hay recepciones.</p>;
   return (
@@ -191,14 +199,15 @@ function Pedidos({ lista, onCambio }) {
       <div className="head"><div><h2>Últimas recepciones</h2><p className="sub">Las 60 más recientes.</p></div></div>
       <div className="tabla-scroll">
         <table className="ranking">
-          <thead><tr><th>Proveedor</th><th>Vía</th><th>Estado</th><th className="r">Total</th><th className="r">Fecha</th><th className="r">Stock</th></tr></thead>
+          <thead><tr><th>Proveedor</th><th>Vía</th><th>Estado</th><th className="r">Total</th><th className="r">Fecha doc.</th><th className="r">Recepción</th><th className="r">Stock</th></tr></thead>
           <tbody>
             {lista.map((r) => (
               <tr key={r.id}>
-                <td><span className="pn">{r.proveedor}</span><span className="pf">{r.doc_numero || ""}{r.prueba ? " · prueba" : ""}</span></td>
+                <td><span className="pn">{r.proveedor}</span><span className="pf">{[r.doc_tipo === "albaran" ? "Albarán" : r.doc_tipo === "factura" ? "Factura" : null, r.doc_numero].filter(Boolean).join(" ")}{r.prueba ? " · prueba" : ""}</span></td>
                 <td>{VIA[r.via] || r.via}</td>
                 <td>{ESTADO[r.estado] || r.estado}</td>
                 <td className="r">{r.total != null ? eur(r.total, 2) : "—"}</td>
+                <td className="r">{r.doc_fecha ? fechaCorta(r.doc_fecha) : "sin fecha"}</td>
                 <td className="r">{fechaCorta(r.confirmado_en || r.llegada_en || r.creado_en)}</td>
                 <td className="r">{r.stock_aplicado ? "Sumado" : r.prueba || !["confirmada", "con_diferencias"].includes(r.estado) ? "—" : <button className="btn-txt" title={r.stock_error || ""} onClick={() => reintentar(r)}>Sumar</button>}</td>
               </tr>
