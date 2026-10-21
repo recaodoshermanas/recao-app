@@ -38,6 +38,7 @@ export const AREAS = [
       { id: "catalogo", label: "Catálogo" },
       { id: "recepcion", label: "Recepción" },
       { id: "revisar", label: "Productos a revisar" },
+      { id: "app", label: "App de tienda" },
       { id: "familias", label: "Familias" },
       { id: "proveedores", label: "Proveedores" },
       { id: "salud", label: "Salud del catálogo" },

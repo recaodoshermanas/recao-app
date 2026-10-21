@@ -16,6 +16,7 @@ const PVP_ORIGEN = { marcado: "marcado", parecidos: "igual que parecidos", regla
 const SECCIONES = [
   { id: "precio", label: "Precio" }, { id: "coste", label: "Subidas de coste" }, { id: "iva", label: "IVA" },
   { id: "codigo", label: "Código de barras" }, { id: "nuevos", label: "Productos nuevos" }, { id: "incidencias", label: "Incidencias" },
+  { id: "tienda", label: "Precios cambiados en tienda" }, // #35
 ];
 const NOMBRE_SEC = Object.fromEntries(SECCIONES.map((s) => [s.id, s.label]));
 const margen = (coste, pvp) => (pvp > 0 ? Math.round((1 - coste / pvp) * 1000) / 10 : null);
@@ -39,15 +40,17 @@ export function ProductosRevisar() {
   const [d, setD] = useState(null);
   const [s, setS] = useState(null);
   const [tab, setTab] = useState("precio");
+  const [tienda, setTienda] = useState(null); // #35: cambios de precio hechos por las trabajadoras
   const cargar = useCallback(async () => {
-    const [a, b] = await Promise.allSettled([fn("revisar_panel"), sb.rpc("revisar_secciones")]);
+    const [a, b, t] = await Promise.allSettled([fn("revisar_panel"), sb.rpc("revisar_secciones"), cargarTienda()]);
+    setTienda(t.status === "fulfilled" ? t.value : { lista: [], nombres: new Map() });
     if (a.status === "fulfilled") setD(a.value); else { avisar(msg(a.reason), "mal"); setD((x) => x || { altas: [], incidencias: [], productos: [], usuarios: [], proveedores: [] }); }
     if (b.status === "fulfilled") setS(b.value); else { avisar(msg(b.reason), "mal"); setS((x) => x || { precio: [], coste: [], iva: [] }); }
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
   const P = useMemo(() => new Map((d?.productos || []).map((p) => [Number(p.id), p])), [d]);
   const U = useMemo(() => new Map((d?.usuarios || []).map((u) => [u.id, u.nombre])), [d]);
-  if (!d || !s) return <Cargando />;
+  if (!d || !s || !tienda) return <Cargando />;
 
   const altas = d.altas.filter((a) => motivos(a).length);
   const codigo = d.incidencias.filter((i) => i.tipo !== "no_es_este");
@@ -57,9 +60,10 @@ export function ProductosRevisar() {
     precio: new Set(s.precio.map((x) => Number(x.product_id))), coste: new Set(s.coste.map((x) => Number(x.product_id))), iva: new Set(s.iva.map((x) => Number(x.product_id))),
     codigo: new Set(codigo.flatMap((i) => [Number(i.product_id_existente), Number(i.product_id_nuevo)]).filter(Boolean)),
     nuevos: new Set(altas.map((a) => Number(a.product_id)).filter(Boolean)), incidencias: new Set(incid.flatMap((i) => [Number(i.product_id_existente), Number(i.product_id_nuevo)]).filter(Boolean)),
+    tienda: new Set(tienda.lista.map((x) => Number(x.product_id))),
   };
   const otras = (pid, actual) => SECCIONES.map((x) => x.id).filter((k) => k !== actual && ids[k].has(Number(pid)));
-  const n = { precio: s.precio.length, coste: s.coste.length, iva: s.iva.length, codigo: codigo.length, nuevos: altas.length, incidencias: incid.length };
+  const n = { precio: s.precio.length, coste: s.coste.length, iva: s.iva.length, codigo: codigo.length, nuevos: altas.length, incidencias: incid.length, tienda: tienda.lista.length };
   const conS = (r) => { setS(r); };
 
   return (
@@ -70,6 +74,7 @@ export function ProductosRevisar() {
       {tab === "iva" && <SecIva lista={s.iva} otras={otras} onListo={conS} />}
       {tab === "codigo" && <Incidencias lista={codigo} P={P} U={U} onHecho={cargar} otras={otras} sec="codigo" vacio="No hay códigos repetidos. Aparecen cuando un producto nuevo o un código puesto en tienda ya lo tenía otro producto." titulo="Códigos de barras repetidos" />}
       {tab === "nuevos" && <Nuevos d={d} P={P} U={U} cargar={cargar} otras={otras} />}
+      {tab === "tienda" && <SecTienda lista={tienda.lista} nombres={tienda.nombres} otras={otras} onHecho={cargar} />}
       {tab === "incidencias" && <Incidencias lista={incid} P={P} U={U} onHecho={cargar} otras={otras} sec="incidencias" vacio="No hay incidencias. Aparecen cuando una trabajadora dice que un código lleva al producto equivocado." titulo="«No es este producto»" />}
     </>
   );
@@ -376,6 +381,63 @@ function Incidencias({ lista, P, U, onHecho, otras, sec, vacio, titulo }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ---------- #35 · Precios cambiados en tienda: ya están en Epos; dirección comprueba y marca «Revisado» o lo devuelve ----------
+async function cargarTienda() {
+  const [lista, us] = await Promise.all([
+    sb.select("precio_cambios_tienda", "select=*&revisado=eq.false&order=creado_en.desc&limit=300"),
+    sb.select("usuarios", "select=id,nombre"),
+  ]);
+  return { lista: lista || [], nombres: new Map((us || []).map((u) => [u.id, (u.nombre || "").split(" ")[0]])) };
+}
+function SecTienda({ lista, nombres, otras, onHecho }) {
+  const [busy, setBusy] = useState(null);
+  const revisado = async (c) => {
+    setBusy(c.id);
+    try { await sb.update("precio_cambios_tienda", `id=eq.${c.id}`, { revisado: true, revisado_por: (await sb.rpc("current_usuario_id").catch(() => null)) || null, revisado_en: new Date().toISOString() }); avisar("Marcado como revisado"); await onHecho(); }
+    catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  const devolver = async (c) => {
+    if (!window.confirm(`Vuelve a poner «${c.nombre}» a ${eur(c.pvp_antes, 2)} en la caja${c.precio_marcado != null ? " y deja de contar como precio marcado" : ""}. ¿Seguimos?`)) return;
+    setBusy(c.id);
+    try {
+      await guardarCambios([{ id: Number(c.product_id), campos: { pvp: Number(c.pvp_antes) } }], `Precio de «${c.nombre}» devuelto a ${eur(c.pvp_antes, 2)}`);
+      if (c.precio_marcado != null) await sb.update("producto_precio_marcado", `product_id=eq.${c.product_id}`, { activo: false });
+      await sb.update("precio_cambios_tienda", `id=eq.${c.id}`, { revisado: true, revisado_por: (await sb.rpc("current_usuario_id").catch(() => null)) || null, revisado_en: new Date().toISOString() });
+      avisar(`Precio ${eur(c.pvp_antes, 2)} guardado en Epos`); await onHecho();
+    } catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  return (
+    <div className="card mt">
+      <div className="head"><div><h2>Precios cambiados en tienda</h2><p className="sub">Cambios que han hecho las trabajadoras desde «Escanear producto → Cambiar precio». Ya están en Epos. Compruébalos y pulsa «Revisado», o devuelve el precio anterior. Con «Precio marcado», el producto queda marcado y los avisos de precio no proponen subirlo.</p></div></div>
+      {!lista.length ? <p className="empty">No hay cambios de precio por revisar.</p> : (
+        <div className="tabla-scroll">
+          <table className="ranking">
+            <thead><tr><th>Producto</th><th className="r">Antes</th><th className="r">Ahora</th><th>Motivo</th><th>Qué hacer</th></tr></thead>
+            <tbody>
+              {lista.map((c) => (
+                <tr key={c.id}>
+                  <td><span className="pn">{c.nombre}</span><span className="pf">{[c.barcode, nombres.get(c.creado_por) || "—", hace(c.creado_en)].filter(Boolean).join(" · ")}</span><Otras lista={otras(c.product_id, "tienda")} /></td>
+                  <td className="r">{eur(c.pvp_antes, 2)}</td>
+                  <td className="r"><b>{eur(c.pvp_nuevo, 2)}</b></td>
+                  <td>{c.motivo}{c.precio_marcado != null && <span style={{ display: "block", marginTop: 3 }}>{chip("prov", `Precio marcado · ${eur(c.precio_marcado, 2)}`)}</span>}</td>
+                  <td style={{ minWidth: 220 }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button className="btn-p" disabled={busy === c.id} onClick={() => revisado(c)}>Revisado</button>
+                      {Math.abs(Number(c.pvp_antes) - Number(c.pvp_nuevo)) >= 0.005 && <button className="btn-l" disabled={busy === c.id} onClick={() => devolver(c)}>Volver a {eur(c.pvp_antes, 2)}</button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

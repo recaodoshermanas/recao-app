@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { F, SF, C, SHADOW, inp, btnDark, btnGhost, lbl } from "../../lib/styles.js";
 import { IcoRight, IcoCheck } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
+import { Instrucciones } from "../../components/Instrucciones.jsx";
 
 // Recepción de pedidos: la trabajadora confirma lo que ha llegado. El stock sube con lo que ella confirma.
 const fn = (accion, datos = {}) => sb.fn("recepcion", { accion, ...datos });
@@ -42,7 +43,7 @@ const importeNum = (v) => { let t = String(v ?? "").trim().replace(/\s|€/g, ""
 const btnPeq = { ...btnGhost, padding: "0 14px", height: 44, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 };
 
 // Foto → JPEG reducido en base64 (las fotos del móvil pesan mucho)
-function prepararFoto(file) {
+export function prepararFoto(file) {
   return new Promise((ok, mal) => {
     const img = new Image(); const url = URL.createObjectURL(file);
     img.onload = () => {
@@ -263,6 +264,7 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
         </div>
         <button type="button" onClick={onCerrar} style={{ ...btnPeq, height: 38 }}>{dentro ? "Volver" : "Cerrar"}</button>
       </div>
+      {!dentro && <Instrucciones pantalla="anadir" sinMargen />}
       {dentro && <div style={{ fontFamily: F, fontSize: 13, color: C.mut, background: "#F4EFE6", borderRadius: 12, padding: "10px 12px" }}>Para lo que ha llegado y no tenemos dado de alta.{recepcion?.via !== "manual" ? " Cuando llegue la factura, compruebo el coste." : ""}</div>}
       <div>{L(1, "Código de barras")}<CampoCodigo id="fp-1" codigo={codigo} setCodigo={setCodigo} sinCodigo={sinCodigo} setSinCodigo={setSinCodigo} estado={estadoCod} /></div>
       <div>{L(2, "Nombre")}<input id="fp-2" value={nombre} onChange={(e) => setNombre(e.target.value)} style={inp} />{ayuda("Como lo leerías en la caja")}</div>
@@ -360,6 +362,8 @@ function CodigoExiste({ producto: p, modo, recepcion, datos, onEsEste, onVolver,
     setBusy(false);
   };
   return (
+    <>
+    <Instrucciones pantalla="incidencia" />
     <div style={{ padding: "16px 16px 28px", display: "flex", flexDirection: "column", gap: 14, maxWidth: 540, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1 }}>
@@ -388,6 +392,7 @@ function CodigoExiste({ producto: p, modo, recepcion, datos, onEsEste, onVolver,
         <button type="button" disabled={busy} onClick={mandar} style={{ ...btnDark, background: C.red, color: "#fff", opacity: busy ? 0.6 : 1 }}>{busy ? "Mandando…" : "Mandar incidencia"}</button>
       </div>
     </div>
+    </>
   );
 }
 
@@ -428,13 +433,14 @@ function FilaSinCodigo({ p, onHecho }) {
     </div>
   );
 }
-function SinCodigo({ productos: iniciales, onTerminar }) {
+export function SinCodigo({ productos: iniciales, onTerminar }) {
   const [lista, setLista] = useState(iniciales || null);
   const [hechos, setHechos] = useState(0);
   useEffect(() => { if (!iniciales) fn("sin_codigo").then((r) => setLista(r.productos || [])).catch(() => setLista([])); }, [iniciales]);
   if (!lista) return <Cargando />;
   return (
     <div style={{ padding: "16px 16px 28px", display: "flex", flexDirection: "column", gap: 12, maxWidth: 540, margin: "0 auto" }}>
+      <Instrucciones pantalla="sin_codigo" sinMargen />
       <div style={{ background: C.char, borderRadius: 16, padding: "16px 18px" }}>
         <div style={{ fontFamily: SF, fontSize: 21, color: C.gold }}>{lista.length} producto{lista.length === 1 ? "" : "s"} nuevo{lista.length === 1 ? "" : "s"}</div>
         <div style={{ fontFamily: F, fontSize: 13, color: "#E9DFC6" }}>Solo falta su código de barras: pásales la pistola</div>
@@ -522,7 +528,7 @@ function PonerCodigos({ onVolver }) {
 }
 
 // ---------- 9 · Añadir producto desde el inicio ----------
-export function AnadirProductoView({ onFin }) {
+export function AnadirProductoView({ onFin, codigoInicial }) {
   const [provs, setProvs] = useState(null);
   const [hecho, setHecho] = useState(null);
   const [clave, setClave] = useState(0);
@@ -557,7 +563,7 @@ export function AnadirProductoView({ onFin }) {
           </button>
         </div>
       )}
-      <FichaProducto key={clave} modo="fuera" proveedores={provs} onCerrar={onFin} onListo={(r) => { if (r.existente) onFin(); else setHecho(r); }} />
+      <FichaProducto key={clave} modo="fuera" proveedores={provs} inicial={clave === 0 && codigoInicial ? { codigo: codigoInicial } : undefined} onCerrar={onFin} onListo={(r) => { if (r.existente) onFin(); else setHecho(r); }} />
     </>
   );
 }
@@ -931,7 +937,7 @@ export function RecepcionView({ onContar }) {
   const input = <input ref={fotoInput} type="file" accept="image/*" capture="environment" multiple onChange={fotoElegida} style={{ display: "none" }} aria-hidden="true" tabIndex={-1} />;
 
   if (vista === "leyendo") return <div>{input}<Cargando texto={destinoFoto.current && !datos ? "Leyendo el documento… tarda unos 20 segundos" : "Un momento…"} /></div>;
-  if (vista === "revisar" && datos) return <div>{input}<Revisar datos={datos} onVolver={(recargar) => { setDatos(null); setVista("lista"); if (recargar) cargar(); }} onHecho={(r) => { setResultado(r); setDatos(null); setVista(r.sin_codigo?.length ? "sincodigo" : "hecho"); }} /></div>;
+  if (vista === "revisar" && datos) return <div>{input}<Instrucciones pantalla="recepcion" /><Revisar datos={datos} onVolver={(recargar) => { setDatos(null); setVista("lista"); if (recargar) cargar(); }} onHecho={(r) => { setResultado(r); setDatos(null); setVista(r.sin_codigo?.length ? "sincodigo" : "hecho"); }} /></div>;
   if (vista === "sincodigo") return <SinCodigo productos={resultado?.sin_codigo?.length ? resultado.sin_codigo.map((a) => ({ ...a, id: a.alta_id })) : null} onTerminar={() => { if (resultado) setVista("hecho"); else { setVista("lista"); cargar(); } }} />;
   if (vista === "espera" && espera) return <FichaProducto modo="espera" recepcion={espera} proveedor={{ nombre: espera.proveedor, supplier_id: espera.supplier_id }} onCerrar={() => { setEspera(null); setVista("lista"); }}
     onListo={(r) => { setEspera(null); setVista("lista"); setMsg(""); if (r.alta) { setAvisoBien(`${r.alta.nombre} dado de alta a ${eur(r.alta.pvp)} y añadido al pedido de ${espera.proveedor}.`); cargar(); } else if (r.incidencia) setAvisoBien("Incidencia mandada a dirección."); }} />;
@@ -976,6 +982,7 @@ export function RecepcionView({ onContar }) {
   return (
     <div style={{ padding: "16px 16px 28px", display: "flex", flexDirection: "column", gap: 12, maxWidth: 540, margin: "0 auto" }}>
       {input}
+      <Instrucciones pantalla="recepcion" sinMargen />
       <p style={{ margin: 0, fontFamily: F, fontSize: 13, color: C.mut }}>Elige el pedido que acaba de llegar. El stock sube cuando confirmas.</p>
       {prueba && <div style={{ fontFamily: F, fontSize: 12.5, background: "#EAF0F8", color: "#2F5C8F", borderRadius: 12, padding: "8px 12px" }}>Modo prueba hasta el inventario: el stock de la caja aún no cambia. Ojo: los productos nuevos que des de alta sí entran en la caja.</div>}
       <Aviso msg={msg} />
