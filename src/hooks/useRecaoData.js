@@ -18,7 +18,7 @@ export function useRecaoData(user) {
       const [facs, mes, provs, cfgs] = await Promise.all([
         sb.select("facturas_proveedores", "select=*&order=fecha.desc"),
         sb.select("datos_mes", "select=*&order=mes.desc"),
-        sb.select("proveedores", "select=*&order=nombre.asc"),
+        sb.select("proveedores", "select=*&activo=eq.true&order=nombre.asc"),
         sb.select("config", "select=*"),
       ]);
       setFacturas(facs);
