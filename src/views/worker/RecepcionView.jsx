@@ -188,6 +188,7 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
   const [sug, setSug] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [parecidos, setParecidos] = useState(null); // #32: altas automáticas de factura que pueden ser este producto
   const provElegido = !dentro ? (proveedores || []).find((p) => p.nombre === provSel) : null;
   const sinCosteFuera = !dentro && !coste.trim();
 
@@ -215,6 +216,9 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nombre, coste, marcado, pMarcado, provSel]);
 
+  if (parecidos?.datos) return <EsEste candidatos={parecidos.lista} datos={parecidos.datos} proveedor={provElegido?.nombre}
+    onListo={(r) => onListo({ alta: r })} onNo={() => { const d = parecidos.datos; setParecidos(null); crear(d, true); }} onVolver={() => setParecidos(null)} />;
+
   if (existe) return <CodigoExiste producto={existe} modo={modo} recepcion={recepcion} datos={{ nombre, coste: coste ? numero(coste) : null, marcado: marcado === true, precio_marcado: marcado ? numero(pMarcado) : null, pvp: numero(pvp) || null, unidades: dentro ? numero(uds) : null, supplier_id: dentro ? proveedor?.supplier_id : provElegido?.supplier_id, proveedor: dentro ? proveedor?.nombre : provElegido?.nombre, recepcion_id: recepcion?.id }}
     onEsEste={() => onListo({ existente: existe, unidades: numero(uds) })} onVolver={() => { setExiste(null); setCodigo(""); setEstadoCod(""); }} onIncidencia={() => onListo({ incidencia: true })} />;
 
@@ -232,11 +236,20 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
     if (!(numero(pvp) > 0)) { setMsg(sinCosteFuera ? "Pon un precio de venta para poder venderlo ya" : "Falta el precio de venta"); return; }
     const datos = { nombre: nombre.trim(), codigo: sinCodigo ? null : codigo, sin_codigo: sinCodigo, marcado, precio_marcado: marcado ? numero(pMarcado) : null, coste: coste.trim() ? numero(coste) : null, pvp: numero(pvp), pvp_sugerido: sug?.pvp ?? null, unidades: dentro ? numero(uds) : null };
     if (modo === "pedido") { onListo({ nuevo: datos }); return; }
-    setBusy(true);
+    await crear(datos, false);
+  };
+  // fuera de pedido: antes de crear, ¿ya lo dio de alta sola una factura de ese proveedor? (#32)
+  const crear = async (datos, sinMirar) => {
+    setBusy(true); setMsg("");
     try {
+      if (!sinMirar && modo === "fuera" && provElegido) {
+        const c = await fn("alta_parecidos", { nombre: datos.nombre, supplier_id: provElegido.supplier_id, proveedor: provElegido.nombre }).catch(() => null);
+        if (c?.candidatos?.length) { setParecidos({ lista: c.candidatos, datos }); setBusy(false); return; }
+      }
+      setParecidos(null);
       const r = await fn("alta_producto", { ...datos, recepcion_id: recepcion?.id, supplier_id: provElegido?.supplier_id, proveedor: provElegido?.nombre });
       onListo({ alta: r });
-    } catch (e) { setMsg(e.message || "No se ha podido dar de alta"); }
+    } catch (e) { setParecidos(null); setMsg(e.message || "No se ha podido dar de alta"); }
     setBusy(false);
   };
   const L = (n, t) => <label style={lbl} htmlFor={`fp-${n}`}>{dentro ? `${n} · ` : ""}{t}</label>;
@@ -292,6 +305,43 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
       </div>
       <Aviso msg={msg} />
       <button type="button" disabled={busy} onClick={guardar} style={{ ...btnDark, background: C.grn, color: "#fff", fontSize: 17, padding: 16, opacity: busy ? 0.6 : 1 }}>{busy ? "Dando de alta…" : modo === "pedido" ? "Añadir al pedido" : modo === "espera" ? "Añadir al pedido y dar de alta" : "Dar de alta"}</button>
+    </div>
+  );
+}
+
+// ---------- #32 · ¿Es este? (lo dio de alta sola una factura, sin código) ----------
+function EsEste({ candidatos, datos, proveedor, onListo, onNo, onVolver }) {
+  const [busy, setBusy] = useState(null);
+  const [msg, setMsg] = useState("");
+  const elegir = async (c) => {
+    setBusy(c.alta_id); setMsg("");
+    try { onListo(await fn("alta_es_este", { alta_id: c.alta_id, codigo: datos.codigo, sin_codigo: datos.sin_codigo, nombre: datos.nombre, marcado: datos.marcado, precio_marcado: datos.precio_marcado })); }
+    catch (e) { setMsg(e.message || "No se ha podido"); }
+    setBusy(null);
+  };
+  const dia = (t) => new Date(t).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+  return (
+    <div style={{ padding: "16px 16px 28px", display: "flex", flexDirection: "column", gap: 14, maxWidth: 540, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: SF, fontSize: 22 }}>¿Es este?</div>
+          <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>«{datos.nombre}»{proveedor ? ` · ${proveedor}` : ""}</div>
+        </div>
+        <button type="button" onClick={onVolver} style={{ ...btnPeq, height: 38 }}>Volver</button>
+      </div>
+      <div style={{ fontFamily: F, fontSize: 14 }}>Una factura de {proveedor || "este proveedor"} ya dio de alta {candidatos.length === 1 ? "este producto" : "estos productos"} sin código. Si es el mismo, no hace falta crear otro:</div>
+      {candidatos.map((c) => (
+        <div key={c.alta_id} style={{ ...card, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div>
+            <div style={{ fontFamily: F, fontSize: 16, fontWeight: 700 }}>{c.nombre}</div>
+            <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{[c.nombre_documento && c.nombre_documento !== c.nombre ? `En la factura: «${c.nombre_documento}»` : null, `Precio ${eur(c.pvp)}`, `llegó el ${dia(c.creado_en)}`].filter(Boolean).join(" · ")}</div>
+          </div>
+          <button type="button" disabled={!!busy} onClick={() => elegir(c)} style={{ ...btnDark, background: C.grn, color: "#fff", opacity: busy ? 0.6 : 1 }}>{busy === c.alta_id ? "Guardando…" : "Sí, es este"}</button>
+        </div>
+      ))}
+      <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>Si es este, se le pone {datos.codigo ? "el código que has escaneado" : "lo que has puesto"} y el nombre «{datos.nombre}»{datos.marcado && datos.precio_marcado ? ` y el precio marcado ${eur(datos.precio_marcado)}` : "; el precio se queda como está"}. El coste es el de la factura.</div>
+      <Aviso msg={msg} />
+      <button type="button" disabled={!!busy} onClick={onNo} style={{ ...btnDark, background: "#fff", color: C.char, border: "1.5px solid #C9C0B0" }}>No, es otro producto: darlo de alta</button>
     </div>
   );
 }
@@ -486,7 +536,7 @@ export function AnadirProductoView({ onFin }) {
     <div style={{ padding: "36px 16px 24px", display: "flex", flexDirection: "column", gap: 14, maxWidth: 540, margin: "0 auto" }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
         <span style={{ width: 72, height: 72, borderRadius: 999, background: "#EAF4EE", display: "flex", alignItems: "center", justifyContent: "center" }}><IcoCheck size={36} color={C.grn} sw={2.4} /></span>
-        <div style={{ fontFamily: SF, fontSize: 24 }}>{hecho.incidencia ? "Incidencia mandada" : "Producto dado de alta"}</div>
+        <div style={{ fontFamily: SF, fontSize: 24 }}>{hecho.incidencia ? "Incidencia mandada" : hecho.alta?.asociado ? "Hecho: es el mismo producto" : "Producto dado de alta"}</div>
         <div style={{ fontFamily: F, fontSize: 14, color: C.mut }}>{hecho.incidencia ? "Dirección lo revisa y lo corrige." : `${hecho.alta.nombre} · ${eur(hecho.alta.pvp)} · ya se puede vender en la caja`}</div>
       </div>
       <button type="button" onClick={() => { setHecho(null); setClave((k) => k + 1); }} style={{ ...btnGhost, minHeight: 48 }}>Añadir otro</button>

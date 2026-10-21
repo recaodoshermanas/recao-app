@@ -240,14 +240,26 @@ function Nuevos({ d, P, U, cargar, otras }) {
   const [sel, setSel] = useState([]);
   const [costes, setCostes] = useState({});
   const [provs, setProvs] = useState({});
+  const [pvps, setPvps] = useState({});
   const [busy, setBusy] = useState(null);
   const filas = d.altas.map((a) => ({ ...a, _m: motivos(a) })).filter((a) => a._m.length && (!filtro || a._m.some(([k]) => k === filtro)));
   const cuenta = (k) => d.altas.filter((a) => motivos(a).some(([x]) => x === k)).length;
+  // #32: cambiar el precio de venta desde aquí, igual que en el Catálogo (Epos al momento y queda en el historial)
+  const guardarPvp = async (a, p) => {
+    const nuevo = numero(pvps[a.id]); const antes = Number(p?.sale_price ?? a.pvp);
+    if (!(nuevo > 0)) { avisar("El precio de venta no puede quedar vacío", "mal"); return; }
+    if (Math.abs(nuevo - antes) < 0.005) { avisar("Es el mismo precio"); return; }
+    if (!window.confirm(`Cambia el precio en caja de «${p?.name || a.nombre}» de ${eur(antes, 2)} a ${eur(nuevo, 2)}. ¿Seguimos?`)) return;
+    setBusy(a.id);
+    try { await guardarCambios([{ id: Number(a.product_id), campos: { pvp: nuevo } }], `Precio de «${p?.name || a.nombre}» a ${eur(nuevo, 2)}`); avisar(`Precio ${eur(nuevo, 2)} guardado en Epos`); setPvps((x) => ({ ...x, [a.id]: undefined })); await cargar(); }
+    catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
   const hacer = async (id, accion, datos, ok) => { setBusy(id); try { const r = await fn(accion, datos); avisar(typeof ok === "function" ? ok(r) : ok); setSel([]); await cargar(); } catch (e) { avisar(e.message || "No se ha podido", "mal"); } setBusy(null); };
   return (
     <div className="card mt">
       <div className="head">
-        <div><h2>Productos dados de alta desde la recepción</h2><p className="sub">Ya están en Epos y se pueden vender. Revisa nombre, categoría, IVA y precio en el Catálogo y márcalos como revisados. Los precios corregidos por coste aparecen en Recepción → Precios por aprobar.</p></div>
+        <div><h2>Productos dados de alta desde la recepción</h2><p className="sub">Ya están en Epos y se pueden vender. El precio de venta se cambia aquí mismo (se guarda en Epos al momento y queda en el historial); nombre, categoría e IVA, en el Catálogo. Luego márcalos como revisados. Los precios corregidos por coste aparecen en Recepción → Precios por aprobar.</p></div>
         {sel.length > 0 && <button className="btn-p" onClick={() => hacer("lote", "alta_revisada", { ids: sel }, `${sel.length} marcados como revisados`)}>Marcar {sel.length} como revisados</button>}
       </div>
       <div className="filtros-t">
@@ -279,9 +291,16 @@ function Nuevos({ d, P, U, cargar, otras }) {
                       {a.nombre_documento && a.nombre_documento !== a.nombre && <span className="pf">En factura: «{a.nombre_documento}»</span>}
                       <Otras lista={a.product_id ? otras(a.product_id, "nuevos") : []} />
                     </td>
-                    <td>{a._m.map(([k, t]) => chip(k, t))}</td>
-                    <td className="r">{a.coste_sin_iva != null ? eur(a.coste_sin_iva, 3) : "—"}{a.coste_introducido != null && a.coste_introducido !== a.coste_sin_iva && <span className="pf">puso {String(a.coste_introducido).replace(".", ",")}{a.interpretacion ? ` (${a.interpretacion})` : ""}</span>}</td>
-                    <td className="r">{eur(p?.sale_price ?? a.pvp, 2)}<span className="pf">{a.estado_coste === "sin_verificar" && a.coste_sin_iva == null && a.coste_introducido == null ? "precio momentáneo · " : ""}{PVP_ORIGEN[a.pvp_origen] || ""}{a.pvp_origen === "trabajadora" && a.pvp_calculado != null ? ` · el sistema daba ${eur(a.pvp_calculado, 2)}` : ""}</span></td>
+                    <td>{a._m.map(([k, t]) => chip(k, t))}{a.precio_marcado && chip("margen", `Precio marcado · ${eur(a.pvp, 2)}`)}{a.precio_marcado && !a.revisado && <span className="pf">Viene con el precio puesto: compruébalo y pulsa «Revisado».</span>}</td>
+                    <td className="r">{a.coste_sin_iva != null ? eur(a.coste_sin_iva, 3) : "—"}{a.coste_introducido != null && a.coste_introducido !== a.coste_sin_iva && <span className="pf">puso {String(a.coste_introducido).replace(".", ",")}{a.interpretacion ? ` (${a.interpretacion})` : ""}</span>}
+                      {a.estado_coste === "sin_verificar" && <span className="pf" style={{ textAlign: "left", maxWidth: 210, marginLeft: "auto" }}>{a.coste_sin_iva == null && a.coste_introducido == null ? `Se dio de alta sin coste: se cogerá de la factura${a.proveedor ? ` de ${a.proveedor}` : ""} cuando llegue, o ponlo aquí.` : `Es el coste que puso ${U.get(a.creado_por) || "la trabajadora"} al darlo de alta. Aún no lo ha confirmado ninguna factura${a.proveedor ? ` de ${a.proveedor}` : ""}; se confirma solo cuando llegue.`}</span>}</td>
+                    <td className="r">{eur(p?.sale_price ?? a.pvp, 2)}{a.product_id && !p?.archivado && (
+                        <span style={{ display: "flex", gap: 4, justifyContent: "flex-end", margin: "4px 0 2px" }}>
+                          <label style={{ position: "absolute", left: -9999 }} htmlFor={`pv-${a.id}`}>Nuevo precio de venta de {a.nombre}</label>
+                          <input id={`pv-${a.id}`} className="mini-input" inputMode="decimal" placeholder="Nuevo PVP" value={pvps[a.id] ?? ""} onChange={(e) => setPvps({ ...pvps, [a.id]: e.target.value })} style={{ width: 80 }} />
+                          <button className="btn-l" disabled={busy === a.id || !(numero(pvps[a.id]) > 0)} onClick={() => guardarPvp(a, p)}>Guardar</button>
+                        </span>
+                      )}<span className="pf">{a.estado_coste === "sin_verificar" && a.coste_sin_iva == null && a.coste_introducido == null ? "precio momentáneo · " : ""}{PVP_ORIGEN[a.pvp_origen] || ""}{a.pvp_origen === "trabajadora" && a.pvp_calculado != null ? ` · el sistema daba ${eur(a.pvp_calculado, 2)}` : ""}</span></td>
                     <td style={{ minWidth: 220 }}>
                       {tieneCoste && (
                         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
