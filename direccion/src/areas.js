@@ -25,6 +25,7 @@ export const AREAS = [
       { id: "caja", label: "Caja" },
       { id: "sobres", label: "Efectivo de sobres" },
       { id: "compras", label: "Compras" },
+      { id: "bancos", label: "Bancos" }, // #23
       { id: "facturas", label: "Facturas", legado: true },
       { id: "cierre", label: "Cierre de mes", legado: true },
       { id: "tesoreria", label: "Tesorería", legado: true },
@@ -77,7 +78,7 @@ export const DESTINOS = {
   disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
   candidatos: "personas/seleccion", plus: "personas/equipo", bolsa: "personas/bolsa",
   recepcion_admin: "producto/recepcion", fichajes_admin: "personas/fichajes", documentos_admin: "personas/documentos",
-  solicitudes_tec: "tecnologia/solicitudes", caja_fuerte: "finanzas/caja", productos_revisar: "producto/revisar",
+  solicitudes_tec: "tecnologia/solicitudes", caja_fuerte: "finanzas/caja", bancos: "finanzas/bancos", productos_revisar: "producto/revisar",
 };
 
 // Enlaces antiguos de Personas → secciones nuevas

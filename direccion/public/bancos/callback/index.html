@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Volviendo al panel…</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;color:#555;background:#fff}</style></head>
+<body><p>Volviendo al panel…</p>
+<script>
+  // Vuelta del banco (#23): se pasa el código al panel, a Finanzas → Bancos, que termina la conexión
+  (function () {
+    var p = new URLSearchParams(location.search), q = new URLSearchParams();
+    if (p.get("code")) q.set("bancos_code", p.get("code"));
+    if (p.get("state")) q.set("bancos_state", p.get("state"));
+    if (p.get("error")) q.set("bancos_error", p.get("error_description") || p.get("error"));
+    location.replace("/?" + q.toString() + "#/finanzas/bancos");
+  })();
+</script></body></html>
