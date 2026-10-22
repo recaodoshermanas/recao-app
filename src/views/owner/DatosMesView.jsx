@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { F, SF, C, inp, lbl, crd } from "../../lib/styles.js";
 import { fmt, fmt2, mkLabel, uid, pn, currentMK } from "../../lib/utils.js";
-import { PAQUETERIA, GASTOS_FIJOS_TPL } from "../../lib/constants.js";
+import { PAQUETERIA } from "../../lib/constants.js";
 import { sb } from "../../lib/supabase.js";
 import { Sec } from "../../components/Sec.jsx";
 import { AperturaSobres, DescuadreSobres, useSobres } from "./AperturaSobres.jsx"; // SOBRES (#13)
 import { EposCierres } from "./EposCierres.jsx"; // #15
 import { SalariosMes } from "./SalariosMes.jsx"; // #18
+import { GastosFijos } from "./GastosFijos.jsx"; // #28
 
 export function DatosMesView({ facturas, monthlyData, config, onReload, initialMonth }) {
   const allMonths = [...new Set([...Object.keys(monthlyData), currentMK])].sort().reverse();
@@ -27,6 +28,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
   const [repartoSocios, setRepartoSocios] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const gfGuardar = useRef(null); // #28: apunta el origen (banco / a mano) de los gastos fijos al guardar
   const [salNuevo, setSalNuevo] = useState(null); // #18: null cargando · true tarjetas por trabajadora · false lista de antes
   const [salV2, setSalV2] = useState([]);
   useEffect(() => { setSalNuevo(null); }, [selMonth]);
@@ -70,6 +72,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         resumen_legacy: null,
       };
       await sb.upsert("datos_mes", payload, "mes");
+      try { await gfGuardar.current?.(); } catch (e) { alert("Guardado, pero no se ha podido apuntar el origen de los gastos fijos: " + e.message); }
       if (!salNuevo && salarios.length > 0) {
         await sb.upsert("config", { key: "salarios_template", value: salarios }, "key");
       }
@@ -145,12 +148,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
 
       <Sec title="Gastos fijos" />
       <div style={crd}>
-        {GASTOS_FIJOS_TPL.map(g => (
-          <div key={g.key} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-            <span style={{ fontFamily: F, fontSize: "13px", color: C.char, flex: 1 }}>{g.label}</span>
-            <input type="number" inputMode="decimal" value={gastosFijos[g.key] || ""} onChange={e => setGF(g.key, e.target.value)} placeholder="0" style={{ ...inp, width: "110px", padding: "8px 10px", fontSize: "13px", marginBottom: 0, textAlign: "right" }} />
-          </div>
-        ))}
+        <GastosFijos mes={selMonth} valores={gastosFijos} onValores={v => setGastosFijos(p => ({ ...p, ...v }))} guardarRef={gfGuardar} />
       </div>
 
       <Sec title="Otros gastos operativos" />
