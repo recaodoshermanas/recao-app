@@ -4,11 +4,12 @@ import { F, SF, C, btnDark } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { IR_CORREO } from "../../lib/enlaceAviso.js";
 import { NovedadesEquipo } from "../../components/Novedades.jsx"; // NOVEDADES
-import { IcoCheck, IcoCalendar } from "../../lib/icons.jsx";
+import { IcoCheck } from "../../lib/icons.jsx";
 import {
   BOLSA_ACTIVA, TELEFONO_DIRECCION, DIAS_SOLTAR, esTurnoTrabajo, horarioDe, horasDe,
   fechaLarga, grupoSemana, hoyYmd, plazo, diasHasta, motivo,
 } from "../../lib/bolsa.js";
+import { MisTurnosMes } from "./MisTurnosMes.jsx"; // #37 resumen del mes
 import { card, seccion, btnNo, btnSi, btnTexto, ShiftChip, DateBlock, PlazoChip, Toast, Hoja, PreferenciaAvisos } from "../bolsa/BolsaUI.jsx";
 
 const FILTROS = [
@@ -81,7 +82,6 @@ export function EventualApp({ user }) {
     visibles.forEach(o => { const g = grupoSemana(o.fecha); let x = out.find(y => y.titulo === g); if (!x) { x = { titulo: g, items: [] }; out.push(x); } x.items.push(o); });
     return out;
   }, [visibles]);
-  const totalHoras = mios.reduce((t, m) => t + horasDe(m.turno, m.fecha), 0);
 
   const cerrar = () => { setSel(null); setFase(null); setMot(null); };
 
@@ -236,34 +236,8 @@ export function EventualApp({ user }) {
             )}
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
-            <div style={{ background: C.char, borderRadius: 18, padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-              <div><div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: "#C9C0B0" }}>Próximos turnos</div><div style={{ fontFamily: SF, fontSize: 34, color: C.gold, lineHeight: 1.1 }}>{mios.length}</div></div>
-              <div style={{ textAlign: "right" }}><div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: "#C9C0B0" }}>Horas</div><div style={{ fontFamily: SF, fontSize: 34, color: C.gold, lineHeight: 1.1 }}>{totalHoras}</div></div>
-            </div>
-
-            {mios.length === 0 ? (
-              <div style={{ ...card, flexDirection: "column", alignItems: "center", textAlign: "center", padding: 24 }}>
-                <IcoCalendar size={26} color={C.mutL} />
-                <div style={{ fontFamily: F, fontSize: 14, color: C.mut }}>Todavía no tienes turnos. Cuando cojas uno aparecerá aquí.</div>
-              </div>
-            ) : mios.map(m => {
-              const b = deBolsa[m.fecha]; const puedeSoltar = b && diasHasta(m.fecha) >= DIAS_SOLTAR;
-              return (
-                <div key={m.fecha} style={{ ...card, flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <DateBlock f={m.fecha} />
-                    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-                      <ShiftChip turno={m.turno} />
-                      <span style={{ fontFamily: F, fontSize: 16.5, fontWeight: 700, color: C.char }}>{horarioDe(m.turno, m.fecha)}</span>
-                      <span style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{horasDe(m.turno, m.fecha)} horas</span>
-                    </div>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: F, fontSize: 12.5, fontWeight: 700, color: "#1E7A46" }}><IcoCheck size={15} color="#1E7A46" sw={2.6} />Tuyo</span>
-                  </div>
-                  {puedeSoltar && <button onClick={() => { setSel({ ...b, fecha: m.fecha, turno: m.turno }); setFase("soltar"); }} style={{ alignSelf: "flex-start", minHeight: 38, padding: "0 12px", border: `1.5px solid ${C.brd}`, borderRadius: 11, background: "#fff", fontFamily: F, fontSize: 13, fontWeight: 600, color: C.char, cursor: "pointer" }}>Ya no puedo ir</button>}
-                </div>
-              );
-            })}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <MisTurnosMes user={user} deBolsa={deBolsa} refresco={mios.map((m) => m.fecha + m.turno).join()} onSoltar={(x) => { setSel(x); setFase("soltar"); }} />
 
             <div style={{ ...card, flexDirection: "column", alignItems: "stretch", gap: 6 }}>
               <div style={{ fontFamily: SF, fontSize: 17, color: C.char }}>¿Te ha surgido algo?</div>
