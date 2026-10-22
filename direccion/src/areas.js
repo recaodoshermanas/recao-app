@@ -27,6 +27,7 @@ export const AREAS = [
       { id: "compras", label: "Compras" },
       { id: "bancos", label: "Bancos" }, // #23
       { id: "pagos", label: "Facturas pendientes de pago" }, // #27
+      { id: "inversiones", label: "Inversiones" }, // #40
       { id: "facturas", label: "Facturas", legado: true },
       { id: "cierre", label: "Cierre de mes", legado: true },
       { id: "tesoreria", label: "Tesorería", legado: true },

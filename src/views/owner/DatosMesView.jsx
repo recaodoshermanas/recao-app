@@ -48,6 +48,16 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
     setRepartoSocios(d.reparto_socios || "");
   }, [selMonth, monthlyData, config]);
 
+  // #40: las inversiones del mes salen de la tabla «inversiones» (solo lectura aquí)
+  useEffect(() => {
+    let vivo = true;
+    const [a, m] = selMonth.split("-").map(Number);
+    const sig = m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, "0")}`;
+    sb.select("inversiones", `select=id,concepto,importe&activo=eq.true&fecha=gte.${selMonth}-01&fecha=lt.${sig}-01&order=fecha.asc`)
+      .then((r) => { if (vivo) setInversiones((r || []).map((i) => ({ id: String(i.id), concepto: i.concepto, amount: Number(i.importe) }))); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [selMonth, monthlyData]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -55,7 +65,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         mes: selMonth,
         ventas_epos: pn(ventas),
         paqueteria, gastos_fijos: gastosFijos, salarios: salNuevo ? salV2 : salarios,
-        otros_gastos: otrosGastos, inversiones,
+        otros_gastos: otrosGastos,
         reparto_socios: pn(repartoSocios),
         resumen_legacy: null,
       };
@@ -157,16 +167,14 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
 
       <div style={{ marginTop: "28px", padding: "16px 0", borderTop: `2px solid ${C.gold}` }}>
         <div style={{ fontFamily: F, fontSize: "10px", fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "16px" }}>Movimientos de tesorería (no afectan al resultado)</div>
-        <Sec title="Inversiones" />
+        <Sec title="Inversiones" sub="Solo lectura: se gestionan en Finanzas → Inversiones" />
         <div style={crd}>
-          {inversiones.map(i => (
-            <div key={i.id} style={{ display: "flex", gap: "8px", marginBottom: "8px", alignItems: "center" }}>
-              <input value={i.concepto} onChange={e => setInversiones(p => p.map(x => x.id === i.id ? { ...x, concepto: e.target.value } : x))} placeholder="Ej: Congelador" style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: "13px", marginBottom: 0 }} />
-              <input type="number" inputMode="decimal" value={i.amount || ""} onChange={e => setInversiones(p => p.map(x => x.id === i.id ? { ...x, amount: pn(e.target.value) } : x))} placeholder="0" style={{ ...inp, width: "100px", padding: "8px 10px", fontSize: "13px", marginBottom: 0, textAlign: "right" }} />
-              <button onClick={() => setInversiones(p => p.filter(x => x.id !== i.id))} style={{ border: "none", background: "none", color: "#ccc", fontSize: "18px", cursor: "pointer" }}>×</button>
+          {inversiones.length === 0 ? <div style={{ fontFamily: F, fontSize: "13px", color: C.mut, marginBottom: "8px" }}>Ninguna este mes.</div> : inversiones.map(i => (
+            <div key={i.id} style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "8px", fontFamily: F, fontSize: "13px", color: C.char }}>
+              <span>{i.concepto}</span><span style={{ fontWeight: 700 }}>{fmt2(i.amount)}</span>
             </div>
           ))}
-          <button onClick={() => setInversiones(p => [...p, { id: uid(), concepto: "", amount: 0 }])} style={{ border: `1.5px dashed ${C.brd}`, background: "none", fontFamily: F, fontSize: "12px", color: C.mut, padding: "10px", borderRadius: "8px", width: "100%", cursor: "pointer" }}>+ Añadir inversión</button>
+          <a href="#/finanzas/inversiones" style={{ fontFamily: F, fontSize: "12.5px", fontWeight: 600, color: C.blu }}>Gestionar en Inversiones</a>
         </div>
         <Sec title="Reparto a socios" />
         <div style={crd}><input type="number" inputMode="decimal" value={repartoSocios} onChange={e => setRepartoSocios(e.target.value)} placeholder="0" style={{ ...inp, marginBottom: 0 }} /></div>

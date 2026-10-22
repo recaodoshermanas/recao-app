@@ -15,15 +15,18 @@ export function useRecaoData(user) {
   const reload = useCallback(async () => {
     try {
       setError(null);
-      const [facs, mes, provs, cfgs] = await Promise.all([
+      const [facs, mes, provs, cfgs, invs] = await Promise.all([
         sb.select("facturas_proveedores", "select=*&order=fecha.desc"),
         sb.select("datos_mes", "select=*&order=mes.desc"),
         sb.select("proveedores", "select=*&activo=eq.true&order=nombre.asc"),
         sb.select("config", "select=*"),
+        sb.select("inversiones", "select=id,fecha,concepto,importe&activo=eq.true&order=fecha.asc").catch(() => []), // #40: única fuente de las inversiones
       ]);
       setFacturas(facs);
       const mObj = {};
-      mes.forEach(m => { mObj[m.mes] = m; });
+      const invMes = {};
+      (invs || []).forEach(i => { (invMes[i.fecha.slice(0, 7)] ||= []).push({ id: String(i.id), concepto: i.concepto, amount: Number(i.importe) }); });
+      mes.forEach(m => { mObj[m.mes] = { ...m, inversiones: invMes[m.mes] || [] }; });
       setMonthlyData(mObj);
       setProveedores(provs.map(p => p.nombre));
       const cfgObj = {};

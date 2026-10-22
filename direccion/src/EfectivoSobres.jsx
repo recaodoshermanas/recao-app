@@ -9,7 +9,7 @@ import { ExtrasSobres } from "../../src/views/owner/ExtrasSobres.jsx"; // #17
 
 const TIPOS = {
   reparto: { label: "Reparto", chip: "rep" }, extra: { label: "Extra", chip: "ext" }, compra: { label: "Compra", chip: "com" },
-  banco: { label: "Banco", chip: "ban" }, caja_fuerte: { label: "Caja fuerte", chip: "cf" },
+  banco: { label: "Banco", chip: "ban" }, caja_fuerte: { label: "Caja fuerte", chip: "cf" }, inversion: { label: "Inversión", chip: "rep" },
 };
 const numero = (v) => { const s = String(v ?? "").trim().replace(/\s/g, ""); const t = s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s; const x = Number(t); return t !== "" && /^\d+(\.\d{1,2})?$/.test(t) && Number.isFinite(x) ? x : NaN; };
 const masMes = (m, n) => { const d = new Date(`${m}-15T12:00:00`); d.setMonth(d.getMonth() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
@@ -75,7 +75,7 @@ export function EfectivoSobres() {
                     <td>{s.tipo === "reparto" ? s.persona : s.tipo === "extra" ? <>{s.persona}{s.concepto ? <span className="pf">{s.concepto}</span> : null}</> : s.tipo === "banco" ? `${s.banco}${s.concepto ? ` · ${s.concepto}` : ""}` : (s.concepto || "—")}{s.cambios > 0 && <span className="pf">Corregido</span>}</td>
                     <td>{s.quien || "—"}</td>
                     <td className="r b">−{eur(s.importe, 2)}</td>
-                    <td className="r" style={{ whiteSpace: "nowrap" }}>{s.origen === "factura" ? <span className="pf">Se corrige en la factura</span> : s.origen === "extras" ? <span className="pf">Se cambia en «Extras de trabajadoras»</span> : <button className="btn-l" onClick={() => setPanel({ editar: s })}>Corregir</button>}</td>
+                    <td className="r" style={{ whiteSpace: "nowrap" }}>{s.origen === "factura" ? <span className="pf">Se corrige en la factura</span> : s.origen === "extras" ? <span className="pf">Se cambia en «Extras de trabajadoras»</span> : s.origen === "inversion" ? <span className="pf">Se cambia en «Inversiones»</span> : <button className="btn-l" onClick={() => setPanel({ editar: s })}>Corregir</button>}</td>
                   </tr>
                 ))}
               </tbody>
