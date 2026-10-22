@@ -232,7 +232,10 @@ export function FinanzasResultados({ onEditMonth }) {
   const filas = [
     { k: "ventas", l: "Ventas (con IVA)" }, { k: "paqueteria", l: "Paquetería" }, { k: "ingresos", l: "Ingresos", b: true },
     ...CATS.map((c) => ({ k: c.id, l: c.label, neg: true })),
-    { k: "gastos", l: "Gastos", b: true, neg: true }, { k: "resultado", l: "Beneficio del negocio", b: true, r: true },
+    { k: "gastos", l: "Gastos", b: true, neg: true },
+    // #36: desde octubre de 2026, la suma de los descuadres de los sobres (resta si falta dinero, suma si sobra)
+    ...(meses.some((m) => m.mes >= "2026-10") ? [{ k: "descuadres_caja", l: "Descuadres de caja" }] : []),
+    { k: "resultado", l: "Beneficio del negocio", b: true, r: true },
     // Solo los socios (#14): el reparto no es gasto, va debajo del beneficio
     ...(d.socio ? [{ k: "reparto_sobres", l: "Reparto a socios", neg: true }, { k: "resultado_tras_reparto", l: "Resultado después del reparto", b: true, r2: true }] : []),
   ];
@@ -292,7 +295,10 @@ function DetalleMes({ mes, onCambio, onEditMonth }) {
     <div className="grid">
       <div className="card c6">
         <div className="head">
-          <div><h2>{mesAnio(mes.mes)}</h2><p className="sub">Resultado {eur(sinDecimales(mes.resultado))} · {pct(mes.ingresos ? mes.resultado / mes.ingresos * 100 : 0)} de los ingresos</p></div>
+          <div><h2>{mesAnio(mes.mes)}</h2><p className="sub">Resultado {eur(sinDecimales(mes.resultado))} · {pct(mes.ingresos ? mes.resultado / mes.ingresos * 100 : 0)} de los ingresos</p>
+            {n0(mes.descuadres_caja) !== 0 && <p className="sub">Incluye {eur(mes.descuadres_caja, 2)} de descuadres de caja (sobres)</p>}
+            {n0(mes.sobres_sin_revisar) > 0 && <p className="sub" style={{ color: "#9A4A00", fontWeight: 700 }}>{mes.sobres_sin_revisar} sobre{mes.sobres_sin_revisar === 1 ? "" : "s"} sin revisar en la Apertura de sobres: cuentan como correctos.</p>}
+          </div>
           {onEditMonth && <button className="btn-l" onClick={() => onEditMonth(mes.mes.slice(0, 7))}>Editar mes</button>}
         </div>
         <h3 className="fh3">Compras de mercancía</h3>
@@ -340,6 +346,8 @@ function DetalleMes({ mes, onCambio, onEditMonth }) {
 // se explica por esos pagos (se contó después de pagar), se descuentan.
 function difEfectivo(x) {
   const bruto = n0(x.contado_efectivo) - n0(x.epos_efectivo);
+  // #25: desde el 24/10 lo contado sale de los cierres de Epos, que ya cuentan las facturas pagadas desde el cajón
+  if (x.fuente === "epos") return { v: bruto, porPagos: false };
   const ajustada = bruto + n0(x.pagos_efectivo);
   const porPagos = n0(x.pagos_efectivo) > 0 && Math.abs(ajustada) < Math.abs(bruto);
   return { v: porPagos ? ajustada : bruto, porPagos };
@@ -366,7 +374,7 @@ export function FinanzasCaja() {
       <div className="grid">
         <div className="card c12">
           <div className="head">
-            <div><h2>Cuadre diario</h2><p className="sub">Lo que registra Epos frente a lo que cuentan las trabajadoras al cerrar cada turno</p></div>
+            <div><h2>Cuadre diario</h2><p className="sub">Lo que registra Epos frente a lo que cuentan las trabajadoras al cerrar cada turno (desde el 24 de octubre, lo contado en los cierres de Epos)</p></div>
             {hoyFila && <p className="sub">Hoy: {hoyFila.cierres} de 2 cierres hechos</p>}
           </div>
           <div className="tabla-scroll">
@@ -393,7 +401,7 @@ export function FinanzasCaja() {
               </tbody>
             </table>
           </div>
-          <p className="sub fuera">* Diferencia una vez descontadas las facturas pagadas en efectivo ese día (hasta el 8 de septiembre se contaba la caja después de pagarlas). Los cierres se registran en la app desde el 30 de julio de 2026.</p>
+          <p className="sub fuera">* Diferencia una vez descontadas las facturas pagadas en efectivo ese día (hasta el 8 de septiembre se contaba la caja después de pagarlas). Los cierres se registran en la app desde el 30 de julio de 2026; desde el 24 de octubre, el efectivo y la tarjeta contados salen de los cierres de Epos (cuentan las facturas pagadas desde el cajón como dinero) y el detalle por turno y caja está en Cierre de mes → «Epos frente a cierres».</p>
         </div>
       </div>
       <div className="grid">

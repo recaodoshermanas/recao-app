@@ -14,12 +14,15 @@ function Avatar({ name, size = 36 }) {
   return <span style={{ width: size, height: size, borderRadius: "999px", background: a.bg, color: a.fg, fontFamily: SF, fontSize: Math.round(size * 0.42), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{a.inicial}</span>;
 }
 
+const DESDE_EPOS = "2026-10-24";
+const conSigno = (v) => `${Number(v) > 0 ? "+" : ""}${fmt2(Number(v))}`;
 function addDays(n) { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); }
 
 export function CierresAdminView() {
   const [trab, setTrab] = useState([]);
   const nombreDe = useMemo(() => Object.fromEntries(trab.map(t => [t.id, t.nombre])), [trab]);
   const [cierres, setCierres] = useState([]);
+  const [epos, setEpos] = useState({}); // #25: cierres de Epos por día (desde el 24/10)
   const [loading, setLoading] = useState(true);
   const [abierto, setAbierto] = useState(null);
   const [fUid, setFUid] = useState("");
@@ -39,7 +42,13 @@ export function CierresAdminView() {
       if (fUid) q += `&usuario_id=eq.${fUid}`;
       if (desde) q += `&fecha=gte.${desde}`;
       if (hasta) q += `&fecha=lte.${hasta}`;
-      setCierres(await sb.select("cierres_turno", q));
+      const lista = await sb.select("cierres_turno", q);
+      setCierres(lista);
+      const dias = [...new Set(lista.map((c) => c.fecha).filter((f) => f >= DESDE_EPOS))];
+      if (dias.length) {
+        const e = await sb.select("epos_cierres", `select=eod_id,fecha,turno,dos_turnos,caja,abre,cierra,ef_esperado,ef_contado,ef_dif,ta_esperado,ta_contado,ta_dif&fecha=in.(${dias.join(",")})&order=caja.asc`).catch(() => []);
+        const m = {}; e.forEach((x) => { (m[x.fecha] ||= []).push(x); }); setEpos(m);
+      } else setEpos({});
     } catch (e) { setCierres([]); }
     setLoading(false);
   }, [fUid, desde, hasta]);
@@ -107,6 +116,8 @@ export function CierresAdminView() {
           const prov = provCaja(caja);
           const tk1 = caja ? (caja.tickets || []).filter(t => t.caja === 1) : [];
           const tk2 = caja ? (caja.tickets || []).filter(t => t.caja === 2) : [];
+          // desde el 24/10 la caja no se apunta en «Mi turno»: se enseñan los cierres de Epos de ese turno
+          const ep = !caja && c.fecha >= DESDE_EPOS ? (epos[c.fecha] || []).filter((x) => x.turno === c.turno || (x.dos_turnos && c.turno === "tarde")) : [];
           return (
             <div key={c.id} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 15, marginBottom: 10, boxShadow: SHADOW.card }}>
               <div onClick={() => setAbierto(open ? null : c.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", gap: 10 }}>
@@ -116,6 +127,7 @@ export function CierresAdminView() {
                     <div style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{nombreDe[c.usuario_id] || "—"}</div>
                     <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 1, textTransform: "capitalize" }}>{fmtF(c.fecha)} · {c.turno}</div>
                     {caja && <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: C.goldDark, marginTop: 2 }}>Ventas: {fmt2(ventas)}</div>}
+                    {ep.length > 0 && (() => { const n = ep.reduce((s, x) => s + Number(x.ef_dif || 0) + Number(x.ta_dif || 0), 0); return <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: Math.abs(n) > 5 ? "#B23A2C" : C.goldDark, marginTop: 2 }}>Caja en Epos: {conSigno(n)}</div>; })()}
                   </div>
                 </div>
                 <span style={{ fontFamily: F, fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 999, background: completo ? "#E7F3EC" : "#FBEAE7", color: completo ? "#1E7A46" : "#B23A2C", whiteSpace: "nowrap", flexShrink: 0 }}>{hechas}/{items.length}{completo ? "" : ` · ${pend} sin hacer`}</span>
@@ -130,6 +142,25 @@ export function CierresAdminView() {
                         {bloqueCaja("Caja 2", caja.caja2_efectivo, caja.caja2_tarjeta, tk2)}
                         <div style={{ display: "flex", justifyContent: "space-between", fontFamily: SF, fontSize: 15, color: C.char, borderTop: `1px solid ${C.brdL}`, paddingTop: 9 }}><span>Ventas del turno</span><span>{fmt2(ventas)}</span></div>
                         {prov > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 7 }}><span>Pagado a proveedores (sale de la caja)</span><span>{fmt2(prov)}</span></div>}
+                      </div>
+                    </div>
+                  )}
+                  {ep.length > 0 && (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ ...secLbl, margin: "0 0 8px" }}>Cierre de caja en Epos</div>
+                      <div style={{ background: "#FBF8F1", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: 13 }}>
+                        {ep.map((x) => (
+                          <div key={x.eod_id} style={{ marginBottom: 10 }}>
+                            <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: C.char, marginBottom: 5 }}>Caja {x.caja}{x.dos_turnos ? " (mañana y tarde)" : ""} · {String(x.abre).slice(11, 16)}–{x.cierra ? String(x.cierra).slice(11, 16) : "?"}</div>
+                            {[["Efectivo", x.ef_esperado, x.ef_contado, x.ef_dif], ["Tarjeta", x.ta_esperado, x.ta_contado, x.ta_dif]].map(([l, e, k, d]) => (
+                              <div key={l} style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 3 }}>
+                                <span>{l}: esperado {fmt2(e)} · contado {fmt2(k)}</span>
+                                <span style={{ fontWeight: 700, color: Number(d) < 0 ? "#B23A2C" : Number(d) > 0 ? "#1E7A46" : C.mut }}>{conSigno(d)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                        <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL }}>El detalle de todos los cierres está en Cierre de mes → «Epos frente a cierres».</div>
                       </div>
                     </div>
                   )}

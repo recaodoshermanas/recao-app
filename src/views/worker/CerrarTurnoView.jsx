@@ -14,6 +14,8 @@ export function CerrarTurnoView({ user }) {
   const fecha = ymd(hoy);
   const dow = isoDow(hoy);
   const fechaLarga = hoy.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+  // #25: desde el 24/10/2026 el cierre de caja se hace solo en Epos; aquí ya no se piden cifras de caja
+  const sinCaja = fecha >= "2026-10-24";
 
   const [turno, setTurno] = useState(null);
   const [modo, setModo] = useState("ver");
@@ -89,6 +91,7 @@ export function CerrarTurnoView({ user }) {
     const faltaMotivo = tareas.filter(t => { const s = estado[t.id]; return s.estado === "no" && !s.nota.trim(); });
     if (faltaMotivo.length) { setMsg("Indica el motivo de las tareas no hechas"); return; }
     setMsg("");
+    if (sinCaja) { setConfirmando(true); return; }
     await cargarProv(turno);
     setCaja({ c1e: "", c1t: "", c2e: "", c2t: "" });
     setSelProv({});
@@ -99,8 +102,8 @@ export function CerrarTurnoView({ user }) {
     setSaving(true); setMsg("");
     try {
       const items = tareas.map(t => ({ tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", justificacion: justif(estado[t.id]) }));
-      const p_caja = { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
-      const p_facturas = Object.entries(selProv).map(([id, c]) => ({ id, caja: c }));
+      const p_caja = sinCaja ? null : { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
+      const p_facturas = sinCaja ? [] : Object.entries(selProv).map(([id, c]) => ({ id, caja: c }));
       await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas });
       setConfirmando(false);
       setModo("ver");
@@ -272,7 +275,7 @@ export function CerrarTurnoView({ user }) {
             {diarias.map(tarjetaTarea)}
             {semanales.length > 0 && <div style={{ ...grpLbl, marginTop: 18 }}>Hoy además</div>}
             {semanales.map(tarjetaTarea)}
-            <button onClick={irACaja} disabled={!completo} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10, opacity: !completo ? 0.5 : 1 }}>{completo ? "Continuar al cierre de caja" : `Revisa todas (faltan ${tareas.length - revisadas})`}</button>
+            <button onClick={irACaja} disabled={!completo} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10, opacity: !completo ? 0.5 : 1 }}>{completo ? (sinCaja ? "Cerrar turno" : "Continuar al cierre de caja") : `Revisa todas (faltan ${tareas.length - revisadas})`}</button>
           </div>
         ) : (
           <div>
@@ -350,6 +353,9 @@ export function CerrarTurnoView({ user }) {
               </div>
             )}
 
+            {sinCaja ? (
+              <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 10, padding: "10px 12px", marginBottom: 16, lineHeight: 1.45 }}>El cierre de caja se hace en Epos, como siempre: aquí ya no hace falta apuntar el efectivo ni la tarjeta.</div>
+            ) : (
             <div style={{ background: C.char, borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontFamily: F, fontSize: 13, color: "#fff", fontWeight: 600 }}>Total del día (ventas)</span>
@@ -357,6 +363,7 @@ export function CerrarTurnoView({ user }) {
               </div>
               {totalTickets > 0 && <div style={{ fontFamily: F, fontSize: 11.5, color: "#9a927f", marginTop: 6 }}>Pagado a proveedores desde la caja: {fmt2(totalTickets)} · no es venta</div>}
             </div>
+            )}
 
             <div style={{ fontFamily: F, fontSize: 12, color: "#7A5C1A", background: "#FBF4E6", border: "1px solid #EAD9AE", borderRadius: 10, padding: "10px 12px", marginBottom: 16, lineHeight: 1.45 }}>Una vez cerrado, el registro <b>no se puede modificar</b>. Si después ves algo mal, se corrige por la vía de la incidencia.</div>
 
