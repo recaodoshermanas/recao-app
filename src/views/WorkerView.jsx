@@ -5,11 +5,13 @@ import { sb } from "../lib/supabase.js";
 import { useConfirm } from "../hooks/useConfirm.jsx";
 
 // #24 / #26: «Tarjeta» incluye las transferencias que mandamos nosotros; «Banco» = domiciliación o pago desde el banco
-const TIPOS_PAGO = [["tarjeta", "Tarjeta / transferencia"], ["efectivo", "Efectivo (caja)"], ["caja_fuerte", "Caja fuerte"], ["banco", "Banco"]];
+// #46: «Tarjeta / transferencia» y «Banco» eran lo mismo: ahora solo «Banco» (las facturas antiguas guardadas como «tarjeta» se tratan igual)
+const TIPOS_PAGO = [["banco", "Banco"], ["efectivo", "Efectivo (caja)"], ["caja_fuerte", "Caja fuerte"]];
+const pagoNorm = (t) => (t === "tarjeta" ? "banco" : t);
 const TIPO_SOBRES = ["efectivo_sobres", "Efectivo sobres"]; // #14: solo los socios
-const ESTILO_PAGO = { tarjeta: ["#E7EEF7", "#3F6EA5"], efectivo: ["#EAF3EC", "#2E7D4F"], caja_fuerte: ["#F3E9D6", "#6A4A08"], efectivo_sobres: ["#EDE4F5", "#5A3A7A"], banco: ["#E6F2F2", "#1F6262"] };
+const ESTILO_PAGO = { tarjeta: ["#E6F2F2", "#1F6262"], efectivo: ["#EAF3EC", "#2E7D4F"], caja_fuerte: ["#F3E9D6", "#6A4A08"], efectivo_sobres: ["#EDE4F5", "#5A3A7A"], banco: ["#E6F2F2", "#1F6262"] };
 const NARANJA = ["#FDEBD3", "#9A4A00", "#E8913A"]; // fondo, texto, borde: factura pendiente de importe
-const etiquetaPago = (t) => (t === "tarjeta" ? "Tarjeta" : t === "efectivo" ? "Efectivo" : t === "caja_fuerte" ? "Caja fuerte" : t === "efectivo_sobres" ? "Efectivo sobres" : t === "banco" ? "Banco" : "");
+const etiquetaPago = (t) => (t === "tarjeta" ? "Banco" : t === "efectivo" ? "Efectivo" : t === "caja_fuerte" ? "Caja fuerte" : t === "efectivo_sobres" ? "Efectivo sobres" : t === "banco" ? "Banco" : "");
 // mismo proveedor aunque cambien mayúsculas, tildes o guiones («COCA COLA» = «Coca-Cola»)
 const claveProv = (t) => String(t ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 // «108,29», «1.108,29» y «108.29» valen lo mismo; acepta negativos (abonos)
@@ -55,7 +57,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
   }, [lista, facturas, proveedores]);
 
   // #26: al elegir proveedor, su forma de pago predefinida (se puede cambiar)
-  const elegirProveedor = (p) => { setProveedor(p); const d = pagoDefecto[claveProv(p)]; if (d && !editId) setTipoPago(d); };
+  const elegirProveedor = (p) => { setProveedor(p); const d = pagoDefecto[claveProv(p)]; if (d && !editId) setTipoPago(pagoNorm(d)); };
 
   const guardar = async (amt) => {
     setSaving(true);
@@ -96,7 +98,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
     catch (e) { if (w) w.close(); alert("No se puede abrir el documento: " + e.message); }
   };
 
-  const startEdit = (f) => { setEditId(f.id); setProveedor(f.proveedor); setImporte(f.importe == null ? "" : String(f.importe).replace(".", ",")); setTipoPago(f.tipo_pago || "efectivo"); setFecha(f.fecha); setNota(f.nota || ""); setModo("form"); };
+  const startEdit = (f) => { setEditId(f.id); setProveedor(f.proveedor); setImporte(f.importe == null ? "" : String(f.importe).replace(".", ",")); setTipoPago(pagoNorm(f.tipo_pago) || "efectivo"); setFecha(f.fecha); setNota(f.nota || ""); setModo("form"); };
 
   const handleDelete = async (id) => {
     try { await sb.delete("facturas_proveedores", `id=eq.${id}`); await onReload(); }
@@ -221,7 +223,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
             })}
           </div>
           {tipoPago === "efectivo_sobres" && <div style={{ fontFamily: F, fontSize: "12.5px", color: "#5A3A7A", background: "#F3EDF8", borderRadius: "10px", padding: "9px 12px", marginBottom: "16px", lineHeight: 1.4 }}>Compra suelta o reparación pagada con el efectivo de los sobres: sale sola en Finanzas → Efectivo de sobres.</div>}
-          {tipoPago === "banco" && <div style={{ fontFamily: F, fontSize: "12.5px", color: "#1F6262", background: "#E6F2F2", borderRadius: "10px", padding: "9px 12px", marginBottom: "16px", lineHeight: 1.4 }}>Se paga desde el banco (domiciliación): no sale dinero de la tienda, pero cuenta como gasto del mes.</div>}
+          {tipoPago === "banco" && <div style={{ fontFamily: F, fontSize: "12.5px", color: "#1F6262", background: "#E6F2F2", borderRadius: "10px", padding: "9px 12px", marginBottom: "16px", lineHeight: 1.4 }}>Se paga desde el banco (transferencia o domiciliación): no sale dinero de la tienda.</div>}
           {tipoPago === "caja_fuerte" && <div style={{ fontFamily: F, fontSize: "12.5px", color: "#6A4A08", background: "#FBF0DA", borderRadius: "10px", padding: "9px 12px", marginBottom: "16px", lineHeight: 1.4 }}>Este dinero sale de la caja fuerte: no sale de la caja registradora ni va al sobre del cierre.</div>}
           {!editId && <div style={{ fontFamily: F, fontSize: "11.5px", color: C.mut, marginTop: "-8px", marginBottom: "16px" }}>El turno se apunta solo por la hora a la que la guardas.</div>}
           <label style={lbl}>Fecha</label>

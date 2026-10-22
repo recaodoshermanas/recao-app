@@ -16,9 +16,12 @@ export function PagosPendientes() {
   const [tab, setTab] = useState("pendientes");
   const [panel, setPanel] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [sinClas, setSinClas] = useState({ sin_clasificar: [], ignorados: [] }); // #46
+  const [verIgn, setVerIgn] = useState(false);
 
   const cargar = useCallback(async () => {
     try { setD(await sb.rpc("pagos_datos")); setFallo(false); } catch (e) { setFallo(true); }
+    try { const r = await sb.rpc("pagos_sin_clasificar"); setSinClas({ sin_clasificar: r?.sin_clasificar || [], ignorados: r?.ignorados || [] }); } catch (e) { /* el aviso es secundario */ }
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -60,6 +63,38 @@ export function PagosPendientes() {
         <Pestanas valor={tab} onChange={setTab} etiqueta="Vista"
           opciones={[{ id: "pendientes", label: "Pendientes" }, { id: "propuestas", label: "Posibles pagos por confirmar", n: nProp }, { id: "pagadas", label: "Pagadas (60 días)" }]} />
       </div>
+
+      {tab === "pendientes" && (sinClas.sin_clasificar.length > 0 || sinClas.ignorados.length > 0) && (
+        <div className="card" style={{ marginTop: 16 }}>
+          {sinClas.sin_clasificar.length > 0 && (
+            <>
+              <h3 className="fh3" style={{ marginTop: 0 }}>Proveedores sin clasificar</h3>
+              <p className="sub">Tienen facturas con forma de pago «Banco» desde el 1/10/2026 pero no están en la lista de transferencia o domiciliación, así que no salen en pendientes. Dime cómo se pagan.</p>
+              {sinClas.sin_clasificar.map((p) => (
+                <div key={p.clave} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+                  <span><strong>{p.nombre}</strong> <span className="pf" style={{ display: "inline", marginLeft: 6 }}>{p.n} {p.n === 1 ? "factura" : "facturas"} · {eur(p.total, 2)}</span></span>
+                  <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn-l" disabled={busy} onClick={() => accion("pagos_clasificar_proveedor", { p_nombre: p.nombre, p_modo: "transferencia" }, `${p.nombre}: transferencia`)}>Es transferencia</button>
+                    <button className="btn-l" disabled={busy} onClick={() => accion("pagos_clasificar_proveedor", { p_nombre: p.nombre, p_modo: "domiciliacion" }, `${p.nombre}: domiciliado`)}>Es domiciliado</button>
+                    <button className="btn-l" disabled={busy} onClick={() => accion("pagos_ignorar_proveedor", { p_nombre: p.nombre, p_ignorar: true }, `${p.nombre}: ignorado`)}>Ignorar</button>
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+          {sinClas.ignorados.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <button className="btn-l" onClick={() => setVerIgn((v) => !v)}>{verIgn ? "Ocultar" : "Ver"} ignorados ({sinClas.ignorados.length})</button>
+              {verIgn && sinClas.ignorados.map((p) => (
+                <div key={p.clave} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "6px 0" }}>
+                  <span>{p.nombre} <span className="pf" style={{ display: "inline", marginLeft: 6 }}>{p.n} {p.n === 1 ? "factura" : "facturas"} · {eur(p.total, 2)}</span></span>
+                  <button className="btn-l" disabled={busy} onClick={() => accion("pagos_ignorar_proveedor", { p_nombre: p.nombre, p_ignorar: false }, `${p.nombre}: vuelve al aviso`)}>Deshacer</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === "pendientes" && (
         <div className="card" style={{ marginTop: 16 }}>

@@ -305,8 +305,8 @@ function DetalleMes({ mes, onCambio, onEditMonth }) {
         <ul className="pq-l">
           <li><span>Facturas de proveedores{mes.facturas_n ? ` (${mes.facturas_n} en la app)` : ""}</span><b>{eur(sinDecimales(mes.facturas))}</b></li>
           {mes.facturas_historico > 0 && <li className="nota"><span>de ellas, total de la hoja sin detalle</span><span>{eur(sinDecimales(mes.facturas_historico))}</span></li>}
-          {/* #24: por forma de pago; «Banco» va aparte de efectivo y tarjeta */}
-          {[["facturas_efectivo", "pagadas en efectivo"], ["facturas_tarjeta", "con tarjeta o transferencia"], ["facturas_banco", "por banco"], ["facturas_caja_fuerte", "de la caja fuerte"], ["facturas_sobres", "con efectivo de sobres"]].filter(([k]) => n0(mes[k])).map(([k, t]) => <li key={k} className="nota"><span>de ellas, {t}</span><span>{eur(sinDecimales(mes[k]))}</span></li>)}
+                    {/* #46: «tarjeta» y «banco» se suman en una sola cifra «Banco» */}
+          {[["facturas_efectivo", "pagadas en efectivo"], ["facturas_banco", "por banco"], ["facturas_caja_fuerte", "de la caja fuerte"], ["facturas_sobres", "con efectivo de sobres"]].map(([k, t]) => [k, t, k === "facturas_banco" ? n0(mes.facturas_banco) + n0(mes.facturas_tarjeta) : n0(mes[k])]).filter(([, , v]) => v).map(([k, t, v]) => <li key={k} className="nota"><span>de ellas, {t}</span><span>{eur(sinDecimales(v))}</span></li>)}
           {n0(mes.facturas_pendientes) > 0 && <li className="nota" style={{ color: "#9A4A00" }}><span>{mes.facturas_pendientes} pendiente{mes.facturas_pendientes > 1 ? "s" : ""} de importe (no cuentan todavía)</span><span>–</span></li>}
         </ul>
         <h3 className="fh3">Salarios</h3>

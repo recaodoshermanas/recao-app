@@ -36,7 +36,8 @@ const FACTURAS_DESDE = "2026-10-24";
 const fechaDoc = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}` : "sin fecha");
 const tipoDoc = (t) => (t === "albaran" ? "Albarán" : t === "factura" ? "Factura" : null);
 const hoyMadrid = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" });
-const PAGOS_REC = [["tarjeta", "Tarjeta / transferencia"], ["efectivo", "Efectivo (caja)"], ["caja_fuerte", "Caja fuerte"], ["banco", "Banco"]];
+// #46: solo «Banco» (antes también «Tarjeta / transferencia»)
+const PAGOS_REC = [["banco", "Banco"], ["efectivo", "Efectivo (caja)"], ["caja_fuerte", "Caja fuerte"]];
 const ETQ_PAGO = Object.fromEntries(PAGOS_REC);
 const claveProv = (t) => String(t ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const importeNum = (v) => { let t = String(v ?? "").trim().replace(/\s|€/g, "").replace(/[−–]/g, "-"); if (t.includes(",")) t = t.replace(/\./g, "").replace(",", "."); const n = Number(t); return t !== "" && Number.isFinite(n) ? n : NaN; };
@@ -716,7 +717,8 @@ function Revisar({ datos, onHecho, onVolver }) {
   useEffect(() => {
     sb.select("proveedor_pago_defecto", "select=nombre,pago").then((r) => {
       const d = (r || []).find((x) => claveProv(x.nombre) === claveProv(rec.proveedor) || (prov?.nombre && claveProv(x.nombre) === claveProv(prov.nombre)));
-      if (d && ETQ_PAGO[d.pago]) { setPago((p) => p ?? d.pago); setPagoAuto(true); }
+      const dp = d?.pago === "tarjeta" ? "banco" : d?.pago;
+      if (dp && ETQ_PAGO[dp]) { setPago((p) => p ?? dp); setPagoAuto(true); }
     }).catch(() => {});
   }, [rec.proveedor, prov?.nombre]);
   const facImporteN = importeNum(facImporte);
