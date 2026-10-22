@@ -335,6 +335,13 @@ function DetalleMes({ mes, onCambio, onEditMonth }) {
             ))}
           </ul>
         )}
+        {(mes.mantenimiento_det || []).length > 0 && <>
+          <h3 className="fh3">Mantenimiento</h3>
+          <ul className="pq-l">
+            {mes.mantenimiento_det.map((l) => <li key={l.id}><span>{l.concepto}</span><span>{eur(n0(l.importe), 2)}</span></li>)}
+          </ul>
+          <a className="sub" href="#/finanzas/mantenimiento">Gestionar en Mantenimiento</a>
+        </>}
         {n0(mes.inversiones) > 0 && <p className="sub fuera">Inversiones (fuera del resultado): {eur(sinDecimales(mes.inversiones))}</p>}
       </div>
     </div>

@@ -26,6 +26,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
   const [salarios, setSalarios] = useState([]);
   const [otrosGastos, setOtrosGastos] = useState([]);
   const [inversiones, setInversiones] = useState([]);
+  const [mantenimiento, setMantenimiento] = useState([]); // #42
   const [repartoSocios, setRepartoSocios] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -61,6 +62,16 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
       setPaqBanco(r);
       setPaqueteria(r.efectiva || {});
     }).catch(() => {});
+    return () => { vivo = false; };
+  }, [selMonth, monthlyData]);
+
+  // #42: el mantenimiento del mes sale de Finanzas → Mantenimiento (solo lectura aquí)
+  useEffect(() => {
+    let vivo = true;
+    const [a, m] = selMonth.split("-").map(Number);
+    const sig = m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, "0")}`;
+    sb.select("mantenimientos", `select=id,concepto,importe&activo=eq.true&fecha=gte.${selMonth}-01&fecha=lt.${sig}-01&order=fecha.asc`)
+      .then((r) => { if (vivo) setMantenimiento((r || []).map((i) => ({ id: String(i.id), concepto: i.concepto, amount: Number(i.importe) }))); }).catch(() => {});
     return () => { vivo = false; };
   }, [selMonth, monthlyData]);
 
@@ -179,6 +190,16 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
           </div>
         ))}
         <button onClick={() => setOtrosGastos(p => [...p, { id: uid(), concepto: "", amount: 0 }])} style={{ border: `1.5px dashed ${C.brd}`, background: "none", fontFamily: F, fontSize: "12px", color: C.mut, padding: "10px", borderRadius: "8px", width: "100%", cursor: "pointer" }}>+ Añadir gasto</button>
+      </div>
+
+      <Sec title="Mantenimiento" sub="Solo lectura: se gestiona en Finanzas → Mantenimiento" />
+      <div style={crd}>
+        {mantenimiento.length === 0 ? <div style={{ fontFamily: F, fontSize: "13px", color: C.mut, marginBottom: "8px" }}>Ninguno este mes.</div> : mantenimiento.map(i => (
+          <div key={i.id} style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "8px", fontFamily: F, fontSize: "13px", color: C.char }}>
+            <span>{i.concepto}</span><span style={{ fontWeight: 700 }}>{fmt2(i.amount)}</span>
+          </div>
+        ))}
+        <a href="#/finanzas/mantenimiento" style={{ fontFamily: F, fontSize: "12.5px", fontWeight: 600, color: C.blu }}>Gestionar en Mantenimiento</a>
       </div>
 
       <div style={{ marginTop: "28px", padding: "16px 0", borderTop: `2px solid ${C.gold}` }}>

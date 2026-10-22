@@ -80,6 +80,11 @@ export function PLView({ facturas, monthlyData, onEditMonth }) {
                       {(md.otros_gastos || []).filter(o => parseFloat(o.amount) > 0).map(o => (<Row key={o.id} label={o.concepto || "(sin concepto)"} val={parseFloat(o.amount)} />))}
                       <Row label="Total otros" val={c.totalOtros} bold />
                     </SubSection>
+                    <SubSection title="Mantenimiento">
+                      {(md.mantenimiento || []).length === 0 && <div style={{ fontFamily: F, fontSize: "12px", color: C.mut, padding: "6px 0" }}>Sin mantenimiento</div>}
+                      {(md.mantenimiento || []).map(o => (<Row key={o.id} label={o.concepto} val={parseFloat(o.amount)} />))}
+                      <Row label="Total mantenimiento" val={c.totalMantenimiento} bold />
+                    </SubSection>
                     <div style={{ marginTop: "16px", padding: "12px", background: C.cream, borderRadius: "8px" }}>
                       <Row label="Total ingresos" val={c.totalIngresos} />
                       <Row label="Total gastos" val={c.totalGastos} />

@@ -15,18 +15,21 @@ export function useRecaoData(user) {
   const reload = useCallback(async () => {
     try {
       setError(null);
-      const [facs, mes, provs, cfgs, invs] = await Promise.all([
-        sb.select("facturas_proveedores", "select=*&order=fecha.desc"),
+      const [facs, mes, provs, cfgs, invs, mants] = await Promise.all([
+        sb.select("facturas_proveedores", "select=*&mantenimiento_id=is.null&order=fecha.desc"), // #42: las pasadas a Mantenimiento ya no son facturas
         sb.select("datos_mes", "select=*&order=mes.desc"),
         sb.select("proveedores", "select=*&activo=eq.true&order=nombre.asc"),
         sb.select("config", "select=*"),
         sb.select("inversiones", "select=id,fecha,concepto,importe&activo=eq.true&order=fecha.asc").catch(() => []), // #40: única fuente de las inversiones
+        sb.select("mantenimientos", "select=id,fecha,concepto,importe&activo=eq.true&order=fecha.asc").catch(() => []), // #42: única fuente del mantenimiento
       ]);
       setFacturas(facs);
       const mObj = {};
       const invMes = {};
       (invs || []).forEach(i => { (invMes[i.fecha.slice(0, 7)] ||= []).push({ id: String(i.id), concepto: i.concepto, amount: Number(i.importe) }); });
-      mes.forEach(m => { mObj[m.mes] = { ...m, inversiones: invMes[m.mes] || [] }; });
+      const manMes = {};
+      (mants || []).forEach(i => { (manMes[i.fecha.slice(0, 7)] ||= []).push({ id: String(i.id), concepto: i.concepto, amount: Number(i.importe) }); });
+      mes.forEach(m => { mObj[m.mes] = { ...m, inversiones: invMes[m.mes] || [], mantenimiento: manMes[m.mes] || [] }; });
       // #43: desde oct-2026 la paquetería de cada mes sale de los cobros de BBVA (+ correcciones a mano)
       try {
         const paq = await sb.rpc("paqueteria_meses");
