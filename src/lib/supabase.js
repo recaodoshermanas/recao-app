@@ -69,7 +69,8 @@ export const sb = {
       body: JSON.stringify(params),
     });
     if (!r.ok) throw new Error(`RPC ${fn}: ${r.status} ${await r.text()}`);
-    return r.json();
+    const t = await r.text(); // las funciones que no devuelven nada llegan con el cuerpo vacío
+    return t ? JSON.parse(t) : null;
   },
   // Llama a una edge function con el token del usuario (p.ej. gestion-usuarios).
   async fn(name, body = {}) {
