@@ -31,6 +31,12 @@ let irInicial = IR_CORREO === "mis" ? "mis" : null;
 export function EventualApp({ user }) {
   const [tab, setTab] = useState(() => irInicial || "bolsa");
   useEffect(() => { if (tab !== irInicial) irInicial = null; }, [tab]);
+  // #48: al pulsar en la campana el recordatorio de turno se abre «Mis turnos»; los de la bolsa, «Turnos disponibles»
+  useEffect(() => {
+    const h = (e) => { const d = e.detail && e.detail.destino; if (d === "mis") setTab("mis"); else if (d === "cubrir") setTab("bolsa"); };
+    window.addEventListener("recao-nav", h);
+    return () => window.removeEventListener("recao-nav", h);
+  }, []);
   const [filtro, setFiltro] = useState("todos");
   const [ofertas, setOfertas] = useState([]);       // bolsa_disponibles()
   const [mios, setMios] = useState([]);             // horarios de trabajo futuros

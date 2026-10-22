@@ -23,6 +23,7 @@ const DESTINO = {
   recepcion_documento: "recepcion", recepcion_diferencia: "recepcion_admin", recepcion_sin_documento: "recepcion_admin", recepcion_precio: "recepcion_admin",
   cambio_por_responder: "cambio", cambio_resuelto: "cambio", cambio_pendiente_admin: "cambios",
   // Bolsa de turnos: las de la trabajadora llevan a «Turnos para cubrir»; las de dirección, a Personas → Bolsa del panel
+  turno_recordatorio: "mis", // #48: recordatorio de turno a las eventuales → «Mis turnos»
   bolsa_resumen: "cubrir", bolsa_urgente: "cubrir", bolsa_descanso_pendiente: "cubrir", bolsa_descanso_ok: "cubrir", bolsa_anulado: "cubrir",
   bolsa_cubierto: "bolsa", bolsa_soltado: "bolsa", bolsa_nadie_puede: "bolsa", bolsa_urgente_admin: "bolsa", bolsa_descanso_limite: "bolsa",
   horas_extra_pedida: "horas", horas_extra_resuelta: "horasextra", // #39

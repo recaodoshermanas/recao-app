@@ -141,6 +141,7 @@ function Ficha({ persona, yo, onClose, onCambio }) {
               {d.horas.length === 0 ? <p className="empty">Ninguna.</p> : <ul className="pq-l">{d.horas.map((h) => <li key={h.id}><span>{fechaCorta(h.fecha)}{h.nota && <span className="pf">{h.nota}</span>}</span><b>{n0(h.horas).toLocaleString("es-ES")} h</b></li>)}</ul>}
             </section>
           )}
+          {persona.eventual && <MovilEventual persona={persona} busy={busy} onGuardar={(telefono) => cuenta({ action: "actualizar", id: persona.id, telefono }, telefono ? "Móvil guardado" : "Móvil quitado")} />}
           <section className="ficha-sec">
             <h3>Cuenta</h3>
             {persona.eventual ? (
@@ -159,6 +160,22 @@ function Ficha({ persona, yo, onClose, onCambio }) {
         </>
       )}
     </Panel>
+  );
+}
+
+// #48: el móvil de las eventuales lo apunta dirección; con él reciben también los avisos de la bolsa y el recordatorio por WhatsApp
+function MovilEventual({ persona, busy, onGuardar }) {
+  const [tel, setTel] = useState(persona.telefono || "");
+  useEffect(() => { setTel(persona.telefono || ""); }, [persona.id, persona.telefono]);
+  const cambiado = tel.trim() !== (persona.telefono || "");
+  return (
+    <section className="ficha-sec">
+      <h3>Móvil <small>para los avisos por WhatsApp</small></h3>
+      <label className="campo">Móvil
+        <input type="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="612 345 678" />
+      </label>
+      <button className="btn-l" disabled={busy || !cambiado} onClick={() => onGuardar(tel.trim())}>Guardar móvil</button>
+    </section>
   );
 }
 
