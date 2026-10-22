@@ -1,7 +1,7 @@
 // Finanzas → Inversiones (solicitud #40): una única lista de inversiones con forma de pago y comprobación con el banco (BBVA).
 // Las de «Efectivo sobres» salen solas como salida en Efectivo de los sobres. Nunca suman en la Cuenta de resultados.
-// Todo pasa por las funciones inversion(es)_* (solo dirección).
-import { useCallback, useEffect, useMemo, useState } from "react";
+// Todo pasa por las funciones inversion(es)_* (solo dirección). La foto del ticket o factura se guarda y se lee en inversiones-foto.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { Cargando, Panel, Pestanas, avisar, hoyStr } from "../ui.jsx";
 import { eur } from "../fmt.js";
@@ -9,6 +9,19 @@ import { eur } from "../fmt.js";
 const fecha = (f) => (f ? new Date(`${String(f).slice(0, 10)}T12:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "—");
 const numero = (t) => { const s = String(t ?? "").trim().replace(/\s/g, ""); const v = Number(s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s); return s !== "" && Number.isFinite(v) ? v : NaN; };
 const msg = (e) => { const t = String(e?.message || e || ""); const m = /"message"\s*:\s*"([^"]+)"/.exec(t); return m ? m[1] : t || "No se ha podido"; };
+// Foto del móvil → JPEG reducido en base64 (las fotos pesan mucho)
+function prepararFoto(file) {
+  return new Promise((ok, mal) => {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 2200 / Math.max(img.width, img.height)); const w = Math.round(img.width * k), h = Math.round(img.height * k);
+      const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url); ok({ mime: "image/jpeg", base64: cv.toDataURL("image/jpeg", 0.82).split(",")[1] });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); mal(new Error("No puedo abrir esa foto")); };
+    img.src = url;
+  });
+}
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const FORMAS = { efectivo_sobres: "Efectivo sobres", banco_bbva: "Banco (BBVA)", sin_indicar: "Sin indicar" };
 const ESTADOS = {
@@ -37,6 +50,12 @@ export function Inversiones() {
   const lista = useMemo(() => (d?.items || []).filter((i) => i.fecha.startsWith(String(anio)) && (!mes || i.fecha.slice(5, 7) === mes)), [d, anio, mes]);
   const totalAnio = useMemo(() => (d?.items || []).filter((i) => i.fecha.startsWith(String(anio))).reduce((s, i) => s + Number(i.importe), 0), [d, anio]);
   const totalLista = lista.reduce((s, i) => s + Number(i.importe), 0);
+
+  const verFoto = async (i) => {
+    const w = window.open("", "_blank");
+    try { const r = await sb.fn("inversiones-foto", { accion: "ver", id: i.id }); if (w) w.location = r.url; else window.location.href = r.url; }
+    catch (e) { if (w) w.close(); avisar(msg(e), "mal"); }
+  };
 
   const accion = async (fn, params, ok) => {
     setBusy(true);
@@ -80,7 +99,7 @@ export function Inversiones() {
                     return (
                       <tr key={i.id}>
                         <td style={{ whiteSpace: "nowrap" }}>{fecha(i.fecha)}</td>
-                        <td>{i.concepto}{(i.proveedor && i.proveedor !== i.concepto) && <span className="pf">{i.proveedor}</span>}{i.nota && <span className="pf">{i.nota}</span>}</td>
+                        <td>{i.concepto}{(i.proveedor && i.proveedor !== i.concepto) && <span className="pf">{i.proveedor}</span>}{i.nota && <span className="pf">{i.nota}</span>}{i.foto && <button className="btn-txt" onClick={() => verFoto(i)}>Ver foto</button>}</td>
                         <td>{FORMAS[i.forma_pago]}</td>
                         <td>
                           <span className="es-chip" style={{ background: e.bg, color: e.fg }}>{e.label}</span>
@@ -140,14 +159,32 @@ function PanelInversion({ inv, onClose, onListo }) {
   const [f, setF] = useState({ fecha: inv.fecha || hoyStr(), concepto: inv.concepto || "", importe: inv.importe != null ? String(inv.importe).replace(".", ",") : "", forma_pago: inv.forma_pago === "sin_indicar" ? "" : inv.forma_pago || "", proveedor: inv.proveedor || "", nota: inv.nota || "" });
   const [provs, setProvs] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [fotoPath, setFotoPath] = useState(null); // foto nueva subida en este panel
+  const [leyendo, setLeyendo] = useState(false);
+  const [lectura, setLectura] = useState("");
+  const input = useRef(null);
   useEffect(() => { sb.rpc("facturas_proveedores_lista").then((r) => setProvs(Array.isArray(r) ? r : [])).catch(() => {}); }, []);
   const x = numero(f.importe);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const ok = f.fecha && f.concepto.trim() && x > 0 && f.forma_pago;
   const cambiaComprobacion = !nueva && (Number(inv.importe) !== x || inv.fecha !== f.fecha || inv.forma_pago !== f.forma_pago) && ["comprobada", "a_mano", "no_encontrada", "pendiente"].includes(inv.estado);
+  const elegirFoto = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ""; if (!file) return;
+    setLeyendo(true); setLectura("");
+    try {
+      const r = await sb.fn("inversiones-foto", { accion: "leer", foto: await prepararFoto(file) });
+      setFotoPath(r.foto_path);
+      const d = r.datos;
+      if (d) {
+        setF((a) => ({ ...a, fecha: d.fecha || a.fecha, concepto: d.concepto || a.concepto, importe: d.importe > 0 ? String(d.importe).replace(".", ",") : a.importe, proveedor: d.proveedor || a.proveedor }));
+        setLectura("Foto guardada y datos leídos. Revisa fecha, concepto, importe y proveedor, y elige la forma de pago.");
+      } else setLectura(`Foto guardada, pero no se han podido leer los datos${r.aviso ? ` (${r.aviso})` : ""}. Rellénalos a mano.`);
+    } catch (er) { avisar(msg(er), "mal"); }
+    setLeyendo(false);
+  };
   const guardar = async () => {
     setBusy(true);
-    try { await sb.rpc("inversion_guardar", { p: { id: inv.id || null, fecha: f.fecha, concepto: f.concepto, importe: x, forma_pago: f.forma_pago, proveedor: f.proveedor, nota: f.nota } }); avisar("Guardado"); onListo(); }
+    try { await sb.rpc("inversion_guardar", { p: { id: inv.id || null, fecha: f.fecha, concepto: f.concepto, importe: x, forma_pago: f.forma_pago, proveedor: f.proveedor, nota: f.nota, ...(fotoPath ? { foto_path: fotoPath } : {}) } }); avisar("Guardado"); onListo(); }
     catch (e) { avisar(msg(e), "mal"); setBusy(false); }
   };
   const borrar = async () => {
@@ -158,7 +195,12 @@ function PanelInversion({ inv, onClose, onListo }) {
   };
   return (
     <Panel titulo={nueva ? "Nueva inversión" : "Editar inversión"} onClose={onClose} ancho="440px"
-      pie={<>{!nueva && <button className="btn-txt peligro" disabled={busy} onClick={borrar}>Borrar</button>}<button className="btn-p" disabled={busy || !ok} onClick={guardar}>{busy ? "Guardando…" : "Guardar"}</button></>}>
+      pie={<>{!nueva && <button className="btn-txt peligro" disabled={busy} onClick={borrar}>Borrar</button>}<button className="btn-p" disabled={busy || leyendo || !ok} onClick={guardar}>{busy ? "Guardando…" : "Guardar"}</button></>}>
+      <input ref={input} type="file" accept="image/*" capture="environment" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} onChange={elegirFoto} />
+      <button type="button" className="btn-l" disabled={leyendo || busy} onClick={() => input.current?.click()}>
+        {leyendo ? "Leyendo la foto… unos segundos" : fotoPath ? "Foto añadida ✓ (cambiar)" : inv.foto ? "Cambiar la foto del ticket o factura" : "Hacer foto del ticket o factura (opcional)"}
+      </button>
+      {lectura ? <p className="sub">{lectura}</p> : <p className="sub">Se guarda la foto y se rellenan solos los datos que se puedan leer.</p>}
       <div className="fila-campos">
         <label className="campo">Fecha<input type="date" value={f.fecha} onChange={set("fecha")} /></label>
         <label className="campo">Importe (€)<input inputMode="decimal" value={f.importe} onChange={set("importe")} placeholder="0,00" /></label>
