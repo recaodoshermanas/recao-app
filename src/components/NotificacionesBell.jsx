@@ -25,6 +25,7 @@ const DESTINO = {
   // Bolsa de turnos: las de la trabajadora llevan a «Turnos para cubrir»; las de dirección, a Personas → Bolsa del panel
   bolsa_resumen: "cubrir", bolsa_urgente: "cubrir", bolsa_descanso_pendiente: "cubrir", bolsa_descanso_ok: "cubrir", bolsa_anulado: "cubrir",
   bolsa_cubierto: "bolsa", bolsa_soltado: "bolsa", bolsa_nadie_puede: "bolsa", bolsa_urgente_admin: "bolsa", bolsa_descanso_limite: "bolsa",
+  horas_extra_pedida: "horas", horas_extra_resuelta: "horasextra", // #39
   // Solicitudes de tecnología (panel de dirección)
   producto_revisar: "productos_revisar", incidencia_codigo: "productos_revisar",
   caja_fuerte_baja: "caja_fuerte", factura_sin_importe: "facturas", bancos_permiso: "bancos",

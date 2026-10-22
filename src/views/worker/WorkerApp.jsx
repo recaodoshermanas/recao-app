@@ -18,6 +18,7 @@ import { EscanearProductoView } from "./ProductoTiendaView.jsx"; // #35
 import { CajaView } from "./CajaView.jsx"; // CAJA (caída de Epos)
 import { MisFichajesView } from "./MisFichajesView.jsx"; // FICHAJES
 import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
+import { HorasExtraView } from "../horasextra/HorasExtraView.jsx"; // #39
 import { WorkerView } from "../WorkerView.jsx";
 import { IR_CORREO } from "../../lib/enlaceAviso.js";
 import { NovedadesEquipo } from "../../components/Novedades.jsx"; // NOVEDADES
@@ -47,16 +48,17 @@ const LO_TUYO = [
   { id: "horarios", label: "Horarios y fichajes", Ico: (p) => <IcoCalendar size={20} color={TOSTADO} sw={1.9} {...p} /> },
   { id: "vacaciones", label: "Vacaciones", Ico: (p) => <IcoSun size={20} color={TOSTADO} sw={1.9} {...p} /> },
   { id: "cambio", label: "Cambiar turno", Ico: (p) => <IcoSwap size={20} color={TOSTADO} sw={1.9} {...p} /> },
+  { id: "horasextra", label: "Horas extra", sub: "Apuntar las que te han pedido", Ico: (p) => <IcoCalendar size={20} color={TOSTADO} sw={1.9} {...p} /> }, // #39
   ...(BOLSA_ACTIVA ? [{ id: "cubrir", label: "Turnos para cubrir", Ico: (p) => <IcoUsers size={20} color={TOSTADO} sw={1.9} {...p} /> }] : []), // BOLSA
   { id: "documentos", label: "Mis documentos", Ico: IcoDoc },
   { id: "seguimiento", label: "Mi seguimiento", sub: "Avisos, plus y faltas", Ico: (p) => <IcoBars size={20} color={TOSTADO} sw={1.9} {...p} /> },
 ];
-const TITULOS = { caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", cambio: "Cambiar turno", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", cambio: "Cambiar turno", horasextra: "Horas extra", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 // A dónde lleva cada destino de la campana o del correo (?ir=…) en la organización nueva: [pantalla, pestaña]
 const DESTINOS = {
   avisos: ["seguimiento", "avisos"], seguimiento: ["seguimiento", null], fichajes: ["horarios", "fichajes"], horario: ["horarios", "horarios"],
-  vacaciones: ["vacaciones"], cambio: ["cambio"], recepcion: ["recepcion"], documentos: ["documentos"], cuenta: ["cuenta"],
+  vacaciones: ["vacaciones"], cambio: ["cambio"], horasextra: ["horasextra"], recepcion: ["recepcion"], documentos: ["documentos"], cuenta: ["cuenta"],
   ...(BOLSA_ACTIVA ? { cubrir: ["cubrir"] } : {}),
 };
 // Enlace de un correo de aviso (?ir=vacaciones): abre esa pantalla. Se guarda hasta que la trabajadora sale de ella,
@@ -208,6 +210,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       {screen === "revisar" && <RevisarTurnoView user={user} />}
       {screen === "seguimiento" && <Seguimiento user={user} pestana={pestana} />}
       {screen === "cambio" && <CambioTurnoView user={user} />}
+      {screen === "horasextra" && <HorasExtraView user={user} />}
       {screen === "vacaciones" && <MisVacacionesView user={user} />}
       {screen === "facturas" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={onReload} user={user} />}
       {screen === "cuenta" && <MiCuentaView />}

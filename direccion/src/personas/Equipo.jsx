@@ -7,6 +7,7 @@ import { Panel, Pestanas, useEquipo, avisar, hoyStr, masDias, fechaCorta, Cargan
 import { eur } from "../fmt.js";
 import { Novedades } from "./Novedades.jsx";
 import { PlusFestivo } from "./PlusFestivo.jsx";
+import { HorasPorConfirmar, usePorConfirmar } from "./HorasPorConfirmar.jsx"; // #39
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const tipoDe = (u) => (u.rol === "admin" ? "Dirección" : u.eventual ? "Eventual" : (u.tipo_turno || u.jornada) === "principal" ? "Principal" : (u.tipo_turno || u.jornada) === "apoyo" ? "Apoyo" : "Equipo");
@@ -19,16 +20,17 @@ export function Equipo({ user }) {
   const { equipo, recargarEquipo } = useEquipo();
   const [ficha, setFicha] = useState(null);
   const [nueva, setNueva] = useState(false);
+  const { lista: porConfirmar, recargar: recargarHoras } = usePorConfirmar(); // #39
   if (!equipo) return <Cargando />;
   return (
     <>
       <div className="barra-sec">
-        <Pestanas valor={vista} onChange={setVista} etiqueta="Equipo" opciones={[{ id: "personas", label: "Personas" }, { id: "plus", label: "Plus del mes" }, { id: "horas", label: "Horas extra" }, { id: "festivos", label: "Plus festivos" }, { id: "novedades", label: "Novedades" }]} />
+        <Pestanas valor={vista} onChange={setVista} etiqueta="Equipo" opciones={[{ id: "personas", label: "Personas" }, { id: "plus", label: "Plus del mes" }, { id: "horas", label: "Horas extra", n: (porConfirmar || []).length }, { id: "festivos", label: "Plus festivos" }, { id: "novedades", label: "Novedades" }]} />
         {vista !== "novedades" && <div className="acciones"><button className="btn-p" onClick={() => setNueva(true)}>+ Nueva cuenta</button></div>}
       </div>
       {vista === "personas" && <Directorio equipo={equipo} onFicha={setFicha} />}
       {vista === "plus" && <Plus equipo={equipo} />}
-      {vista === "horas" && <Horas equipo={equipo} />}
+      {vista === "horas" && <><HorasPorConfirmar lista={porConfirmar} onCambio={recargarHoras} /><Horas equipo={equipo} refresco={porConfirmar} /></>}
       {vista === "festivos" && <PlusFestivo equipo={equipo} />}
       {vista === "novedades" && <Novedades />}
       {ficha && <Ficha persona={equipo.find((u) => u.id === ficha) || null} yo={user} onClose={() => setFicha(null)} onCambio={recargarEquipo} />}
@@ -242,7 +244,7 @@ function Plus({ equipo }) {
   );
 }
 
-function Horas({ equipo }) {
+function Horas({ equipo, refresco }) {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear()); const [mes, setMes] = useState(hoy.getMonth() + 1);
   const [filas, setFilas] = useState(null);
@@ -254,7 +256,7 @@ function Horas({ equipo }) {
     setFilas(null);
     try { setFilas(await sb.select("horas_extras", `select=*&fecha=gte.${anio}-${mm}-01&fecha=lte.${anio}-${mm}-${ultimoDia(anio, mes)}&order=fecha.asc`)); } catch (e) { setFilas([]); }
   }, [anio, mes, mm]);
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { cargar(); }, [cargar, refresco]);
   const porPersona = Object.entries((filas || []).reduce((a, h) => { (a[h.usuario_id] ||= []).push(h); return a; }, {})).sort((a, b) => (nombreDe[a[0]] || "").localeCompare(nombreDe[b[0]] || ""));
   const total = (filas || []).reduce((s, h) => s + n0(h.horas), 0);
   const borrar = async (h) => { if (!window.confirm("¿Borrar estas horas?")) return; try { await sb.delete("horas_extras", `id=eq.${h.id}`); avisar("Horas borradas"); cargar(); } catch (e) { avisar("No se ha podido", "mal"); } };

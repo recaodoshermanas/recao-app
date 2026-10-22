@@ -10,6 +10,7 @@ import {
   fechaLarga, grupoSemana, hoyYmd, plazo, diasHasta, motivo,
 } from "../../lib/bolsa.js";
 import { MisTurnosMes } from "./MisTurnosMes.jsx"; // #37 resumen del mes
+import { HorasExtraView } from "../horasextra/HorasExtraView.jsx"; // #39
 import { card, seccion, btnNo, btnSi, btnTexto, ShiftChip, DateBlock, PlazoChip, Toast, Hoja, PreferenciaAvisos } from "../bolsa/BolsaUI.jsx";
 
 const FILTROS = [
@@ -44,6 +45,7 @@ export function EventualApp({ user }) {
   const [verRech, setVerRech] = useState(false);
   const [normaVista, setNormaVista] = useState(leerNorma);
   const [toast, setToast] = useState("");
+  const [horasPend, setHorasPend] = useState({}); // #39: fecha → horas extra pendientes de confirmar
   const avisar = (t) => { setToast(t); setTimeout(() => setToast(""), 2600); };
 
   const load = useCallback(async (silencioso) => {
@@ -64,6 +66,12 @@ export function EventualApp({ user }) {
     } catch (e) { setError("No se han podido cargar los turnos. Comprueba la conexión."); }
     if (!silencioso) setLoading(false);
   }, [user.id]);
+
+  const alCambiarHoras = useCallback((lista) => {
+    const m = {}; (lista || []).filter((p) => p.estado === "pendiente").forEach((p) => { m[p.fecha] = (m[p.fecha] || 0) + Number(p.horas); });
+    setHorasPend(m);
+  }, []);
+  useEffect(() => { sb.rpc("he_mis_peticiones").then(alCambiarHoras).catch(() => {}); }, [alCambiarHoras, tab]);
 
   useEffect(() => {
     load(false);
@@ -154,11 +162,13 @@ export function EventualApp({ user }) {
       <div role="group" aria-label="Secciones" style={{ display: "flex", gap: 4, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 15, padding: 4, marginTop: 16 }}>
         {tabBtn("bolsa", "Disponibles", pendientes.length)}
         {tabBtn("mis", "Mis turnos", mios.length)}
+        {tabBtn("horas", "Horas extra", Object.keys(horasPend).length)}
       </div>
 
       {error && <div style={{ fontFamily: F, fontSize: 13, color: C.red, background: "#FBEAE7", borderRadius: 12, padding: "10px 12px", marginTop: 14 }}>{error}</div>}
 
-      {loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 30 }}>Cargando…</div>
+      {tab === "horas" ? <div style={{ margin: "0 -16px" }}><HorasExtraView user={user} onCambio={alCambiarHoras} /></div>
+        : loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 30 }}>Cargando…</div>
         : tab === "bolsa" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 16 }}>
             {!normaVista ? (
@@ -237,7 +247,7 @@ export function EventualApp({ user }) {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <MisTurnosMes user={user} deBolsa={deBolsa} refresco={mios.map((m) => m.fecha + m.turno).join()} onSoltar={(x) => { setSel(x); setFase("soltar"); }} />
+            <MisTurnosMes user={user} deBolsa={deBolsa} pendientes={horasPend} refresco={mios.map((m) => m.fecha + m.turno).join()} onSoltar={(x) => { setSel(x); setFase("soltar"); }} />
 
             <div style={{ ...card, flexDirection: "column", alignItems: "stretch", gap: 6 }}>
               <div style={{ fontFamily: SF, fontSize: 17, color: C.char }}>¿Te ha surgido algo?</div>
