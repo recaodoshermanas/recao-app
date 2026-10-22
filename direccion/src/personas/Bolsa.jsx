@@ -1,6 +1,6 @@
 // Personas · Bolsa de turnos (dirección)
 // Turnos publicados con sus respuestas, cambios en cadena y descansos compensatorios,
-// coberturas (anular) y acceso de las eventuales a la app.
+// coberturas (anular). El acceso de las eventuales se gestiona en Personas → Equipo.
 // Las reglas viven en la base de datos (migración bolsa_turnos); aquí solo se ven y se gestionan.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
@@ -8,7 +8,6 @@ import { TURNOS } from "../../../src/lib/turnos.js";
 import { TURNOS_BOLSA, DIAS_ANTELACION, destinoDe, horarioDe, horasDe, fechaLarga, hoyYmd, plazo, diasHasta, horaCorta, motivo } from "../../../src/lib/bolsa.js";
 import { Panel, Pestanas, Cargando, Avatar, avisar, ir, fechaCorta, useEquipo } from "../ui.jsx";
 import "./bolsa.css";
-import { telNormalizado, TEL_AYUDA } from "../../../src/views/owner/UsuariosView.jsx";
 
 const corto = (n) => {
   const p = (n || "").trim().split(/\s+/);
@@ -25,12 +24,11 @@ function Plazo({ f }) {
 }
 
 export function Bolsa() {
-  const { equipo, recargarEquipo } = useEquipo();
+  const { equipo } = useEquipo();
   const [ofertas, setOfertas] = useState(null);
   const [resp, setResp] = useState({});
   const [tab, setTab] = useState("abiertos");
   const [publicando, setPublicando] = useState(false);
-  const [acceso, setAcceso] = useState(null); // persona eventual a la que se da acceso
 
   const cargar = useCallback(async () => {
     try {
@@ -52,7 +50,6 @@ export function Bolsa() {
   const urgentes = abiertas.filter((o) => plazo(o.fecha).urgente);
   const cubiertas = ofertas.filter((o) => o.estado === "cubierto");
   const cadenas = cubiertas.filter((o) => o.cadena_bolsa_id);
-  const eventuales = equipo.filter((u) => u.eventual && u.activo);
   const descansos = abiertas.filter((o) => o.origen === "descanso_comp");
 
   const retirar = async (o) => {
@@ -65,12 +62,6 @@ export function Bolsa() {
     try { const r = await sb.rpc("reabrir_turno_bolsa", { p_id: o.id }); if (r?.ok) { avisar("Anulado: el turno vuelve a la bolsa"); cargar(); } else avisar(motivo(r?.motivo).texto, "mal"); }
     catch (e) { avisar("No se ha podido anular", "mal"); }
   };
-  const quitarAcceso = async (u) => {
-    if (!window.confirm(`¿Quitar el acceso a ${u.nombre}? Sus turnos asignados se mantienen.`)) return;
-    try { await sb.fn("gestion-usuarios", { action: "quitar_acceso_eventual", id: u.id }); avisar("Acceso quitado"); recargarEquipo(); }
-    catch (e) { avisar(e.message || "No se ha podido quitar el acceso", "mal"); }
-  };
-
   const origen = (o) => {
     if (o.origen === "cadena") { const p = porId[o.origen_bolsa_id]; return p ? `Hueco por el cambio de día de ${corto(nombreDe[p.cogido_por])}` : "Hueco por un cambio de día"; }
     if (o.origen === "descanso_comp") return `Descanso compensatorio de ${corto(nombreDe[o.descanso_de])}${o.limite_descanso ? ` · límite ${fechaCorta(o.limite_descanso)}` : ""}`;
@@ -100,9 +91,9 @@ export function Bolsa() {
 
       <div className="card">
         <div className="head">
-          <div><h2>{tab === "abiertos" ? "Turnos en la bolsa" : tab === "cubiertos" ? "Cubiertos desde la bolsa" : "Eventuales"}</h2>
-            <p className="sub">{tab === "abiertos" ? "Quién puede, quién ha dicho que no y quién no ha contestado" : tab === "cubiertos" ? "Cambios en cadena, descansos y coberturas. «Anular» lo deshace todo y devuelve el turno a la bolsa." : "Quién tiene acceso a la app para ver y coger apoyos"}</p></div>
-          <Pestanas valor={tab} onChange={setTab} etiqueta="Bolsa" opciones={[{ id: "abiertos", label: "En la bolsa", n: abiertas.length }, { id: "cubiertos", label: "Cubiertos", n: cubiertas.length }, { id: "eventuales", label: "Eventuales" }]} />
+          <div><h2>{tab === "abiertos" ? "Turnos en la bolsa" : tab === "cubiertos" ? "Cubiertos desde la bolsa" : ""}</h2>
+            <p className="sub">{tab === "abiertos" ? "Quién puede, quién ha dicho que no y quién no ha contestado" : "Cambios en cadena, descansos y coberturas. «Anular» lo deshace todo y devuelve el turno a la bolsa."}</p></div>
+          <Pestanas valor={tab} onChange={setTab} etiqueta="Bolsa" opciones={[{ id: "abiertos", label: "En la bolsa", n: abiertas.length }, { id: "cubiertos", label: "Cubiertos", n: cubiertas.length }] } />
         </div>
 
         {tab === "abiertos" && (abiertas.length === 0 ? <p className="empty">No hay turnos publicados ahora mismo.</p> : (
@@ -185,27 +176,9 @@ export function Bolsa() {
           </>
         ))}
 
-        {tab === "eventuales" && (
-          <>
-            {eventuales.length === 0 ? <p className="empty">Aún no hay personas eventuales. Se añaden desde Horarios con «+ Eventual».</p> : (
-              <ul className="b-evs">
-                {eventuales.map((u) => (
-                  <li key={u.id}>
-                    <Avatar nombre={u.nombre} size={30} />
-                    <div><b>{u.nombre}</b><small className={u.auth_id ? "ok" : ""}>{u.auth_id ? `Con acceso · ${u.email || ""}` : "Sin acceso a la app"}</small></div>
-                    {u.auth_id ? <button className="btn-txt peligro" onClick={() => quitarAcceso(u)}>Quitar acceso</button>
-                      : <button className="btn-l" onClick={() => setAcceso(u)}>Dar acceso</button>}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="sub fuera">Con acceso, la eventual entra en app.elrecao.com y solo ve los turnos de apoyo que puede coger. No ve facturas, proveedores ni datos internos.</p>
-          </>
-        )}
       </div>
 
       {publicando && <Publicar onClose={() => setPublicando(false)} onHecho={() => { setPublicando(false); cargar(); }} />}
-      {acceso && <DarAcceso persona={acceso} onClose={() => setAcceso(null)} onHecho={() => { setAcceso(null); recargarEquipo(); }} />}
     </>
   );
 }
@@ -231,31 +204,6 @@ function Publicar({ onClose, onHecho }) {
       <p className="b-va">Lo verán: <Destino t={f.turno} /></p>
       {d != null && d < DIAS_ANTELACION && <p className="b-aviso">Faltan {d} días: menos de las 3 semanas habituales.{d <= 10 ? " Saldrá ya como urgente." : ""}</p>}
       <label className="campo">Nota (opcional)<input value={f.nota} onChange={(e) => setF({ ...f, nota: e.target.value })} placeholder="p. ej. hay que recibir al proveedor de fruta" /></label>
-    </Panel>
-  );
-}
-
-function DarAcceso({ persona, onClose, onHecho }) {
-  const [email, setEmail] = useState("");
-  const [pass, setPass] = useState("");
-  const [tel, setTel] = useState(persona.telefono || "");
-  const [busy, setBusy] = useState(false);
-  const telN = telNormalizado(tel);
-  const valido = /\S+@\S+\.\S+/.test(email) && pass.length >= 8 && !!telN;
-  async function crear() {
-    setBusy(true);
-    try { await sb.fn("gestion-usuarios", { action: "dar_acceso_eventual", id: persona.id, email: email.trim(), password: pass, telefono: telN }); avisar("Acceso creado: pásale su email y contraseña"); onHecho(); }
-    catch (e) { avisar(e.message || "No se ha podido crear el acceso", "mal"); }
-    finally { setBusy(false); }
-  }
-  return (
-    <Panel titulo={`Acceso para ${persona.nombre}`} sub="Entrará en app.elrecao.com y solo verá los apoyos que puede coger" onClose={onClose} ancho="460px"
-      pie={<button className="btn-p" disabled={!valido || busy} onClick={crear}>{busy ? "Creando…" : "Crear acceso"}</button>}>
-      <label className="campo">Email<input type="email" autoCapitalize="none" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nombre@correo.com" /></label>
-      <label className="campo">Contraseña temporal<input autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Mínimo 8 caracteres" /></label>
-      <label className="campo">Móvil (avisos por WhatsApp)<input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="612 345 678" /></label>
-      <p className="sub" style={tel && telN === null ? { color: "var(--down)" } : undefined}>{tel && telN === null ? "Formato no válido. " : ""}{TEL_AYUDA}</p>
-      <p className="sub">Pásale el email y la contraseña en persona o por teléfono, no por escrito en un grupo.</p>
     </Panel>
   );
 }

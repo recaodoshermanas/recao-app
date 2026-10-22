@@ -5,6 +5,7 @@ import { TURNOS, horasTurno } from "../../../src/lib/turnos.js";
 import { resumenCalendario } from "../../../src/lib/vacaciones.js";
 import { Panel, Pestanas, useEquipo, avisar, hoyStr, masDias, fechaCorta, Cargando, Avatar, n0 } from "../ui.jsx";
 import { eur } from "../fmt.js";
+import { telNormalizado, TEL_AYUDA } from "../../../src/views/owner/UsuariosView.jsx";
 import { Novedades } from "./Novedades.jsx";
 import { PlusFestivo } from "./PlusFestivo.jsx";
 import { HorasPorConfirmar, usePorConfirmar } from "./HorasPorConfirmar.jsx"; // #39
@@ -48,7 +49,7 @@ function Directorio({ equipo, onFicha }) {
       .then((r) => { const m = {}; r.forEach((h) => { (m[h.usuario_id] ||= {})[h.fecha] = h.turno; }); setHor(m); }).catch(() => {});
   }, [hoy]);
   const grupos = [
-    { id: "Principal", t: "Principales" }, { id: "Apoyo", t: "Apoyos" }, { id: "Equipo", t: "Equipo" }, { id: "Eventual", t: "Eventuales (sin cuenta)" }, { id: "Dirección", t: "Dirección" },
+    { id: "Principal", t: "Principales" }, { id: "Apoyo", t: "Apoyos" }, { id: "Equipo", t: "Equipo" }, { id: "Eventual", t: "Eventuales" }, { id: "Dirección", t: "Dirección" },
   ];
   const visibles = equipo.filter((u) => verInactivos || u.activo);
   const dias = Array.from({ length: 7 }, (_, i) => masDias(hoy, i));
@@ -65,7 +66,7 @@ function Directorio({ equipo, onFicha }) {
                 const t = hor[u.id]?.[hoy];
                 return (
                   <button key={u.id} className={`card tarjeta-eq ${u.activo ? "" : "inactiva"}`} onClick={() => onFicha(u.id)}>
-                    <div className="te-cab"><Avatar nombre={u.nombre} size={40} /><div><b>{u.nombre}</b><span>{u.activo ? (u.rol === "admin" ? "Dirección" : tipoDe(u)) : "Desactivada"}</span></div></div>
+                    <div className="te-cab"><Avatar nombre={u.nombre} size={40} /><div><b>{u.nombre}</b><span>{u.activo ? (u.rol === "admin" ? "Dirección" : u.eventual ? `Eventual · ${u.auth_id ? "con acceso a la app" : "sin acceso a la app"}` : tipoDe(u)) : "Desactivada"}</span></div></div>
                     {u.rol !== "admin" && (
                       <div className="te-sem" aria-label="Turnos de los próximos 7 días">
                         {dias.map((f) => { const tt = hor[u.id]?.[f]; const inf = tt && TURNOS[tt]; return <span key={f} className={`ts ${f === hoy ? "hoy" : ""}`} style={inf ? { background: inf.bg, color: inf.fg } : undefined} title={`${fechaCorta(f)}: ${tt || "sin turno"}`}>{tt ? ABREV[tt] : "·"}</span>; })}
@@ -88,6 +89,8 @@ function Ficha({ persona, yo, onClose, onCambio }) {
   const hoy = hoyStr(); const anio = Number(hoy.slice(0, 4)); const mes = Number(hoy.slice(5, 7));
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [dialogo, setDialogo] = useState(null); // #49: desactivar / borrar con turnos futuros
+  const [acceso, setAcceso] = useState(false);
   const cargar = useCallback(async () => {
     if (!persona) return;
     const uid = persona.id;
@@ -108,11 +111,18 @@ function Ficha({ persona, yo, onClose, onCambio }) {
   const esYo = yo && yo.id === persona.id;
   const cuenta = async (body, ok) => {
     setBusy(true);
-    try { const r = await sb.fn("gestion-usuarios", body); if (r && r.ok === false) throw new Error(r.error); avisar(ok); await onCambio(); }
-    catch (e) { avisar(e.message || "No se ha podido", "mal"); }
-    setBusy(false);
+    try { const r = await sb.fn("gestion-usuarios", body); if (r && r.ok === false) throw new Error(r.error); avisar(ok); await onCambio(); setBusy(false); return true; }
+    catch (e) { avisar(e.message || "No se ha podido", "mal"); setBusy(false); return false; }
   };
+  const guardarDatos = async (cambios, aviso) => {
+    if (aviso && !window.confirm(aviso)) return false;
+    return cuenta({ action: "actualizar", id: persona.id, ...cambios }, "Datos guardados");
+  };
+  const turnosFuturos = async () => { try { return (await sb.rpc("turnos_futuros_persona", { p_uid: persona.id })) || []; } catch (e) { return []; } };
+  const pedirDesactivar = async () => { setBusy(true); const t = await turnosFuturos(); setBusy(false); setDialogo({ tipo: "desactivar", turnos: t }); };
+  const pedirBorrar = async () => { setBusy(true); const t = await turnosFuturos(); setBusy(false); setDialogo({ tipo: "borrar", turnos: t }); };
   return (
+    <>
     <Panel titulo={persona.nombre} sub={`${tipoDe(persona)}${persona.email ? " · " + persona.email : ""}${persona.telefono ? " · " + persona.telefono : ""}`} onClose={onClose} ancho="560px">
       {!d ? <p className="empty">Cargando…</p> : (
         <>
@@ -141,63 +151,167 @@ function Ficha({ persona, yo, onClose, onCambio }) {
               {d.horas.length === 0 ? <p className="empty">Ninguna.</p> : <ul className="pq-l">{d.horas.map((h) => <li key={h.id}><span>{fechaCorta(h.fecha)}{h.nota && <span className="pf">{h.nota}</span>}</span><b>{n0(h.horas).toLocaleString("es-ES")} h</b></li>)}</ul>}
             </section>
           )}
-          {persona.eventual && <MovilEventual persona={persona} busy={busy} onGuardar={(telefono) => cuenta({ action: "actualizar", id: persona.id, telefono }, telefono ? "Móvil guardado" : "Móvil quitado")} />}
+          <DatosPersona persona={persona} busy={busy} onGuardar={guardarDatos} />
           <section className="ficha-sec">
             <h3>Cuenta</h3>
-            {persona.eventual ? (
-              <div className="acc-cuenta">
-                <p className="sub">Persona eventual: sin acceso a la app, solo aparece en los horarios.</p>
-                <button className="btn-txt peligro" disabled={busy} onClick={() => { if (window.confirm(`¿Eliminar a ${persona.nombre}? Se borran también sus turnos.`)) cuenta({ action: "eliminar_eventual", id: persona.id }, "Persona eliminada").then(onClose); }}>Eliminar persona</button>
-              </div>
-            ) : esYo ? <p className="sub">Es tu cuenta.</p> : (
-              <div className="acc-cuenta">
-                <button className="btn-l" disabled={busy} onClick={() => cuenta({ action: "actualizar", id: persona.id, rol: persona.rol === "admin" ? "trabajadora" : "admin" }, "Rol cambiado")}>{persona.rol === "admin" ? "Pasar a trabajadora" : "Dar acceso de dirección"}</button>
-                <button className="btn-l" disabled={busy} onClick={() => cuenta({ action: "actualizar", id: persona.id, activo: !persona.activo }, persona.activo ? "Cuenta desactivada" : "Cuenta activada")}>{persona.activo ? "Desactivar cuenta" : "Activar cuenta"}</button>
-                <button className="btn-l" disabled={busy} onClick={() => { const p = window.prompt(`Nueva contraseña para ${persona.nombre} (mínimo 8 caracteres)`); if (p && p.length >= 8) cuenta({ action: "resetear_password", id: persona.id, password: p }, "Contraseña cambiada"); else if (p) avisar("Mínimo 8 caracteres", "mal"); }}>Cambiar contraseña</button>
-              </div>
-            )}
+            {esYo ? <p className="sub">Es tu cuenta: no puedes desactivarla ni quitarte el acceso de dirección.</p> : null}
+            <div className="acc-cuenta">
+              {persona.eventual && !persona.auth_id && <button className="btn-p" disabled={busy} onClick={() => setAcceso(true)}>Dar acceso a la app</button>}
+              {!esYo && <button className="btn-l" disabled={busy} onClick={() => cuenta({ action: "actualizar", id: persona.id, rol: persona.rol === "admin" ? "trabajadora" : "admin" }, "Rol cambiado")}>{persona.rol === "admin" ? "Pasar a trabajadora" : "Dar acceso de dirección"}</button>}
+              {!esYo && <button className="btn-l" disabled={busy} onClick={() => (persona.activo ? pedirDesactivar() : cuenta({ action: "actualizar", id: persona.id, activo: true }, "Cuenta activada"))}>{persona.activo ? "Desactivar cuenta" : "Activar cuenta"}</button>}
+              {persona.auth_id && <button className="btn-l" disabled={busy} onClick={() => { const p = window.prompt(`Nueva contraseña para ${persona.nombre} (mínimo 8 caracteres)`); if (p && p.length >= 8) cuenta({ action: "resetear_password", id: persona.id, password: p }, "Contraseña cambiada"); else if (p) avisar("Mínimo 8 caracteres", "mal"); }}>Cambiar contraseña</button>}
+              {persona.eventual && !esYo && <button className="btn-txt peligro" disabled={busy} onClick={pedirBorrar}>Borrar persona</button>}
+            </div>
+            {!persona.eventual && persona.rol !== "admin" && <p className="sub">Las trabajadoras de plantilla no se borran, solo se desactivan: así se conserva su historial.</p>}
+            {persona.rol === "admin" && <p className="sub">Las personas de dirección no se borran, solo se desactivan.</p>}
           </section>
         </>
       )}
     </Panel>
+    {dialogo && <ConfirmarTurnos persona={persona} dialogo={dialogo} busy={busy} onClose={() => setDialogo(null)}
+      onHecho={async (turnos) => {
+        const ok = dialogo.tipo === "borrar"
+          ? await cuenta({ action: "eliminar_eventual", id: persona.id }, "Persona borrada")
+          : await cuenta({ action: "actualizar", id: persona.id, activo: false, turnos }, turnos === "bolsa" ? "Cuenta desactivada: sus turnos han salido a la bolsa" : "Cuenta desactivada");
+        setDialogo(null); if (ok && dialogo.tipo === "borrar") onClose();
+      }} />}
+    {acceso && <DarAcceso persona={persona} onClose={() => setAcceso(false)} onHecho={async () => { setAcceso(false); await onCambio(); }} />}
+    </>
   );
 }
 
-// #48: el móvil de las eventuales lo apunta dirección; con él reciben también los avisos de la bolsa y el recordatorio por WhatsApp
-function MovilEventual({ persona, busy, onGuardar }) {
-  const [tel, setTel] = useState(persona.telefono || "");
-  useEffect(() => { setTel(persona.telefono || ""); }, [persona.id, persona.telefono]);
-  const cambiado = tel.trim() !== (persona.telefono || "");
+// #49: datos de la persona editables desde su perfil
+const TIPOS = [{ id: "principal", t: "Principal" }, { id: "apoyo", t: "Apoyo" }, { id: "eventual", t: "Eventual" }];
+const tipoId = (p) => (p.eventual ? "eventual" : (p.tipo_turno || p.jornada) === "apoyo" ? "apoyo" : (p.tipo_turno || p.jornada) === "principal" ? "principal" : "");
+function DatosPersona({ persona, busy, onGuardar }) {
+  const [edit, setEdit] = useState(false);
+  const base = () => ({ nombre: persona.nombre || "", email: persona.email || "", tel: persona.telefono || "", tipo: tipoId(persona) });
+  const [f, setF] = useState(base);
+  useEffect(() => { setF(base()); setEdit(false); }, [persona.id, persona.nombre, persona.email, persona.telefono, persona.eventual, persona.tipo_turno, persona.jornada]); // eslint-disable-line
+  const esAdmin = persona.rol === "admin";
+  const telN = f.tel.trim() ? telNormalizado(f.tel) : "";
+  const ok = f.nombre.trim() && telN !== null && (!persona.auth_id || /\S+@\S+\.\S+/.test(f.email));
+  const guardar = async () => {
+    const c = { nombre: f.nombre.trim(), telefono: telN || "" };
+    const avisos = [];
+    if (persona.auth_id && f.email.trim().toLowerCase() !== (persona.email || "").toLowerCase()) { c.email = f.email.trim(); avisos.push(`${persona.nombre} entrará en la app con el nuevo email (${c.email}). Díselo.`); }
+    if (!esAdmin && f.tipo && f.tipo !== tipoId(persona)) { c.tipo = f.tipo; avisos.push("Cambiar el tipo de puesto cambia lo que ve en la app (eventuales o plantilla) y si entra en el plus."); }
+    if (await onGuardar(c, avisos.length ? avisos.join("\n\n") + "\n\n¿Guardar?" : null)) setEdit(false);
+  };
   return (
     <section className="ficha-sec">
-      <h3>Móvil <small>para los avisos por WhatsApp</small></h3>
-      <label className="campo">Móvil
-        <input type="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="612 345 678" />
-      </label>
-      <button className="btn-l" disabled={busy || !cambiado} onClick={() => onGuardar(tel.trim())}>Guardar móvil</button>
+      <h3>Datos {!edit && <button className="btn-l" onClick={() => setEdit(true)}>Editar</button>}</h3>
+      {!edit ? (
+        <ul className="pq-l">
+          <li><span>Nombre</span><b>{persona.nombre}</b></li>
+          <li><span>{persona.auth_id ? "Email (con el que entra)" : "Email"}</span><b>{persona.email || (persona.eventual ? "Sin acceso a la app" : "–")}</b></li>
+          <li><span>Móvil</span><b>{persona.telefono || "–"}</b></li>
+          <li><span>Puesto</span><b>{tipoDe(persona)}</b></li>
+        </ul>
+      ) : (
+        <>
+          <label className="campo">Nombre<input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></label>
+          {persona.auth_id && <label className="campo">Email (con el que entra en la app)<input type="email" autoCapitalize="none" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>}
+          <label className="campo">Móvil (avisos por WhatsApp)<input type="tel" inputMode="tel" value={f.tel} onChange={(e) => setF({ ...f, tel: e.target.value })} placeholder="612 345 678" /></label>
+          <p className="sub" style={f.tel && telN === null ? { color: "var(--down)" } : undefined}>{f.tel && telN === null ? "Formato no válido. " : ""}{TEL_AYUDA}</p>
+          {!esAdmin && <div className="campo">Tipo de puesto
+            <div className="seg">{TIPOS.map((t) => <button key={t.id} aria-pressed={f.tipo === t.id} onClick={() => setF({ ...f, tipo: t.id })}>{t.t}</button>)}</div>
+          </div>}
+          <div className="acc-cuenta">
+            <button className="btn-p" disabled={!ok || busy} onClick={guardar}>{busy ? "Guardando…" : "Guardar"}</button>
+            <button className="btn-l" disabled={busy} onClick={() => { setF(base()); setEdit(false); }}>Cancelar</button>
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
-function NuevaCuenta({ onClose, onCreada }) {
-  const [f, setF] = useState({ nombre: "", email: "", password: "", rol: "trabajadora" });
+// #49: desactivar o borrar con los turnos futuros a la vista
+function ConfirmarTurnos({ persona, dialogo, busy, onClose, onHecho }) {
+  const borrar = dialogo.tipo === "borrar";
+  const t = dialogo.turnos;
+  const [que, setQue] = useState("mantener");
+  return (
+    <Panel titulo={borrar ? `Borrar a ${persona.nombre}` : `Desactivar a ${persona.nombre}`} onClose={onClose} ancho="460px"
+      pie={<button className={borrar ? "btn-l peligro" : "btn-p"} disabled={busy} onClick={() => onHecho(borrar ? "bolsa" : t.length ? que : "mantener")}>{busy ? "Un momento…" : borrar ? "Borrar para siempre" : "Desactivar cuenta"}</button>}>
+      {borrar && <p className="sub"><b>Se borra para siempre</b>{persona.auth_id ? ", también su cuenta de acceso" : ""}. No se puede deshacer.</p>}
+      {t.length > 0 ? (
+        <>
+          <p>Tiene {t.length} {t.length === 1 ? "turno" : "turnos"} de trabajo desde hoy:</p>
+          <ul className="pq-l" style={{ maxHeight: 200, overflow: "auto" }}>{t.map((x) => <li key={x.fecha}><span>{fechaCorta(x.fecha)}</span><b>{x.turno} · {horasTurno(x.turno, x.fecha)}</b></li>)}</ul>
+          {borrar ? <p className="sub">Al confirmar, esos turnos salen a la bolsa.</p> : (
+            <div className="campo">¿Qué hacemos con ellos?
+              <div className="seg"><button aria-pressed={que === "mantener"} onClick={() => setQue("mantener")}>Mantener los turnos</button><button aria-pressed={que === "bolsa"} onClick={() => setQue("bolsa")}>Lanzarlos a la bolsa</button></div>
+              <small>{que === "bolsa" ? "Se le quitan del horario y salen a la bolsa con las reglas de siempre (Apoyos a eventuales; Mañana y Tarde a la plantilla)." : "Se quedan asignados a esta persona."}</small>
+            </div>
+          )}
+        </>
+      ) : <p className="sub">No tiene turnos de trabajo desde hoy.</p>}
+      {!borrar && <p className="sub">Desactivada no puede entrar en la app, no recibe avisos ni ofertas de la bolsa y no aparece entre quienes pueden cubrir un turno. Se puede volver a activar.</p>}
+    </Panel>
+  );
+}
+
+function DarAcceso({ persona, onClose, onHecho }) {
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [tel, setTel] = useState(persona.telefono || "");
   const [busy, setBusy] = useState(false);
-  const ok = f.nombre.trim() && f.email.trim() && f.password.length >= 8;
+  const telN = telNormalizado(tel);
+  const valido = /\S+@\S+\.\S+/.test(email) && pass.length >= 8 && !!telN;
+  async function crear() {
+    setBusy(true);
+    try { const r = await sb.fn("gestion-usuarios", { action: "dar_acceso_eventual", id: persona.id, email: email.trim(), password: pass, telefono: telN }); if (r && r.ok === false) throw new Error(r.error); avisar("Acceso creado: pásale su email y contraseña"); await onHecho(); }
+    catch (e) { avisar(e.message || "No se ha podido crear el acceso", "mal"); }
+    setBusy(false);
+  }
+  return (
+    <Panel titulo={`Acceso para ${persona.nombre}`} sub="Entrará en app.elrecao.com y solo verá los apoyos que puede coger" onClose={onClose} ancho="460px"
+      pie={<button className="btn-p" disabled={!valido || busy} onClick={crear}>{busy ? "Creando…" : "Crear acceso"}</button>}>
+      <label className="campo">Email<input type="email" autoCapitalize="none" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nombre@correo.com" /></label>
+      <label className="campo">Contraseña temporal<input autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Mínimo 8 caracteres" /></label>
+      <label className="campo">Móvil (avisos por WhatsApp)<input type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="612 345 678" /></label>
+      <p className="sub" style={tel && telN === null ? { color: "var(--down)" } : undefined}>{tel && telN === null ? "Formato no válido. " : ""}{TEL_AYUDA}</p>
+      <p className="sub">Pásale el email y la contraseña en persona o por teléfono, no por escrito en un grupo.</p>
+    </Panel>
+  );
+}
+
+function NuevaCuenta({ onClose, onCreada }) {
+  const [f, setF] = useState({ nombre: "", email: "", password: "", tel: "", tipo: "principal", acceso: false });
+  const [busy, setBusy] = useState(false);
+  const ev = f.tipo === "eventual";
+  const pideCuenta = !ev || f.acceso;
+  const telN = telNormalizado(f.tel);
+  const ok = f.nombre.trim() && (!pideCuenta || (/\S+@\S+\.\S+/.test(f.email) && f.password.length >= 8 && !!telN));
   const crear = async () => {
     setBusy(true);
-    try { const r = await sb.fn("gestion-usuarios", { action: "crear", email: f.email.trim().toLowerCase(), nombre: f.nombre.trim(), rol: f.rol, password: f.password }); if (r && r.ok === false) throw new Error(r.error); avisar("Cuenta creada"); await onCreada(); }
-    catch (e) { avisar(e.message || "No se ha podido crear", "mal"); }
+    try {
+      const r = ev
+        ? await sb.fn("gestion-usuarios", { action: "crear_eventual", nombre: f.nombre.trim(), telefono: telN || undefined, acceso: f.acceso, email: f.email.trim().toLowerCase(), password: f.password })
+        : await sb.fn("gestion-usuarios", { action: "crear", tipo: f.tipo === "direccion" ? "admin" : f.tipo, email: f.email.trim().toLowerCase(), nombre: f.nombre.trim(), password: f.password, telefono: telN });
+      if (r && r.ok === false) throw new Error(r.error);
+      avisar(ev && !f.acceso ? "Persona creada sin acceso a la app" : "Cuenta creada"); await onCreada();
+    } catch (e) { avisar(e.message || "No se ha podido crear", "mal"); }
     setBusy(false);
   };
   return (
-    <Panel titulo="Nueva cuenta" sub="Para entrar en la app. Las personas eventuales se añaden desde Horarios." onClose={onClose}
-      pie={<button className="btn-p" disabled={!ok || busy} onClick={crear}>{busy ? "Creando…" : "Crear cuenta"}</button>}>
-      <label className="campo">Nombre<input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></label>
-      <label className="campo">Email<input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
-      <label className="campo">Contraseña inicial<input type="text" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} placeholder="Mínimo 8 caracteres" /></label>
-      <div className="campo">Rol
-        <div className="seg"><button aria-pressed={f.rol === "trabajadora"} onClick={() => setF({ ...f, rol: "trabajadora" })}>Trabajadora</button><button aria-pressed={f.rol === "admin"} onClick={() => setF({ ...f, rol: "admin" })}>Dirección</button></div>
+    <Panel titulo="Nueva cuenta" sub="Elige el tipo de persona. Las eventuales pueden crearse sin acceso a la app." onClose={onClose}
+      pie={<button className="btn-p" disabled={!ok || busy} onClick={crear}>{busy ? "Creando…" : "Crear"}</button>}>
+      <div className="campo">Tipo
+        <div className="seg">{[...TIPOS, { id: "direccion", t: "Dirección" }].map((t) => <button key={t.id} aria-pressed={f.tipo === t.id} onClick={() => setF({ ...f, tipo: t.id })}>{t.t}</button>)}</div>
       </div>
+      <label className="campo">Nombre<input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></label>
+      {ev && <label className="chk"><input type="checkbox" checked={f.acceso} onChange={(e) => setF({ ...f, acceso: e.target.checked })} /> Darle acceso a la app ahora</label>}
+      {pideCuenta && (
+        <>
+          <label className="campo">Email<input type="email" autoCapitalize="none" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
+          <label className="campo">{ev ? "Contraseña temporal" : "Contraseña inicial"}<input type="text" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} placeholder="Mínimo 8 caracteres" /></label>
+        </>
+      )}
+      <label className="campo">Móvil (avisos por WhatsApp){pideCuenta ? "" : " · opcional"}<input type="tel" inputMode="tel" value={f.tel} onChange={(e) => setF({ ...f, tel: e.target.value })} placeholder="612 345 678" /></label>
+      <p className="sub" style={f.tel && telN === null ? { color: "var(--down)" } : undefined}>{f.tel && telN === null ? "Formato no válido. " : ""}{TEL_AYUDA}</p>
     </Panel>
   );
 }

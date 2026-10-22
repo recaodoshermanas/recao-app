@@ -24,12 +24,11 @@ function huecosDe(filas) {
 export function Horarios() {
   const hoy = hoyStr();
   const [lunes, setLunes] = useState(lunesDe(hoy));
-  const { equipo, recargarEquipo } = useEquipo();
+  const { equipo } = useEquipo();
   const [mapa, setMapa] = useState(null);
   const [prox, setProx] = useState(null); // horarios 60 días para la cobertura
   const [celda, setCelda] = useState(null); // {persona, fecha}
   const [hueco, setHueco] = useState(null); // {fecha, turno}
-  const [nuevoEv, setNuevoEv] = useState(null); // {fecha?, turno?}
   const [bolsa, setBolsa] = useState({}); // BOLSA: "fecha|turno" → oferta abierta (próximos 60 días)
   const [festivos, setFestivos] = useState({}); // FESTIVOS: fecha → { nombre, ambito }
   const [verFestivos, setVerFestivos] = useState(false);
@@ -113,15 +112,6 @@ export function Horarios() {
   };
   const tocaPublicar = (fecha, turno) => BOLSA_ACTIVA && !bolsa[`${fecha}|${turno}`] && diasHasta(fecha) <= DIAS_ANTELACION;
 
-  const crearEventual = async (nombre, asignar) => {
-    try {
-      const r = await sb.fn("gestion-usuarios", { action: "crear_eventual", nombre });
-      if (asignar && r?.usuario?.id) await sb.upsert("horarios", { usuario_id: r.usuario.id, fecha: asignar.fecha, turno: asignar.turno }, "usuario_id,fecha");
-      await recargarEquipo(); await cargarSemana(); await cargarProx();
-      avisar(asignar ? "Persona añadida y turno asignado" : "Persona añadida");
-    } catch (e) { avisar("No se ha podido crear la persona", "mal"); }
-  };
-
   if (!equipo || !mapa) return <Cargando />;
   const turnosDia = (f) => trab.filter((u) => mapa[`${u.id}|${f}`] && !LIBRES.has(mapa[`${u.id}|${f}`])).length;
   const hayPend = BOLSA_ACTIVA && dias.some((f) => trab.some((u) => pendiente[`${u.id}|${f}`])); // BOLSA
@@ -138,7 +128,6 @@ export function Horarios() {
             <button className="btn-l" onClick={() => setLunes(masDias(lunes, -7))} aria-label="Semana anterior">‹</button>
             {lunes !== lunesDe(hoy) && <button className="btn-l" onClick={() => setLunes(lunesDe(hoy))}>Esta semana</button>}
             <button className="btn-l" onClick={() => setLunes(masDias(lunes, 7))} aria-label="Semana siguiente">›</button>
-            <button className="btn-l" onClick={() => setNuevoEv({})}>+ Eventual</button>
             <button className="btn-l" onClick={() => setVerFestivos(true)}>Festivos</button>
           </div>
         </div>
@@ -228,15 +217,10 @@ export function Horarios() {
           onPublicar={async () => { await publicar(hueco.fecha, hueco.turno); setHueco(null); }}
           onRetirar={async () => { await retirar(hueco.fecha, hueco.turno); setHueco(null); }}
           onClose={() => setHueco(null)}
-          onAsignar={async (uid) => { await guardar(uid, hueco.fecha, hueco.turno); setHueco(null); avisar("Turno asignado"); }}
-          onNuevo={() => { setNuevoEv(hueco); setHueco(null); }} />
+          onAsignar={async (uid) => { await guardar(uid, hueco.fecha, hueco.turno); setHueco(null); avisar("Turno asignado"); }} />
       )}
 
       {verFestivos && <FestivosPanel onClose={() => setVerFestivos(false)} onCambio={cargarFest} />}
-      {nuevoEv && (
-        <NuevoEventual destino={nuevoEv.fecha ? nuevoEv : null} onClose={() => setNuevoEv(null)}
-          onCrear={async (nombre) => { await crearEventual(nombre, nuevoEv.fecha ? nuevoEv : null); setNuevoEv(null); }} />
-      )}
     </>
   );
 }
@@ -267,7 +251,7 @@ function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {} }) {
   );
 }
 
-function AsignarHueco({ hueco, trab, prox, mapa, enBolsa, onPublicar, onRetirar, onClose, onAsignar, onNuevo }) {
+function AsignarHueco({ hueco, trab, prox, mapa, enBolsa, onPublicar, onRetirar, onClose, onAsignar }) {
   const turnoDe = {};
   prox.forEach((h) => { turnoDe[`${h.usuario_id}|${h.fecha}`] = h.turno; });
   Object.entries(mapa).forEach(([k, t]) => { turnoDe[k] = t; });
@@ -301,18 +285,6 @@ function AsignarHueco({ hueco, trab, prox, mapa, enBolsa, onPublicar, onRetirar,
           })}
         </ul>
       )}
-      <button className="btn-l" onClick={onNuevo}>+ Persona eventual nueva</button>
-    </Panel>
-  );
-}
-
-function NuevoEventual({ destino, onClose, onCrear }) {
-  const [nombre, setNombre] = useState("");
-  const [busy, setBusy] = useState(false);
-  return (
-    <Panel titulo="Persona eventual" sub={destino ? `Para ${destino.turno} · ${fechaCorta(destino.fecha)}` : "Sin cuenta en la app; solo aparece en los horarios"} onClose={onClose}
-      pie={<button className="btn-p" disabled={!nombre.trim() || busy} onClick={async () => { setBusy(true); await onCrear(nombre.trim()); setBusy(false); }}>{busy ? "Creando…" : destino ? "Crear y asignar" : "Crear"}</button>}>
-      <label className="campo">Nombre<input autoFocus value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre y apellido" /></label>
     </Panel>
   );
 }
