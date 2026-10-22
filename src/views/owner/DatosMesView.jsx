@@ -21,6 +21,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
 
   const [ventas, setVentas] = useState("");
   const [paqueteria, setPaqueteria] = useState({});
+  const [paqBanco, setPaqBanco] = useState(null); // #43: desde oct-2026 la paquetería sale de BBVA (null = no aplica)
   const [gastosFijos, setGastosFijos] = useState({});
   const [salarios, setSalarios] = useState([]);
   const [otrosGastos, setOtrosGastos] = useState([]);
@@ -50,6 +51,19 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
     setRepartoSocios(d.reparto_socios || "");
   }, [selMonth, monthlyData, config]);
 
+  // #43: paquetería desde el banco (BBVA) para los meses desde octubre de 2026
+  useEffect(() => {
+    let vivo = true;
+    setPaqBanco(null);
+    if (selMonth < "2026-10") return;
+    sb.rpc("paqueteria_mes_detalle", { p_mes: selMonth }).then((r) => {
+      if (!vivo || !r?.aplica) return;
+      setPaqBanco(r);
+      setPaqueteria(r.efectiva || {});
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, [selMonth, monthlyData]);
+
   // #40: las inversiones del mes salen de la tabla «inversiones» (solo lectura aquí)
   useEffect(() => {
     let vivo = true;
@@ -71,6 +85,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         reparto_socios: pn(repartoSocios),
         resumen_legacy: null,
       };
+      if (paqBanco) payload.paqueteria = await sb.rpc("paqueteria_guardar", { p_mes: selMonth, p_valores: paqueteria }); // #43
       await sb.upsert("datos_mes", payload, "mes");
       try { await gfGuardar.current?.(); } catch (e) { alert("Guardado, pero no se ha podido apuntar el origen de los gastos fijos: " + e.message); }
       if (!salNuevo && salarios.length > 0) {
@@ -84,6 +99,8 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
 
   const setGF = (k, v) => setGastosFijos(p => ({ ...p, [k]: pn(v) }));
   const setPQ = (k, v) => setPaqueteria(p => ({ ...p, [k]: pn(v) }));
+  const paqLista = paqBanco ? [...new Set([...PAQUETERIA.filter(p => p !== "Amazon" || paqueteria.Amazon), ...Object.keys(paqueteria)])] : PAQUETERIA;
+  const paqNota = (p) => !paqBanco ? "" : (paqBanco.manual?.[p] != null && Number(paqBanco.manual[p]) !== Number(paqBanco.auto?.[p] ?? NaN)) || (paqBanco.auto?.[p] == null && paqueteria[p] > 0) ? "a mano" : "banco";
   const facturasMonth = facturas.filter(f => f.fecha.startsWith(selMonth));
   const totalFacturas = facturasMonth.reduce((s, f) => s + (Number(f.importe) || 0), 0);
 
@@ -123,10 +140,11 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         <label style={lbl}>Ventas EPOS (€)</label>
         <input type="number" inputMode="decimal" value={ventas} onChange={e => setVentas(e.target.value)} placeholder="50349" style={{ ...inp, marginBottom: "16px" }} />
         <label style={lbl}>Paquetería</label>
+        {paqBanco && <div style={{ fontFamily: F, fontSize: "11px", color: C.mut, marginBottom: "8px" }}>Cobros recibidos en BBVA en el mes (del día 1 al último). Si cambias una cifra a mano, se respeta.</div>}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-          {PAQUETERIA.map(p => (
+          {paqLista.map(p => (
             <div key={p} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontFamily: F, fontSize: "12px", color: C.mut, minWidth: "65px" }}>{p}</span>
+              <span style={{ fontFamily: F, fontSize: "12px", color: C.mut, minWidth: "65px" }}>{p}{paqBanco && <span style={{ display: "block", fontSize: "9px" }}>{paqNota(p)}</span>}</span>
               <input type="number" inputMode="decimal" value={paqueteria[p] || ""} onChange={e => setPQ(p, e.target.value)} placeholder="0" style={{ ...inp, padding: "8px 10px", fontSize: "13px", marginBottom: 0 }} />
             </div>
           ))}

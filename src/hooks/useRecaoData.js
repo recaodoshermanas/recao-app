@@ -27,6 +27,11 @@ export function useRecaoData(user) {
       const invMes = {};
       (invs || []).forEach(i => { (invMes[i.fecha.slice(0, 7)] ||= []).push({ id: String(i.id), concepto: i.concepto, amount: Number(i.importe) }); });
       mes.forEach(m => { mObj[m.mes] = { ...m, inversiones: invMes[m.mes] || [] }; });
+      // #43: desde oct-2026 la paquetería de cada mes sale de los cobros de BBVA (+ correcciones a mano)
+      try {
+        const paq = await sb.rpc("paqueteria_meses");
+        Object.entries(paq || {}).forEach(([k, v]) => { if (mObj[k]) mObj[k] = { ...mObj[k], paqueteria: v }; });
+      } catch (e) { /* solo dirección */ }
       setMonthlyData(mObj);
       setProveedores(provs.map(p => p.nombre));
       const cfgObj = {};
