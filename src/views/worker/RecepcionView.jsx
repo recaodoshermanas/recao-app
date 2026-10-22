@@ -9,6 +9,9 @@ const fn = (accion, datos = {}) => sb.fn("recepcion", { accion, ...datos });
 const eur = (x) => (x == null || isNaN(x) ? "" : Number(x).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €");
 const numero = (v) => { const n = Number(String(v ?? "").replace(",", ".")); return isFinite(n) ? n : 0; };
 const dinero = (x) => (x == null || isNaN(x) ? "" : Number(x).toFixed(2).replace(".", ","));
+// #47: los costes se guardan y se muestran con 2 decimales, siempre redondeando hacia arriba (4,542 → 4,55)
+const subeCent = (x) => (x == null || isNaN(x) ? x : Math.ceil(Number(x) * 100 - 1e-6) / 100);
+const dineroSube = (x) => dinero(subeCent(x));
 const fmt = (x) => (x == null ? "" : Number.isInteger(Number(x)) ? String(Number(x)) : String(Math.round(Number(x) * 100) / 100).replace(".", ","));
 // Productos al peso (#19): kilos, €/kg sin IVA editable e importe; sin bultos ni unidades
 const alPeso = (l) => !!l.producto?.al_peso && l.emparejado !== "nuevo";
@@ -77,8 +80,48 @@ function Cantidad({ valor, onCambio, etiqueta }) {
 }
 
 // ---------- buscador de productos (añadir, asociar, manual) ----------
+function Escaner({ onCodigo, onCerrar }) {
+  const video = useRef(null);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    let stream, parar = false;
+    (async () => {
+      try {
+        if (!("BarcodeDetector" in window)) { setMsg("Este móvil no lee códigos con la cámara: usa la pistola o escribe el nombre."); return; }
+        const det = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        if (video.current) { video.current.srcObject = stream; await video.current.play(); }
+        while (!parar) {
+          const r = await det.detect(video.current).catch(() => []);
+          if (r?.[0]?.rawValue) { parar = true; onCodigo(String(r[0].rawValue).replace(/\D/g, "")); break; }
+          await new Promise((s) => setTimeout(s, 250));
+        }
+      } catch (_) { setMsg("No he podido abrir la cámara."); }
+    })();
+    return () => { parar = true; stream?.getTracks().forEach((t) => t.stop()); };
+  }, []);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <video ref={video} muted playsInline style={{ width: "100%", borderRadius: 12, background: "#000" }} />
+      <Aviso msg={msg} />
+      <button type="button" onClick={onCerrar} style={btnPeq}>Cerrar la cámara</button>
+    </div>
+  );
+}
 function Buscador({ supplierId, titulo, onElegir, onCerrar, permitirNuevo, onNuevo }) {
   const [q, setQ] = useState("");
+  const [camara, setCamara] = useState(false);
+  const [hallado, setHallado] = useState(null); // {producto} o {codigo} si no está en la tienda
+  const [aviso, setAviso] = useState("");
+  const mirarCodigo = async (c) => {
+    setCamara(false); setAviso(""); setHallado(null);
+    try {
+      const r = await fn("comprobar_codigo", { codigo: c });
+      if (!r.valido) setAviso("Ese código no es válido: escanéalo otra vez");
+      else if (r.producto) setHallado({ producto: r.producto, codigo: c });
+      else setHallado({ codigo: c });
+    } catch (e) { setAviso(e.message || "No he podido comprobar el código"); }
+  };
   const [lista, setLista] = useState(null);
   const [todos, setTodos] = useState(false);
   useEffect(() => {
@@ -92,8 +135,32 @@ function Buscador({ supplierId, titulo, onElegir, onCerrar, permitirNuevo, onNue
         <div style={{ fontFamily: SF, fontSize: 19, color: C.char }}>{titulo}</div>
         <button type="button" onClick={onCerrar} style={{ ...btnPeq, height: 38 }}>Cerrar</button>
       </div>
+      <button type="button" onClick={() => { setHallado(null); setAviso(""); setCamara(true); }} style={{ ...btnDark, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.gold} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
+        Escanear el código de barras
+      </button>
+      {camara && <Escaner onCodigo={mirarCodigo} onCerrar={() => setCamara(false)} />}
+      <Aviso msg={aviso} />
+      {hallado?.producto && (
+        <div style={{ ...card, border: `1.5px solid ${C.grn}` }}>
+          <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>Código {hallado.codigo}</div>
+          <div style={{ fontFamily: F, fontSize: 16, fontWeight: 700, color: C.char }}>{hallado.producto.nombre}</div>
+          <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>PVP {eur(hallado.producto.pvp)}</div>
+          <button type="button" onClick={() => onElegir(hallado.producto)} style={{ ...btnDark, background: C.grn, color: "#fff" }}>Sí, es este</button>
+          <button type="button" onClick={() => { setHallado(null); setCamara(true); }} style={btnPeq}>No, escanear otro</button>
+        </div>
+      )}
+      {hallado && !hallado.producto && (
+        <div style={{ ...card, border: "1.5px solid #E0B94A", background: "#FBF0DA" }}>
+          <div style={{ fontFamily: F, fontSize: 15, fontWeight: 700, color: "#6B4A0C" }}>Este código no está en la tienda</div>
+          <div style={{ fontFamily: F, fontSize: 12.5, color: "#6B4A0C" }}>Código {hallado.codigo}</div>
+          {permitirNuevo && <button type="button" onClick={() => onNuevo("", hallado.codigo)} style={btnDark}>Dar de alta como producto nuevo</button>}
+          <button type="button" onClick={() => { setHallado(null); setCamara(true); }} style={btnPeq}>Escanear otro</button>
+        </div>
+      )}
       <label style={{ position: "absolute", left: -9999 }} htmlFor="busca-prod">Buscar producto</label>
-      <input id="busca-prod" autoFocus type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar o escanear el código…" style={inp} />
+      <input id="busca-prod" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="O busca por el nombre…" style={inp}
+        onKeyDown={(e) => { if (e.key === "Enter" && /^\d{8,14}$/.test(q.trim())) { e.preventDefault(); mirarCodigo(q.trim()); } }} />
       {supplierId && <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: F, fontSize: 13, color: C.mut }}><input type="checkbox" checked={todos} onChange={(e) => setTodos(e.target.checked)} /> Buscar en todos los proveedores</label>}
       {lista === null ? <Cargando /> : lista.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>No encuentro nada con eso.</div> : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -105,7 +172,7 @@ function Buscador({ supplierId, titulo, onElegir, onCerrar, permitirNuevo, onNue
           ))}
         </div>
       )}
-      {permitirNuevo && <button type="button" onClick={() => onNuevo(q)} style={{ background: "none", border: "none", fontFamily: F, fontSize: 13.5, fontWeight: 600, color: "#4A4236", textDecoration: "underline", padding: 10, cursor: "pointer" }}>No está: es un producto nuevo</button>}
+      {permitirNuevo && <button type="button" onClick={() => onNuevo(q, "")} style={{ background: "none", border: "none", fontFamily: F, fontSize: 13.5, fontWeight: 600, color: "#4A4236", textDecoration: "underline", padding: 10, cursor: "pointer" }}>No está: es un producto nuevo</button>}
     </div>
   );
 }
@@ -183,7 +250,7 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
   const [uds, setUds] = useState(inicial?.unidades != null ? fmt(inicial.unidades) : "1");
   const [marcado, setMarcado] = useState(inicial?.marcado ?? (inicial?.precio_marcado != null ? true : null));
   const [pMarcado, setPMarcado] = useState(inicial?.precio_marcado != null ? dinero(inicial.precio_marcado) : "");
-  const [coste, setCoste] = useState(inicial?.coste != null ? String(Math.round(Number(inicial.coste) * 10000) / 10000).replace(".", ",") : "");
+  const [coste, setCoste] = useState(inicial?.coste != null ? dineroSube(inicial.coste) : "");
   const [provSel, setProvSel] = useState(inicial?.proveedor || "");
   const [pvp, setPvp] = useState(inicial?.pvp != null ? dinero(inicial.pvp) : "");
   const [tocado, setTocado] = useState(inicial?.pvp != null);
@@ -211,7 +278,7 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
   // precio de venta propuesto
   useEffect(() => {
     const t = setTimeout(() => {
-      fn("precio_sugerido", { nombre, recepcion_id: recepcion?.id, supplier_id: dentro ? proveedor?.supplier_id : provElegido?.supplier_id, proveedor: dentro ? proveedor?.nombre : provElegido?.nombre, coste_sin_iva: coste ? numero(coste) : null, marcado: marcado === true, precio_marcado: marcado ? numero(pMarcado) || null : null })
+      fn("precio_sugerido", { nombre, recepcion_id: recepcion?.id, supplier_id: dentro ? proveedor?.supplier_id : provElegido?.supplier_id, proveedor: dentro ? proveedor?.nombre : provElegido?.nombre, coste_sin_iva: coste ? subeCent(numero(coste)) : null, marcado: marcado === true, precio_marcado: marcado ? numero(pMarcado) || null : null })
         .then((r) => { setSug(r); if (!tocado) setPvp(r.pvp != null ? dinero(r.pvp) : ""); }).catch(() => {});
     }, 450);
     return () => clearTimeout(t);
@@ -221,7 +288,7 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
   if (parecidos?.datos) return <EsEste candidatos={parecidos.lista} datos={parecidos.datos} proveedor={provElegido?.nombre}
     onListo={(r) => onListo({ alta: r })} onNo={() => { const d = parecidos.datos; setParecidos(null); crear(d, true); }} onVolver={() => setParecidos(null)} />;
 
-  if (existe) return <CodigoExiste producto={existe} modo={modo} recepcion={recepcion} datos={{ nombre, coste: coste ? numero(coste) : null, marcado: marcado === true, precio_marcado: marcado ? numero(pMarcado) : null, pvp: numero(pvp) || null, unidades: dentro ? numero(uds) : null, supplier_id: dentro ? proveedor?.supplier_id : provElegido?.supplier_id, proveedor: dentro ? proveedor?.nombre : provElegido?.nombre, recepcion_id: recepcion?.id }}
+  if (existe) return <CodigoExiste producto={existe} modo={modo} recepcion={recepcion} datos={{ nombre, coste: coste ? subeCent(numero(coste)) : null, marcado: marcado === true, precio_marcado: marcado ? numero(pMarcado) : null, pvp: numero(pvp) || null, unidades: dentro ? numero(uds) : null, supplier_id: dentro ? proveedor?.supplier_id : provElegido?.supplier_id, proveedor: dentro ? proveedor?.nombre : provElegido?.nombre, recepcion_id: recepcion?.id }}
     onEsEste={() => onListo({ existente: existe, unidades: numero(uds) })} onVolver={() => { setExiste(null); setCodigo(""); setEstadoCod(""); }} onIncidencia={() => onListo({ incidencia: true })} />;
 
   const guardar = async () => {
@@ -236,7 +303,7 @@ function FichaProducto({ modo, recepcion, proveedor, proveedores, inicial, onLis
     if (dentro && !(numero(coste) > 0)) { setMsg("Pon el precio de coste"); return; }
     if (!dentro && coste.trim() && !(numero(coste) > 0)) { setMsg("Ese coste no es válido. Si no lo sabes, déjalo vacío"); return; }
     if (!(numero(pvp) > 0)) { setMsg(sinCosteFuera ? "Pon un precio de venta para poder venderlo ya" : "Falta el precio de venta"); return; }
-    const datos = { nombre: nombre.trim(), codigo: sinCodigo ? null : codigo, sin_codigo: sinCodigo, marcado, precio_marcado: marcado ? numero(pMarcado) : null, coste: coste.trim() ? numero(coste) : null, pvp: numero(pvp), pvp_sugerido: sug?.pvp ?? null, unidades: dentro ? numero(uds) : null };
+    const datos = { nombre: nombre.trim(), codigo: sinCodigo ? null : codigo, sin_codigo: sinCodigo, marcado, precio_marcado: marcado ? numero(pMarcado) : null, coste: coste.trim() ? subeCent(numero(coste)) : null, pvp: numero(pvp), pvp_sugerido: sug?.pvp ?? null, unidades: dentro ? numero(uds) : null };
     if (modo === "pedido") { onListo({ nuevo: datos }); return; }
     await crear(datos, false);
   };
@@ -631,7 +698,7 @@ function Linea({ l, manual, onCambio, onAsociar, marcar, normal }) {
           <div style={{ fontFamily: F, fontSize: 14, fontWeight: 600, color: C.char }}>{titulo}{regalo ? <span style={{ ...chip("#EAF4EE", "#1E6B3C"), marginLeft: 6 }}>REGALO</span> : l.emparejado === "nuevo" && <span style={{ ...chip("#FBF0DA", "#7A5410"), marginLeft: 6 }}>NUEVO</span>}</div>
           {sinProducto && marcar && <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: "#A3362B" }}>Falta decir qué producto es</div>}
           {regalo && <div style={{ fontFamily: F, fontSize: 12, color: "#1E6B3C" }}>Regalo: va al mismo producto{normal ? ` que «${normal.nuevo?.nombre || normal.producto?.nombre || normal.descripcion}»` : ""}, con coste 0.</div>}
-          {!regalo && l.emparejado === "nuevo" && !l.product_id && l.nuevo?.auto && <div style={{ fontFamily: F, fontSize: 12, color: "#6B4A0C" }}>No lo tenemos: se da de alta solo al confirmar{l.precio_marcado != null ? ` (precio marcado ${eur(l.precio_marcado)})` : ""}. <button type="button" onClick={() => onAsociar("buscar")} style={{ background: "none", border: "none", padding: 0, fontFamily: F, fontSize: 12, color: "#6B4A0C", textDecoration: "underline", cursor: "pointer" }}>No, es otro producto</button></div>}
+          {!regalo && l.emparejado === "nuevo" && !l.product_id && l.nuevo?.auto && <div style={{ fontFamily: F, fontSize: 12, color: "#6B4A0C" }}>No lo tenemos: se da de alta solo al confirmar{l.precio_marcado != null ? ` (precio marcado ${eur(l.precio_marcado)})` : ""}. <button type="button" onClick={() => onAsociar("buscar")} style={{ ...btnDark, height: 48, marginTop: 8 }}>Ya existe</button></div>}
           {!regalo && l.emparejado === "nuevo" && !l.product_id && !l.nuevo?.auto && l.nuevo && <div style={{ fontFamily: F, fontSize: 12, color: "#6B4A0C" }}>PVP {eur(l.nuevo.pvp)}{l.nuevo.sin_codigo ? " · sin código" : l.nuevo.codigo ? ` · ${l.nuevo.codigo}` : ""} · se da de alta al confirmar. <button type="button" onClick={() => onAsociar("editar")} style={{ background: "none", border: "none", padding: 0, fontFamily: F, fontSize: 12, color: "#6B4A0C", textDecoration: "underline", cursor: "pointer" }}>Cambiar</button></div>}
           {l.descripcion && l.descripcion !== titulo && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>{l.via === "foto" ? "Leído: «" + l.descripcion + "»" : l.descripcion}</div>}
           {l.cant_doc != null && !alPeso(l) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Factura: {fmt(l.cant_doc)}{u > 1 ? ` × ${fmt(u)} uds` : ""}{pack ? ` piezas = ${fmt(udsDoc(l.cant_doc, u))} packs de ${packDe(u)}` : ""}{l.base_unit != null ? ` · ${eur(l.base_unit)}/${pack ? "pack" : "ud"} sin IVA` : ""}</div>}
@@ -653,12 +720,12 @@ function Linea({ l, manual, onCambio, onAsociar, marcar, normal }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, alignItems: "end", background: importeNoCuadra(l) ? "#FBEAE7" : "#F7F2E9", borderRadius: 12, padding: "8px 10px" }}>
           <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Kilos factura<div style={{ fontSize: 16, fontWeight: 700, color: C.char }}>{fmt(kgFactura(l))} kg</div></div>
           <label style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>€/kg sin IVA
-            <input inputMode="decimal" aria-label={`Precio por kilo sin IVA de ${titulo}`} value={l.coste_txt ?? (l.base_unit != null ? dinero(l.base_unit) : "")} onChange={(e) => onCambio({ coste_txt: e.target.value })} onFocus={(e) => e.target.select()} placeholder="0,00"
+            <input inputMode="decimal" aria-label={`Precio por kilo sin IVA de ${titulo}`} value={l.coste_txt ?? (l.base_unit != null ? dineroSube(l.base_unit) : "")} onChange={(e) => onCambio({ coste_txt: e.target.value })} onFocus={(e) => e.target.select()} placeholder="0,00"
               style={{ display: "block", width: "100%", boxSizing: "border-box", height: 40, marginTop: 2, textAlign: "center", border: `1.5px solid ${l.coste_txt != null && l.base_unit != null && Math.abs(numero(l.coste_txt) - Number(l.base_unit)) > 0.0005 ? C.grn : C.brd}`, borderRadius: 10, fontFamily: F, fontSize: 16, fontWeight: 700, color: C.char, background: "#fff" }} />
           </label>
           <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, textAlign: "right" }}>Importe<div style={{ fontSize: 16, fontWeight: 700, color: C.char }}>{eur(importeLinea(l))}</div></div>
           {importeNoCuadra(l) && <div style={{ gridColumn: "1 / -1", fontFamily: F, fontSize: 12, fontWeight: 700, color: "#A3362B" }}>No cuadra con la factura: la línea dice {eur(l.importe_doc)}. Revisa el precio por kilo.</div>}
-          {l.coste_txt != null && l.base_unit != null && Math.abs(numero(l.coste_txt) - Number(l.base_unit)) > 0.0005 && <div style={{ gridColumn: "1 / -1", fontFamily: F, fontSize: 12, color: "#1E6B3C" }}>Corregido (se había leído {dinero(l.base_unit)} €/kg). Al confirmar, este es el coste que va a la caja.</div>}
+          {l.coste_txt != null && l.base_unit != null && Math.abs(numero(l.coste_txt) - Number(l.base_unit)) > 0.0005 && <div style={{ gridColumn: "1 / -1", fontFamily: F, fontSize: 12, color: "#1E6B3C" }}>Corregido (se había leído {dineroSube(l.base_unit)} €/kg). Al confirmar, este es el coste que va a la caja.</div>}
         </div>
       )}
       {pregunta && (
@@ -740,9 +807,9 @@ function Revisar({ datos, onHecho, onVolver }) {
   const pendientes = listaPend.length;
   const difs = lineas.filter((l) => l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-3).length;
   const total = lineas.filter((l) => l.tipo === "venta").reduce((s, l) => s + numero(l.q), 0);
-  // Suma de líneas (cantidad de la factura × precio, con las correcciones) frente al total sin IVA del documento
+  // Suma de líneas (importe de cada línea, que ya lleva el descuento; si se ha corregido el precio, cantidad × precio) frente al total sin IVA del documento
   const conPrecio = lineas.filter((l) => l.cant_doc != null && precioKg(l) != null);
-  const sumaLineas = !manual && conPrecio.length ? Math.round(conPrecio.reduce((s, l) => s + Number(l.cant_doc) * Number(l.unidades_por || 1) * precioKg(l), 0) * 100) / 100 : null;
+  const sumaLineas = !manual && conPrecio.length ? Math.round(conPrecio.reduce((s, l) => s + (l.importe_doc != null && (l.coste_txt == null || l.coste_txt === "") ? Number(l.importe_doc) : Number(l.cant_doc) * Number(l.unidades_por || 1) * precioKg(l)), 0) * 100) / 100 : null;
 
   const anadir = (p) => {
     setLineas((ls) => [...ls, { id: null, via: rec.via, descripcion: p.nombre, producto: p, product_id: p.id, tipo: "venta", emparejado: "ok", anadida: true, q: "1", coste_ref: p.coste != null ? Math.round(p.coste * 100) / 100 : null }]);
@@ -759,7 +826,7 @@ function Revisar({ datos, onHecho, onVolver }) {
       if (conFactura) await sb.rpc("recepcion_factura_preparar", { p_id: rec.id, p_pago: pago, p_importe: sinImporte ? null : Math.round(facImporteN * 100) / 100, p_sin_importe: sinImporte });
       const r = await fn("confirmar", {
         id: rec.id,
-        lineas: lineas.map((l) => ({ id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, unidades_por: l.unidades_por, descripcion: l.descripcion, nuevo: l.emparejado === "nuevo" && !l.product_id ? l.nuevo : undefined, coste_sin_iva: l.emparejado === "nuevo" ? undefined : l.coste_txt ? numero(l.coste_txt) : manual && l.coste_ref != null ? l.coste_ref : undefined })),
+        lineas: lineas.map((l) => ({ id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, unidades_por: l.unidades_por, descripcion: l.descripcion, nuevo: l.emparejado === "nuevo" && !l.product_id ? l.nuevo : undefined, coste_sin_iva: l.emparejado === "nuevo" ? undefined : l.coste_txt ? subeCent(numero(l.coste_txt)) : manual && l.coste_ref != null ? l.coste_ref : undefined })),
       });
       if (conFactura) { try { const fs = await sb.select("facturas_proveedores", `select=id,importe,tipo_pago&recepcion_id=eq.${rec.id}`); r.factura = fs[0] || { error: true }; } catch { /* la factura se ve en «Facturas» */ } }
       onHecho(r);
@@ -775,7 +842,7 @@ function Revisar({ datos, onHecho, onVolver }) {
     <div style={{ padding: "18px 16px" }}>
       <Buscador supplierId={prov?.supplier_id} titulo={panel.modo === "anadir" ? `Añadir de ${rec.proveedor}` : "¿Qué producto es?"} permitirNuevo
         onCerrar={() => setPanel(null)}
-        onNuevo={(q) => setPanel({ modo: "nuevo", idx: panel.modo === "anadir" ? null : panel.idx, nombre: q })}
+        onNuevo={(q, codigo) => setPanel({ modo: "nuevo", idx: panel.modo === "anadir" ? null : panel.idx, nombre: q, codigo })}
         onElegir={(p) => { if (panel.modo === "anadir") anadir(p); else { cambiar(panel.idx, { producto: p, product_id: p.id, emparejado: "ok", tipo: "venta" }); setPanel(null); } }} />
     </div>
   );
@@ -783,7 +850,7 @@ function Revisar({ datos, onHecho, onVolver }) {
     const l = panel.idx != null ? lineas[panel.idx] : null;
     const inicial = l?.nuevo && !l.nuevo.auto && l.nuevo.pvp != null
       ? { ...l.nuevo, unidades: numero(l.q) }
-      : { nombre: panel.nombre || (l ? (l.nuevo?.nombre || l.descripcion) : ""), unidades: l ? numero(l.q) || null : null, coste: l?.base_unit ?? null, marcado: l?.precio_marcado != null ? true : null, precio_marcado: l?.precio_marcado ?? null };
+      : { codigo: panel.codigo || "", nombre: panel.nombre || (l ? (l.nuevo?.nombre || l.descripcion) : ""), unidades: l ? numero(l.q) || null : null, coste: l?.base_unit ?? null, marcado: l?.precio_marcado != null ? true : null, precio_marcado: l?.precio_marcado ?? null };
     return (
       <FichaProducto modo="pedido" recepcion={rec} proveedor={prov || { nombre: rec.proveedor, supplier_id: rec.supplier_id }} inicial={inicial}
         onCerrar={() => setPanel(null)}
