@@ -703,7 +703,46 @@ function ComoSeVende({ l, onCambio }) {
 }
 
 // ---------- una línea del pedido ----------
-function Linea({ l, manual, onCambio, onAsociar, marcar, normal }) {
+const MOTIVOS_NP = [["expositor", "Expositor o surtido sin desglosar"], ["portes", "Portes / transporte"], ["envases", "Envases / fianzas"], ["material", "Material para la tienda (bolsas, limpieza…)"], ["otro", "Otro"]];
+const motivoNP = (l) => l.no_producto_motivo === "otro" && l.no_producto_texto ? `Otro: ${l.no_producto_texto}` : (MOTIVOS_NP.find(([k]) => k === l.no_producto_motivo)?.[1] || "No es un producto");
+
+// #52: «No es un producto» (no da de alta, no suma stock, no cambia costes; su importe sigue en el total de la factura)
+function NoEsProducto({ l, onCambio, onAnadirExpo, hijos, onQuitar }) {
+  const [abierto, setAbierto] = useState(false);
+  const [otro, setOtro] = useState("");
+  const [elegido, setElegido] = useState(null);
+  const marcado = l.tipo !== "venta";
+  if (marcado) return (
+    <div style={{ background: "#F1EEE8", borderRadius: 12, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6, fontFamily: F, fontSize: 12.5, color: "#4A4236" }}>
+      <div><b>No es un producto:</b> {motivoNP(l)}. No suma stock, no se da de alta y no cambia costes; el importe cuenta en la factura.</div>
+      {l.no_producto_motivo === "expositor" && (
+        <>
+          {hijos.map((h) => <div key={h.k} style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ flex: 1 }}>· {h.nombre} × {fmt(h.q)}</span><button type="button" onClick={() => onQuitar(h.k)} style={{ ...btnPeq, height: 30, padding: "0 10px" }}>Quitar</button></div>)}
+          {!hijos.length && <div style={{ color: "#6B4A0C" }}>Sin desglosar: dirección recibirá un aviso para revisarlo.</div>}
+          {hijos.length > 0 && <div style={{ color: C.mut }}>El coste del expositor se reparte entre estos productos según su precio de venta.</div>}
+          <button type="button" onClick={onAnadirExpo} style={btnPeq}>Añadir lo que trae</button>
+        </>
+      )}
+      <button type="button" onClick={() => onCambio({ tipo: "venta", no_producto_motivo: null, no_producto_texto: null })} style={{ ...btnPeq, height: 36 }}>Sí es un producto</button>
+    </div>
+  );
+  if (!abierto) return <button type="button" onClick={() => setAbierto(true)} style={{ ...btnPeq, height: 38, borderColor: "#B9AE9A", color: "#4A4236" }}>No es un producto</button>;
+  return (
+    <div style={{ background: "#F1EEE8", borderRadius: 12, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: "#4A4236" }}>¿Qué es?</div>
+      {MOTIVOS_NP.map(([k, t]) => <button key={k} type="button" onClick={() => { if (k === "otro") setElegido("otro"); else { onCambio({ tipo: "uso_interno", no_producto_motivo: k, no_producto_texto: null }); setAbierto(false); } }} style={{ ...btnPeq, justifyContent: "flex-start", textAlign: "left", ...(elegido === k ? { borderColor: C.char } : {}) }}>{t}</button>)}
+      {elegido === "otro" && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <input aria-label="Qué es" value={otro} onChange={(e) => setOtro(e.target.value)} placeholder="Escribe qué es" style={{ flex: 1, height: 40, boxSizing: "border-box", border: `1px solid ${C.brd}`, borderRadius: 10, padding: "0 10px", fontFamily: F, fontSize: 14 }} />
+          <button type="button" disabled={!otro.trim()} onClick={() => { onCambio({ tipo: "uso_interno", no_producto_motivo: "otro", no_producto_texto: otro.trim() }); setAbierto(false); setElegido(null); }} style={{ ...btnPeq, opacity: otro.trim() ? 1 : 0.5 }}>Vale</button>
+        </div>
+      )}
+      <button type="button" onClick={() => { setAbierto(false); setElegido(null); }} style={{ background: "none", border: "none", fontFamily: F, fontSize: 12.5, color: C.mut, textDecoration: "underline", cursor: "pointer" }}>Cancelar</button>
+    </div>
+  );
+}
+
+function Linea({ l, manual, onCambio, onAsociar, marcar, normal, hijos = [], onAnadirExpo, onQuitar }) {
   const dif = l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-3;
   const titulo = l.nuevo?.nombre || l.producto?.nombre || l.descripcion;
   const sinProducto = l.tipo === "venta" && !l.producto && l.emparejado !== "nuevo";
@@ -729,7 +768,7 @@ function Linea({ l, manual, onCambio, onAsociar, marcar, normal }) {
           {!regalo && l.emparejado === "nuevo" && !l.product_id && !l.nuevo?.auto && l.nuevo && <div style={{ fontFamily: F, fontSize: 12, color: "#6B4A0C" }}>PVP {eur(l.nuevo.pvp)}{l.nuevo.sin_codigo ? " · sin código" : l.nuevo.codigo ? ` · ${l.nuevo.codigo}` : ""} · se da de alta al confirmar. <button type="button" onClick={() => onAsociar("editar")} style={{ background: "none", border: "none", padding: 0, fontFamily: F, fontSize: 12, color: "#6B4A0C", textDecoration: "underline", cursor: "pointer" }}>Cambiar</button></div>}
           {l.descripcion && l.descripcion !== titulo && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>{l.via === "foto" ? "Leído: «" + l.descripcion + "»" : l.descripcion}</div>}
           {l.cant_doc != null && !alPeso(l) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Factura: {fmt(l.cant_doc)}{u > 1 ? ` × ${fmt(u)} uds` : ""}{pack ? ` piezas = ${fmt(udsDoc(l.cant_doc, u))} packs de ${packDe(u)}` : ""}{l.base_unit != null ? ` · ${eur(l.base_unit)}/${pack ? "pack" : "ud"} sin IVA` : ""}</div>}
-          {l.tipo !== "venta" && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>No es de venta: no suma stock</div>}
+          {l.expositor_de != null && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Viene dentro de un expositor</div>}
           {dif && <div style={{ fontFamily: F, fontSize: 11.5, color: "#A3362B", fontWeight: 600 }}>El documento dice {fmt(l.uds_doc)}{alPeso(l) ? " kg" : ""}</div>}
         </div>
         {l.tipo === "venta" && (alPeso(l) ? (
@@ -779,9 +818,9 @@ function Linea({ l, manual, onCambio, onAsociar, marcar, normal }) {
             <button type="button" onClick={() => onAsociar("buscar")} style={btnPeq}>Buscar otro</button>
             <button type="button" onClick={() => onAsociar("nuevo")} style={btnPeq}>Es nuevo</button>
           </div>
-          <button type="button" onClick={() => onCambio({ tipo: "uso_interno" })} style={{ background: "none", border: "none", fontFamily: F, fontSize: 12.5, color: C.mut, textDecoration: "underline", cursor: "pointer" }}>No es para vender (limpieza, bolsas…)</button>
         </div>
       )}
+      {regaloDe(l) == null && !l.expositor_de && <NoEsProducto l={l} onCambio={onCambio} hijos={hijos} onAnadirExpo={onAnadirExpo} onQuitar={onQuitar} />}
       {l.emparejado === "propuesta" && l.producto && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: F, fontSize: 12, color: "#6B4A0C" }}>
           <span style={{ flex: 1 }}>Lo he asociado por el nombre. ¿Es este producto?</span>
@@ -842,8 +881,8 @@ function Revisar({ datos, onHecho, onVolver }) {
   const conPrecio = lineas.filter((l) => l.cant_doc != null && precioKg(l) != null);
   const sumaLineas = !manual && conPrecio.length ? Math.round(conPrecio.reduce((s, l) => s + (l.importe_doc != null && (l.coste_txt == null || l.coste_txt === "") ? Number(l.importe_doc) : Number(l.cant_doc) * Number(l.unidades_por || 1) * precioKg(l)), 0) * 100) / 100 : null;
 
-  const anadir = (p) => {
-    setLineas((ls) => [...ls, { id: null, via: rec.via, descripcion: p.nombre, producto: p, product_id: p.id, tipo: "venta", emparejado: "ok", anadida: true, q: "1", coste_ref: p.coste != null ? Math.round(p.coste * 100) / 100 : null }]);
+  const anadir = (p, expo) => {
+    setLineas((ls) => [...ls, { id: null, k: `x${Date.now()}${ls.length}`, via: rec.via, descripcion: p.nombre, producto: p, product_id: p.id, tipo: "venta", emparejado: "ok", anadida: true, q: "1", coste_ref: p.coste != null ? Math.round(p.coste * 100) / 100 : null, ...(expo != null ? { expositor_de: expo } : {}) }]);
     setPanel(null);
   };
   const confirmar = async () => {
@@ -852,13 +891,26 @@ function Revisar({ datos, onHecho, onVolver }) {
     if (conFactura && !pago) { setMsg("Elige cómo se ha pagado la factura"); return; }
     if (conFactura && !sinImporte && !(Number.isFinite(facImporteN) && facImporteN !== 0)) { setMsg("Pon el importe total de la factura o marca «No sé el importe»"); return; }
     if (conFactura && numObligatorio && !numFac.trim()) { setMsg("Pon el número de factura: dirección lo necesita para la transferencia"); return; }
+    // #52: el coste de un expositor se reparte entre lo que trae, en proporción al precio de venta de cada producto
+    const costeExpo = new Map();
+    for (const e of lineas.filter((x) => x.tipo !== "venta" && x.no_producto_motivo === "expositor" && x.orden != null)) {
+      const hs = lineas.filter((x) => x.expositor_de != null && Number(x.expositor_de) === Number(e.orden) && numero(x.q) > 0);
+      if (!hs.length) continue;
+      const pvpDe = (x) => Number(x.nuevo?.pvp ?? x.producto?.pvp ?? 0);
+      const falta = hs.find((x) => !(pvpDe(x) > 0));
+      if (falta) { setMsg(`Falta el precio de venta de «${falta.nuevo?.nombre || falta.producto?.nombre || falta.descripcion}» para repartir el coste del expositor`); return; }
+      const importe = e.importe_doc != null ? Number(e.importe_doc) : Number(e.cant_doc || 1) * Number(e.unidades_por || 1) * Number(e.base_unit || 0);
+      if (!(importe > 0)) { setMsg(`No sé el importe del expositor «${e.descripcion}»: no puedo repartir su coste`); return; }
+      const peso = hs.reduce((t, x) => t + numero(x.q) * pvpDe(x), 0);
+      for (const x of hs) costeExpo.set(x.id ?? x.k, subeCent(importe * pvpDe(x) / peso));
+    }
     setBusy(true); setMsg("");
     try {
       // #24: importe y forma de pago se guardan antes; al confirmar, la factura se crea sola en «Facturas»
       if (conFactura) await sb.rpc("recepcion_factura_preparar", { p_id: rec.id, p_pago: pago, p_importe: sinImporte ? null : Math.round(facImporteN * 100) / 100, p_sin_importe: sinImporte, p_numero: numFac.trim() || null });
       const r = await fn("confirmar", {
         id: rec.id,
-        lineas: lineas.map((l) => ({ id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, unidades_por: l.unidades_por, descripcion: l.descripcion, nuevo: l.emparejado === "nuevo" && !l.product_id ? l.nuevo : undefined, coste_sin_iva: l.emparejado === "nuevo" ? undefined : l.coste_txt ? subeCent(numero(l.coste_txt)) : manual && l.coste_ref != null ? l.coste_ref : undefined })),
+        lineas: lineas.map((l) => { const ce = costeExpo.get(l.id ?? l.k); return { id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, no_producto_motivo: l.tipo !== "venta" ? (l.no_producto_motivo || "otro") : null, no_producto_texto: l.tipo !== "venta" ? l.no_producto_texto || null : null, expositor_de: l.expositor_de ?? undefined, unidades_por: l.unidades_por, descripcion: l.descripcion, nuevo: l.emparejado === "nuevo" && !l.product_id ? (ce != null ? { ...l.nuevo, coste: ce } : l.nuevo) : undefined, coste_sin_iva: ce != null && l.emparejado !== "nuevo" ? ce : l.emparejado === "nuevo" ? undefined : l.coste_txt ? subeCent(numero(l.coste_txt)) : manual && l.coste_ref != null ? l.coste_ref : undefined }; }),
       });
       if (conFactura) { try { const fs = await sb.select("facturas_proveedores", `select=id,importe,tipo_pago&recepcion_id=eq.${rec.id}`); r.factura = fs[0] || { error: true }; } catch { /* la factura se ve en «Facturas» */ } }
       onHecho(r);
@@ -872,10 +924,10 @@ function Revisar({ datos, onHecho, onVolver }) {
 
   if (panel?.modo === "buscar" || panel?.modo === "anadir") return (
     <div style={{ padding: "18px 16px" }}>
-      <Buscador supplierId={prov?.supplier_id} titulo={panel.modo === "anadir" ? `Añadir de ${rec.proveedor}` : "¿Qué producto es?"} permitirNuevo
+      <Buscador supplierId={prov?.supplier_id} titulo={panel.modo === "anadir" ? (panel.expo != null ? "¿Qué trae el expositor?" : `Añadir de ${rec.proveedor}`) : "¿Qué producto es?"} permitirNuevo
         onCerrar={() => setPanel(null)}
-        onNuevo={(q, codigo) => setPanel({ modo: "nuevo", idx: panel.modo === "anadir" ? null : panel.idx, nombre: q, codigo })}
-        onElegir={(p) => { if (panel.modo === "anadir") anadir(p); else { cambiar(panel.idx, { producto: p, product_id: p.id, emparejado: "ok", tipo: "venta" }); setPanel(null); } }} />
+        onNuevo={(q, codigo) => setPanel({ modo: "nuevo", idx: panel.modo === "anadir" ? null : panel.idx, nombre: q, codigo, expo: panel.expo })}
+        onElegir={(p) => { if (panel.modo === "anadir") anadir(p, panel.expo); else { cambiar(panel.idx, { producto: p, product_id: p.id, emparejado: "ok", tipo: "venta" }); setPanel(null); } }} />
     </div>
   );
   if (panel?.modo === "nuevo" || panel?.modo === "editar") {
@@ -889,10 +941,10 @@ function Revisar({ datos, onHecho, onVolver }) {
         onListo={(r) => {
           if (r.nuevo) {
             const n = r.nuevo; const cambio = { emparejado: "nuevo", nuevo: { ...n }, producto: null, product_id: null, tipo: "venta", q: fmt(n.unidades) };
-            if (l) cambiar(panel.idx, cambio); else setLineas((ls) => [...ls, { id: null, via: rec.via, descripcion: n.nombre, anadida: true, ...cambio }]);
+            if (l) cambiar(panel.idx, cambio); else setLineas((ls) => [...ls, { id: null, k: `x${Date.now()}${ls.length}`, via: rec.via, descripcion: n.nombre, anadida: true, ...(panel.expo != null ? { expositor_de: panel.expo } : {}), ...cambio }]);
           } else if (r.existente) {
             const p = r.existente; const cambio = { producto: { id: p.id, nombre: p.nombre, pvp: p.pvp }, product_id: p.id, emparejado: "ok", nuevo: null, tipo: "venta", q: fmt(r.unidades || 1) };
-            if (l) cambiar(panel.idx, cambio); else setLineas((ls) => [...ls, { id: null, via: rec.via, descripcion: p.nombre, anadida: true, ...cambio }]);
+            if (l) cambiar(panel.idx, cambio); else setLineas((ls) => [...ls, { id: null, k: `x${Date.now()}${ls.length}`, via: rec.via, descripcion: p.nombre, anadida: true, ...(panel.expo != null ? { expositor_de: panel.expo } : {}), ...cambio }]);
           } else if (r.incidencia) setMsg("Incidencia mandada a dirección. Ese producto no se ha añadido al pedido.");
           setPanel(null);
         }} />
@@ -922,7 +974,9 @@ function Revisar({ datos, onHecho, onVolver }) {
           {!manual && <p style={{ margin: 0, fontFamily: F, fontSize: 13, color: C.mut }}>Salen las unidades del documento. Cuenta lo que ha llegado y cambia lo que no coincida.</p>}
           {manual && <p style={{ margin: 0, fontFamily: F, fontSize: 13, color: C.mut }}>Pon solo lo que ha llegado. El coste sale de la última compra (sin IVA): cámbialo si es otro.</p>}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {lineas.map((l, i) => <Linea key={l.id ?? `n${i}`} l={l} manual={manual} marcar={marcar} normal={regaloDe(l) != null ? lineas.find((x) => x !== l && Number(x.orden) === regaloDe(l)) : null} onCambio={(c) => cambiar(i, c)} onAsociar={(modo) => setPanel({ modo, idx: i })} />)}
+            {lineas.map((l, i) => <Linea key={l.id ?? l.k ?? `n${i}`} l={l} manual={manual} marcar={marcar} normal={regaloDe(l) != null ? lineas.find((x) => x !== l && Number(x.orden) === regaloDe(l)) : null} onCambio={(c) => cambiar(i, c)} onAsociar={(modo) => setPanel({ modo, idx: i })}
+              hijos={l.orden != null ? lineas.filter((x) => x.expositor_de != null && Number(x.expositor_de) === Number(l.orden)).map((x) => ({ k: x.id ?? x.k, nombre: x.nuevo?.nombre || x.producto?.nombre || x.descripcion, q: numero(x.q) })) : []}
+              onAnadirExpo={() => setPanel({ modo: "anadir", expo: Number(l.orden) })} onQuitar={(k) => setLineas((ls) => ls.filter((x) => (x.id ?? x.k) !== k))} />)}
           </div>
           <button type="button" onClick={() => setPanel({ modo: "anadir" })} style={{ height: 46, borderRadius: 12, border: "1.5px dashed #C9C0B0", background: "transparent", fontFamily: F, fontSize: 13.5, fontWeight: 600, color: "#4A4236", cursor: "pointer" }}>{manual ? "+ Añadir producto" : "+ Ha llegado algo que no está en la lista"}</button>
           <button type="button" onClick={() => setPanel({ modo: "nuevo" })} style={{ height: 46, borderRadius: 12, border: `1.5px solid ${C.char}`, background: "#fff", fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.char, cursor: "pointer" }}>+ Producto nuevo (no lo tenemos dado de alta)</button>
