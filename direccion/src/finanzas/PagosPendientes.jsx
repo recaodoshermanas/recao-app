@@ -8,6 +8,32 @@ import { eur } from "../fmt.js";
 const fecha = (f) => (f ? new Date(`${String(f).slice(0, 10)}T12:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "—");
 const numero = (t) => { const v = Number(String(t).replace(/\./g, "").replace(",", ".")); return Number.isFinite(v) ? v : NaN; };
 const msg = (e) => { const t = String(e?.message || e || ""); const m = /"message"\s*:\s*"([^"]+)"/.exec(t); return m ? m[1] : t || "No se ha podido"; };
+const copiar = async (texto, ok) => {
+  try { await navigator.clipboard.writeText(texto); avisar(ok); }
+  catch (e) { avisar("No se ha podido copiar", "mal"); }
+};
+
+// Número de factura (#50): se copia al pulsarlo; si falta, sale en rojo y se puede añadir ahí mismo
+function Numero({ p, busy, onGuardar }) {
+  const [edit, setEdit] = useState(false);
+  const [v, setV] = useState("");
+  if (p.tipo !== "f") return null;
+  if (edit) {
+    return (
+      <span style={{ display: "inline-flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+        <input value={v} autoFocus maxLength={60} onChange={(e) => setV(e.target.value)} placeholder="Número de factura" style={{ padding: "4px 8px", border: "1px solid var(--line)", borderRadius: 8, font: "inherit" }}
+          onKeyDown={(e) => { if (e.key === "Enter" && v.trim()) onGuardar(v).then((ok) => ok && setEdit(false)); }} />
+        <button className="btn-l" disabled={busy || !v.trim()} onClick={() => onGuardar(v).then((ok) => ok && setEdit(false))}>Guardar</button>
+        <button className="btn-txt" onClick={() => setEdit(false)}>Cancelar</button>
+      </span>
+    );
+  }
+  if (!p.numero) {
+    return <span style={{ display: "block", marginTop: 2 }}><strong style={{ color: "var(--down)" }}>Sin número</strong> <button className="btn-txt" onClick={() => setEdit(true)}>Añadir</button></span>;
+  }
+  return <button className="btn-txt" title="Pulsa para copiar" style={{ display: "block", fontWeight: 700, marginTop: 2 }} onClick={() => copiar(p.numero, "Número copiado")}>Nº {p.numero}</button>;
+}
+
 const pideDias = (n) => (n <= 0 ? "hoy" : n === 1 ? "1 día" : `${n} días`);
 
 export function PagosPendientes() {
@@ -18,6 +44,9 @@ export function PagosPendientes() {
   const [busy, setBusy] = useState(false);
   const [sinClas, setSinClas] = useState({ sin_clasificar: [], ignorados: [] }); // #46
   const [verIgn, setVerIgn] = useState(false);
+  const [sel, setSel] = useState(() => new Set()); // #50: facturas marcadas para copiar sus números juntos
+  const marcar = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const guardarNumero = async (p, numero) => accion("pagos_factura_numero", { p_id: p.id, p_numero: numero }, "Número guardado");
 
   const cargar = useCallback(async () => {
     try { setD(await sb.rpc("pagos_datos")); setFallo(false); } catch (e) { setFallo(true); }
@@ -104,13 +133,25 @@ export function PagosPendientes() {
                 <strong>{g.nombre} <span className="pf" style={{ display: "inline", marginLeft: 6 }}>{g.items.length} {g.items.length === 1 ? "pendiente" : "pendientes"}</span></strong>
                 <strong>{eur(g.total, 2)}</strong>
               </div>
+              {g.items.some((p) => sel.has(`${p.tipo}-${p.id}`)) && (() => {
+                const marcadas = g.items.filter((p) => p.tipo === "f" && sel.has(`${p.tipo}-${p.id}`));
+                const nums = marcadas.map((p) => p.numero).filter(Boolean);
+                return (
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "8px 0" }}>
+                    <span className="sub">{marcadas.length} marcadas · {eur(marcadas.reduce((s, x) => s + Number(x.importe), 0), 2)}</span>
+                    <button className="btn-p" disabled={!nums.length} onClick={() => copiar(`${nums.join(" / ")} RECAO`, "Números copiados")}>Copiar números</button>
+                    {nums.length < marcadas.length && <span className="sub" style={{ color: "var(--down)" }}>Alguna marcada no tiene número</span>}
+                  </div>
+                );
+              })()}
               <div className="tabla-scroll">
                 <table className="ranking es-tabla">
                   <tbody>
                     {g.items.map((p) => (
                       <tr key={`${p.tipo}-${p.id}`}>
+                        <td style={{ width: 28 }}>{p.tipo === "f" && <input type="checkbox" aria-label="Marcar para copiar el número" checked={sel.has(`${p.tipo}-${p.id}`)} onChange={() => marcar(`${p.tipo}-${p.id}`)} />}</td>
                         <td style={{ whiteSpace: "nowrap" }}>{fecha(p.fecha)}<span className="pf">{p.dias > 0 ? `lleva ${pideDias(p.dias)}` : "de hoy"}</span></td>
-                        <td>{p.tipo === "x" ? p.nombre : p.nombre}{p.etiqueta && <span className="es-chip com" style={{ marginLeft: 8 }}>{p.etiqueta}</span>}
+                        <td>{p.nombre}<Numero p={p} busy={busy} onGuardar={(n) => guardarNumero(p, n)} />{p.etiqueta && <span className="es-chip com" style={{ marginLeft: 8 }}>{p.etiqueta}</span>}
                           {(p.quien || p.nota) && <span className="pf">{[p.quien && `Lo metió ${p.quien}`, p.nota].filter(Boolean).join(" · ")}</span>}</td>
                         <td className="r b">{eur(p.importe, 2)}</td>
                         <td className="r" style={{ whiteSpace: "nowrap" }}>
@@ -138,7 +179,8 @@ export function PagosPendientes() {
               {p.opciones.map((o, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center", borderTop: "1px dashed var(--line)", marginTop: 10, paddingTop: 10 }}>
                   <div>
-                    {o.items.map((it) => <div key={`${it.tipo}-${it.id}`}>{it.nombre} · {fecha(it.fecha)} · {eur(it.importe, 2)}</div>)}
+                    {o.items.map((it) => <div key={`${it.tipo}-${it.id}`}>{it.nombre} · {fecha(it.fecha)} · {eur(it.importe, 2)}{it.numero && <> · <strong>Nº {it.numero}</strong></>}</div>)}
+                    {o.por_numero && <span className="pf" style={{ fontWeight: 700 }}>El concepto de la transferencia lleva el número de factura</span>}
                     <span className="pf" style={{ color: Number(o.dif) === 0 ? undefined : "var(--down)", fontWeight: Number(o.dif) === 0 ? 500 : 700 }}>
                       {Number(o.dif) === 0 ? "Cuadra exacto" : `Diferencia ${eur(Math.abs(o.dif), 2)} (${o.dif > 0 ? "se ha transferido de más" : "se ha transferido de menos"})`}
                     </span>
@@ -164,7 +206,7 @@ export function PagosPendientes() {
                   {d.pagadas.map((p) => (
                     <tr key={`${p.tipo}-${p.id}`}>
                       <td style={{ whiteSpace: "nowrap" }}>{fecha(p.pagada_fecha)}</td>
-                      <td>{p.grupo !== p.nombre && p.tipo === "f" ? `${p.grupo} · ` : ""}{p.nombre}<span className="pf">{p.tipo === "x" ? "Pago fijo" : "Factura"} del {fecha(p.fecha)}</span></td>
+                      <td>{p.grupo !== p.nombre && p.tipo === "f" ? `${p.grupo} · ` : ""}{p.nombre}<span className="pf">{p.tipo === "x" ? "Pago fijo" : "Factura"} del {fecha(p.fecha)}</span>{p.tipo === "f" && p.numero && <button className="btn-txt" title="Pulsa para copiar" style={{ display: "block", fontWeight: 700 }} onClick={() => copiar(p.numero, "Número copiado")}>Nº {p.numero}</button>}</td>
                       <td>{p.mov ? <>Banco · {fecha(p.mov.fecha)} · {eur(p.mov.importe, 2)}<span className="pf">{p.mov.concepto}</span></> : <>Marcada a mano{p.nota && <span className="pf">{p.nota}</span>}</>}</td>
                       <td className="r b">{eur(p.importe, 2)}</td>
                       <td className="r"><button className="btn-l" disabled={busy} onClick={() => { if (window.confirm("¿Volver a ponerla como pendiente de pago?")) accion("pagos_volver_pendiente", { p_tipo: p.tipo, p_id: p.id }, "Vuelve a pendiente"); }}>Volver a pendiente</button></td>

@@ -29,6 +29,8 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
   const [nombres, setNombres] = useState({}); // dirección: quién estaba en el turno
   const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
   const [nota, setNota] = useState("");
+  const [numero, setNumero] = useState(""); // #50: número de factura (doc_numero)
+  const [modoPago, setModoPago] = useState({}); // proveedor → transferencia | domiciliacion
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [isNewProv, setIsNewProv] = useState(false);
@@ -40,12 +42,12 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
 
   useEffect(() => {
     sb.rpc("facturas_proveedores_lista").then((r) => setLista(Array.isArray(r) ? r : null)).catch(() => setLista(null));
-    sb.select("proveedor_pago_defecto", "select=nombre,pago").then((r) => setPagoDefecto(Object.fromEntries((r || []).map((x) => [claveProv(x.nombre), x.pago])))).catch(() => {});
+    sb.select("proveedor_pago_defecto", "select=nombre,pago,modo").then((r) => { setPagoDefecto(Object.fromEntries((r || []).map((x) => [claveProv(x.nombre), x.pago]))); setModoPago(Object.fromEntries((r || []).map((x) => [claveProv(x.nombre), x.modo]))); }).catch(() => {});
     if (isAdmin) sb.select("usuarios", "select=id,nombre").then((r) => setNombres(Object.fromEntries((r || []).map((u) => [u.id, (u.nombre || "").split(" ")[0]])))).catch(() => {});
   }, [isAdmin]);
 
   const hoy = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" });
-  const resetForm = () => { setProveedor(""); setImporte(""); setTipoPago("efectivo"); setFecha(hoy()); setNota(""); setEditId(null); setIsNewProv(false); };
+  const resetForm = () => { setProveedor(""); setImporte(""); setTipoPago("efectivo"); setFecha(hoy()); setNota(""); setNumero(""); setEditId(null); setIsNewProv(false); };
 
   // Lista para «Añadir factura»: los de recepción + los de otros gastos, sin repetir el mismo proveedor escrito de dos formas
   const allProveedores = useMemo(() => {
@@ -62,7 +64,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
   const guardar = async (amt) => {
     setSaving(true);
     try {
-      const payload = { proveedor: proveedor.trim(), importe: amt, tipo_pago: tipoPago, fecha, nota: nota.trim() || null };
+      const payload = { proveedor: proveedor.trim(), importe: amt, tipo_pago: tipoPago, fecha, nota: nota.trim() || null, doc_numero: numero.trim() || null };
       if (editId) await sb.update("facturas_proveedores", `id=eq.${editId}`, payload);
       else {
         await sb.insert("facturas_proveedores", payload);
@@ -78,9 +80,12 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
     setSaving(false);
   };
 
+  // #50: pagada por banco a un proveedor de transferencia → el número de factura es obligatorio
+  const numeroObligatorio = pagoNorm(tipoPago) === "banco" && modoPago[claveProv(proveedor)] === "transferencia";
   const handleSave = () => {
     const amt = Math.round(importeNum(importe) * 100) / 100;
     if (!proveedor.trim() || !Number.isFinite(amt) || amt === 0) return;
+    if (numeroObligatorio && !numero.trim()) { alert("Pon el número de factura: dirección lo necesita para la transferencia."); return; }
     // #24: aviso si ya entró por la recepción de pedidos (mismo proveedor, día e importe)
     const dup = !editId && facturas.find(f => f.recepcion_id && claveProv(f.proveedor) === claveProv(proveedor) && f.fecha === fecha && f.importe != null && Math.abs(Number(f.importe) - amt) < 0.005);
     if (dup) { ask("Esta factura ya se registró en la recepción de pedidos. ¿Quieres apuntarla otra vez?", () => guardar(amt)); return; }
@@ -98,7 +103,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
     catch (e) { if (w) w.close(); alert("No se puede abrir el documento: " + e.message); }
   };
 
-  const startEdit = (f) => { setEditId(f.id); setProveedor(f.proveedor); setImporte(f.importe == null ? "" : String(f.importe).replace(".", ",")); setTipoPago(pagoNorm(f.tipo_pago) || "efectivo"); setFecha(f.fecha); setNota(f.nota || ""); setModo("form"); };
+  const startEdit = (f) => { setEditId(f.id); setProveedor(f.proveedor); setImporte(f.importe == null ? "" : String(f.importe).replace(".", ",")); setTipoPago(pagoNorm(f.tipo_pago) || "efectivo"); setFecha(f.fecha); setNota(f.nota || ""); setNumero(f.doc_numero || ""); setModo("form"); };
 
   const handleDelete = async (id) => {
     try { await sb.delete("facturas_proveedores", `id=eq.${id}`); await onReload(); }
@@ -228,8 +233,11 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
           {!editId && <div style={{ fontFamily: F, fontSize: "11.5px", color: C.mut, marginTop: "-8px", marginBottom: "16px" }}>El turno se apunta solo por la hora a la que la guardas.</div>}
           <label style={lbl}>Fecha</label>
           <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ ...inp, marginBottom: "16px" }} />
+          <label style={lbl}>Número de factura{numeroObligatorio ? "" : " (opcional)"}</label>
+          <input value={numero} onChange={e => setNumero(e.target.value)} placeholder="Tal cual sale en la factura" style={{ ...inp, marginBottom: numeroObligatorio ? "4px" : "16px", ...(numeroObligatorio && !numero.trim() ? { borderColor: NARANJA[2], background: NARANJA[0] } : {}) }} />
+          {numeroObligatorio && <div style={{ fontFamily: F, fontSize: "11.5px", color: C.mut, marginBottom: "16px" }}>Obligatorio: este proveedor se paga por transferencia y dirección pone el número en el concepto.</div>}
           <label style={lbl}>Nota (opcional)</label>
-          <input value={nota} onChange={e => setNota(e.target.value)} placeholder="Nº factura, observaciones..." style={{ ...inp, marginBottom: "28px" }} />
+          <input value={nota} onChange={e => setNota(e.target.value)} placeholder="Observaciones..." style={{ ...inp, marginBottom: "28px" }} />
           <div style={{ display: "flex", gap: "10px" }}>
             <button onClick={() => { resetForm(); setModo("lista"); }} style={{ flex: 1, padding: "14px", border: `1.5px solid ${C.brd}`, borderRadius: "10px", background: "transparent", fontFamily: F, fontSize: "14px", fontWeight: 600, color: C.mut, cursor: "pointer" }}>Cancelar</button>
             <button onClick={handleSave} disabled={!proveedor || !importe || saving} style={{ flex: 2, padding: "14px", border: "none", borderRadius: "10px", background: (!proveedor || !importe || saving) ? "#D8D0C4" : C.char, color: (!proveedor || !importe || saving) ? "#A09888" : C.gold, fontFamily: SF, fontSize: "15px", cursor: (!proveedor || !importe || saving) ? "default" : "pointer" }}>{saving ? "Guardando..." : saved ? "✓ Guardado" : (editId ? "Actualizar" : "Guardar")}</button>

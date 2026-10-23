@@ -781,14 +781,18 @@ function Revisar({ datos, onHecho, onVolver }) {
   const [sinImporte, setSinImporte] = useState(false);
   const [pago, setPago] = useState(null);
   const [pagoAuto, setPagoAuto] = useState(false);
+  const [numFac, setNumFac] = useState(rec.doc_numero || ""); // #50
+  const [modoProv, setModoProv] = useState(null);
   useEffect(() => {
-    sb.select("proveedor_pago_defecto", "select=nombre,pago").then((r) => {
+    sb.select("proveedor_pago_defecto", "select=nombre,pago,modo").then((r) => {
       const d = (r || []).find((x) => claveProv(x.nombre) === claveProv(rec.proveedor) || (prov?.nombre && claveProv(x.nombre) === claveProv(prov.nombre)));
+      setModoProv(d?.modo || null);
       const dp = d?.pago === "tarjeta" ? "banco" : d?.pago;
       if (dp && ETQ_PAGO[dp]) { setPago((p) => p ?? dp); setPagoAuto(true); }
     }).catch(() => {});
   }, [rec.proveedor, prov?.nombre]);
   const facImporteN = importeNum(facImporte);
+  const numObligatorio = pago === "banco" && modoProv === "transferencia";
   // #31: lo que se cambia en una línea normal (producto, cómo se vende) lo sigue su línea de regalo
   const cambiar = (i, cambio) => setLineas((ls) => {
     const orden = ls[i]?.orden;
@@ -820,10 +824,11 @@ function Revisar({ datos, onHecho, onVolver }) {
     if (!lineas.some((l) => numero(l.q) > 0)) { setMsg("No hay nada que recepcionar"); return; }
     if (conFactura && !pago) { setMsg("Elige cómo se ha pagado la factura"); return; }
     if (conFactura && !sinImporte && !(Number.isFinite(facImporteN) && facImporteN !== 0)) { setMsg("Pon el importe total de la factura o marca «No sé el importe»"); return; }
+    if (conFactura && numObligatorio && !numFac.trim()) { setMsg("Pon el número de factura: dirección lo necesita para la transferencia"); return; }
     setBusy(true); setMsg("");
     try {
       // #24: importe y forma de pago se guardan antes; al confirmar, la factura se crea sola en «Facturas»
-      if (conFactura) await sb.rpc("recepcion_factura_preparar", { p_id: rec.id, p_pago: pago, p_importe: sinImporte ? null : Math.round(facImporteN * 100) / 100, p_sin_importe: sinImporte });
+      if (conFactura) await sb.rpc("recepcion_factura_preparar", { p_id: rec.id, p_pago: pago, p_importe: sinImporte ? null : Math.round(facImporteN * 100) / 100, p_sin_importe: sinImporte, p_numero: numFac.trim() || null });
       const r = await fn("confirmar", {
         id: rec.id,
         lineas: lineas.map((l) => ({ id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, unidades_por: l.unidades_por, descripcion: l.descripcion, nuevo: l.emparejado === "nuevo" && !l.product_id ? l.nuevo : undefined, coste_sin_iva: l.emparejado === "nuevo" ? undefined : l.coste_txt ? subeCent(numero(l.coste_txt)) : manual && l.coste_ref != null ? l.coste_ref : undefined })),
@@ -913,6 +918,9 @@ function Revisar({ datos, onHecho, onVolver }) {
           <input type="checkbox" checked={sinImporte} onChange={(e) => setSinImporte(e.target.checked)} style={{ width: 18, height: 18 }} />
           No sé el importe (queda pendiente y se avisa a dirección)
         </label>
+        <label style={{ ...lbl, marginBottom: 0, marginTop: 4 }}>Número de factura{numObligatorio ? "" : " (opcional)"}</label>
+        <input value={numFac} onChange={(e) => setNumFac(e.target.value)} placeholder="Tal cual sale en la factura" style={{ ...inp, marginBottom: 0, ...(numObligatorio && !numFac.trim() ? { background: "#FDEBD3", borderColor: "#E8913A" } : {}) }} />
+        {numObligatorio && <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Obligatorio: este proveedor se paga por transferencia y dirección pone el número en el concepto.</div>}
         <label style={{ ...lbl, marginBottom: 0, marginTop: 4 }}>¿Cómo se ha pagado?</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {PAGOS_REC.map(([v, t]) => {
