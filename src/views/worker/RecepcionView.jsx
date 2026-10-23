@@ -472,14 +472,30 @@ function FilaSinCodigo({ p, onHecho }) {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [hecho, setHecho] = useState(false);
+  const [dup, setDup] = useState(null); // producto que ya tiene ese código
   useEffect(() => { if (!codigo || codigo.length < 8) { setEstado(""); return; } setEstado(eanOk(codigo) ? "nuevo" : (codigo.length >= 13 || codigo.length === 8 ? "malo" : "")); }, [codigo]);
   const guardar = async (sin) => {
     setBusy(true); setMsg("");
     try {
       const r = await fn("guardar_codigo", sin ? { alta_id: p.id, sin_codigo: true } : { alta_id: p.id, codigo });
-      if (r.duplicado) setMsg(`Ese código ya lo tiene «${r.duplicado.nombre}». No lo he guardado: se lo he mandado a dirección.`);
       setHecho(true); onHecho();
-    } catch (e) { setMsg(e.message || "No se ha podido guardar"); }
+    } catch (e) {
+      if (e.data?.duplicado) {
+        // el código ya lo tiene otro producto: se enseña cuál y se pregunta si es el mismo
+        setHecho(true); onHecho();
+        try { const v = await fn("codigos", { accion: "ver_duplicado", alta_id: p.id }); setDup({ ...v.existente, resuelto: "" }); }
+        catch (_) { setMsg(`Ese código ya lo tiene «${e.data.duplicado.nombre}». No lo he guardado: se lo he mandado a dirección.`); }
+      } else setMsg(e.message || "No se ha podido guardar");
+    }
+    setBusy(false);
+  };
+  const esElMismo = async () => {
+    setBusy(true); setMsg("");
+    try {
+      const r = await fn("codigos", { accion: "unificar_alta", alta_id: p.id });
+      setDup((d) => ({ ...d, resuelto: r.unificado ? "unificado" : "dir" }));
+      if (!r.unificado) setMsg(r.motivo || "Se lo he mandado a dirección.");
+    } catch (e) { setMsg(e.message || "No se ha podido hacer, avisa a dirección"); }
     setBusy(false);
   };
   return (
@@ -497,7 +513,18 @@ function FilaSinCodigo({ p, onHecho }) {
           <button type="button" disabled={busy || (!sinCodigo && estado !== "nuevo")} onClick={() => guardar(sinCodigo)} style={{ ...btnPeq, background: C.char, color: C.gold, border: "none", opacity: busy || (!sinCodigo && estado !== "nuevo") ? 0.5 : 1 }}>{busy ? "Guardando…" : "Guardar"}</button>
         </>
       )}
-      <Aviso msg={msg} tipo={/mandado/.test(msg) ? "bien" : "mal"} />
+      {dup && !dup.resuelto && (
+        <>
+          <div style={{ fontFamily: F, fontSize: 14 }}>Este código ya lo tiene «{dup.nombre}»{dup.pvp != null ? ` (${eur(dup.pvp)})` : ""}. ¿Es el mismo producto?</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" disabled={busy} onClick={esElMismo} style={{ ...btnPeq, flex: 1, background: C.grn, color: "#fff", border: "none", opacity: busy ? 0.6 : 1 }}>{busy ? "Un momento…" : "Sí, es el mismo"}</button>
+            <button type="button" disabled={busy} onClick={() => setDup((d) => ({ ...d, resuelto: "otro" }))} style={{ ...btnPeq, flex: 1 }}>No, es otro</button>
+          </div>
+        </>
+      )}
+      {dup?.resuelto === "unificado" && <Aviso msg={`Hecho: ahora es «${dup.nombre}». El alta repetida queda archivada y dirección lo ve.`} tipo="bien" />}
+      {dup?.resuelto === "otro" && <Aviso msg={`Se queda como aviso para dirección: el código lo tiene «${dup.nombre}».`} tipo="bien" />}
+      <Aviso msg={msg} tipo="mal" />
     </div>
   );
 }

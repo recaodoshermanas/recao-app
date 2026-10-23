@@ -80,7 +80,11 @@ export const sb = {
       body: JSON.stringify(body),
     });
     const out = await r.json().catch(() => ({}));
-    if (!r.ok || out?.ok === false) throw new Error(out?.error || `Fn ${name}: ${r.status}`);
+    if (!r.ok || out?.ok === false) {
+      const e = new Error(out?.error || "No se ha podido hacer, avisa a dirección");
+      e.data = out;
+      throw e;
+    }
     return out;
   },
 };
