@@ -11,7 +11,7 @@ const numero = (v) => { const n = Number(String(v ?? "").replace(",", ".")); ret
 const MOTIVO = { subida_coste: "Ha subido el coste", producto_nuevo: "Producto nuevo", cambiado_trabajadora: "Nuevo · precio cambiado en tienda", coste_corregido: "Coste corregido con la factura" };
 const ESTADO = { esperando_documento: "Esperando factura", por_revisar: "Por recepcionar", confirmada: "Confirmada", con_diferencias: "Con diferencias", descartada: "Descartada" };
 const VIA = { email: "Correo", foto: "Foto", manual: "Manual" };
-const AVISO = { sin_documento: "Sin factura", diferencia: "Diferencia", sin_codigo: "Sin código", sin_asociar: "Sin asociar", stock_error: "Stock", precio: "Precio", coste_sin_verificar: "Coste sin verificar", alta_error: "Alta fallida" };
+const AVISO = { sin_documento: "Sin factura", diferencia: "Diferencia", sin_codigo: "Sin código", sin_asociar: "Sin asociar", stock_error: "Stock", precio: "Precio", coste_sin_verificar: "Coste sin verificar", alta_error: "Alta fallida", expositor_sin_desglosar: "Expositor sin desglosar", alta_por_error: "Alta por error" };
 const margen = (pvp, coste) => (pvp > 0 && coste != null ? (1 - coste / pvp) * 100 : null);
 
 export function Recepcion() {
@@ -40,7 +40,7 @@ export function Recepcion() {
         {tab === "etiquetas" && <Etiquetas lista={d.etiquetas} onCambio={cargar} />}
         {tab === "diferencias" && <Diferencias lista={d.diferencias} onCambio={cargar} />}
         {tab === "avisos" && <ListaAvisos lista={d.avisos} onCambio={cargar} />}
-        {tab === "pedidos" && <Pedidos lista={d.recientes} onCambio={cargar} />}
+        {tab === "pedidos" && <Pedidos proveedores={d.proveedores} onCambio={cargar} />}
         {tab === "proveedores" && <Fichas fichas={d.fichas} proveedores={d.proveedores} onCambio={cargar} />}
         {tab === "ajustes" && <Ajustes config={d.config} onCambio={cargar} />}
       </div>
@@ -183,39 +183,176 @@ function ListaAvisos({ lista, onCambio }) {
   );
 }
 
-function Pedidos({ lista: base, onCambio }) {
-  // fecha y tipo del documento leído (#33); la función «recepcion» aún no los manda en esta lista
-  const [docs, setDocs] = useState({});
-  useEffect(() => {
-    const ids = base.map((r) => r.id);
-    if (!ids.length) return;
-    sb.rpc("recepcion_fechas_documento", { p_ids: ids }).then((ls) => setDocs(Object.fromEntries((ls || []).map((x) => [x.id, x])))).catch(() => {});
-  }, [base]);
-  const lista = useMemo(() => base.map((r) => ({ ...r, doc_tipo: r.doc_tipo ?? docs[r.id]?.doc_tipo, doc_fecha: r.doc_fecha ?? docs[r.id]?.doc_fecha })), [base, docs]);
-  const reintentar = async (r) => { try { const x = await fn("aplicar_stock", { id: r.id }); avisar(x.ok ? `Stock sumado (${x.productos} productos)` : `Faltan ${x.errores.length} productos`, x.ok ? "ok" : "mal"); onCambio(); } catch (e) { avisar(e.message, "mal"); } };
-  if (!lista.length) return <p className="empty">Todavía no hay recepciones.</p>;
+const MOTIVOS_NP = { expositor: "Expositor o surtido sin desglosar", portes: "Portes / transporte", envases: "Envases / fianzas", material: "Material para la tienda", otro: "Otro" };
+const fechaHora = (t) => (t ? new Date(t).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
+
+function Pedidos({ proveedores, onCambio }) {
+  const [f, setF] = useState({ q: "", proveedor: "", estado: "", desde: "", hasta: "" });
+  const [filas, setFilas] = useState(null);
+  const [total, setTotal] = useState(0);
+  const [mas, setMas] = useState(false);
+  const [abierto, setAbierto] = useState(null);
+  const cargar = useCallback(async (off = 0) => {
+    try {
+      const r = await fn("pedidos_lista", { ...f, offset: off, limit: 50 });
+      setFilas((x) => (off ? [...(x || []), ...r.filas] : r.filas)); setTotal(r.total);
+    } catch (e) { avisar(e.message || "No se han podido cargar los pedidos", "mal"); setFilas((x) => x || []); }
+    setMas(false);
+  }, [f]);
+  useEffect(() => { const t = setTimeout(() => cargar(0), 250); return () => clearTimeout(t); }, [cargar]);
+  const reintentar = async (r) => { try { const x = await fn("aplicar_stock", { id: r.id }); avisar(x.ok ? `Stock sumado (${x.productos} productos)` : `Faltan ${x.errores.length} productos`, x.ok ? "ok" : "mal"); cargar(0); onCambio(); } catch (e) { avisar(e.message, "mal"); } };
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   return (
     <>
-      <div className="head"><div><h2>Últimas recepciones</h2><p className="sub">Las 60 más recientes.</p></div></div>
+      <div className="head"><div><h2>Pedidos</h2><p className="sub">Todas las recepciones, de la más reciente a la más antigua. Pulsa un pedido para verlo completo{total ? ` · ${total} en total` : ""}.</p></div></div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+        <input className="mini-input" aria-label="Nº de documento" placeholder="Nº de documento" value={f.q} onChange={set("q")} style={{ minWidth: 150 }} />
+        <select className="mini-input" aria-label="Proveedor" value={f.proveedor} onChange={set("proveedor")}><option value="">Todos los proveedores</option>{(proveedores || []).map((p) => <option key={p.nombre} value={p.nombre}>{p.nombre}</option>)}</select>
+        <select className="mini-input" aria-label="Estado" value={f.estado} onChange={set("estado")}><option value="">Todos los estados</option>{Object.entries(ESTADO).map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
+        <label className="sub" style={{ display: "flex", alignItems: "center", gap: 4 }}>Desde<input className="mini-input" type="date" value={f.desde} onChange={set("desde")} /></label>
+        <label className="sub" style={{ display: "flex", alignItems: "center", gap: 4 }}>Hasta<input className="mini-input" type="date" value={f.hasta} onChange={set("hasta")} /></label>
+      </div>
+      {!filas ? <Cargando /> : !filas.length ? <p className="empty">No hay pedidos con esos filtros.</p> : (
+        <div className="tabla-scroll">
+          <table className="ranking">
+            <thead><tr><th>Proveedor</th><th>Vía</th><th>Estado</th><th>Recepcionó</th><th className="r">Total</th><th className="r">Fecha doc.</th><th className="r">Recepción</th><th className="r">Stock</th></tr></thead>
+            <tbody>
+              {filas.map((r) => (
+                <tr key={r.id} onClick={() => setAbierto(r.id)} style={{ cursor: "pointer" }}>
+                  <td><button className="btn-txt" style={{ textAlign: "left" }} onClick={(e) => { e.stopPropagation(); setAbierto(r.id); }}><span className="pn">{r.proveedor}</span></button><span className="pf">{[r.doc_tipo === "albaran" ? "Albarán" : r.doc_tipo === "factura" ? "Factura" : null, r.doc_numero].filter(Boolean).join(" ")}{r.prueba ? " · prueba" : ""}</span></td>
+                  <td>{VIA[r.via] || r.via}</td>
+                  <td>{ESTADO[r.estado] || r.estado}</td>
+                  <td>{r.recepcionado_por || "—"}</td>
+                  <td className="r">{r.total != null ? eur(r.total, 2) : "—"}</td>
+                  <td className="r">{r.doc_fecha ? fechaCorta(r.doc_fecha) : "sin fecha"}</td>
+                  <td className="r">{fechaCorta(r.confirmado_en || r.llegada_en || r.creado_en)}</td>
+                  <td className="r" onClick={(e) => e.stopPropagation()}>{r.stock_aplicado ? "Sumado" : r.prueba || !["confirmada", "con_diferencias"].includes(r.estado) ? "—" : <button className="btn-txt" title={r.stock_error || ""} onClick={() => reintentar(r)}>Sumar</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {filas && filas.length < total && <p style={{ textAlign: "center" }}><button className="btn-l" disabled={mas} onClick={() => { setMas(true); cargar(filas.length); }}>{mas ? "Cargando…" : `Ver más (${total - filas.length} restantes)`}</button></p>}
+      {abierto && <PedidoDetalle id={abierto} onClose={() => setAbierto(null)} onCambio={() => { cargar(0); onCambio(); }} />}
+    </>
+  );
+}
+
+function BuscaProducto({ onElegir, onCerrar }) {
+  const [q, setQ] = useState("");
+  const [lista, setLista] = useState([]);
+  useEffect(() => {
+    if (q.trim().length < 2) { setLista([]); return; }
+    let vivo = true;
+    const t = setTimeout(() => { fn("productos", { q, todos: true }).then((r) => vivo && setLista(r.productos || [])).catch(() => vivo && setLista([])); }, 250);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [q]);
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 10, margin: "6px 0 10px", background: "var(--bg, #fff)" }}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input className="mini-input" autoFocus aria-label="Buscar producto" placeholder="Nombre o código de barras" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 1 }} />
+        <button className="btn-l" onClick={onCerrar}>Cancelar</button>
+      </div>
+      {lista.map((p) => <div key={p.id}><button className="btn-txt" style={{ textAlign: "left", padding: "6px 2px" }} onClick={() => onElegir(p)}>{p.nombre} <span className="pf">{eur(p.pvp, 2)}</span></button></div>)}
+      {q.trim().length >= 2 && !lista.length && <p className="sub">Nada con ese nombre.</p>}
+    </div>
+  );
+}
+
+function PedidoDetalle({ id, onClose, onCambio }) {
+  const [d, setD] = useState(null);
+  const [ed, setEd] = useState({});
+  const [busca, setBusca] = useState(null); // id de línea
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { fn("pedido_abrir", { id }).then(setD).catch((e) => { avisar(e.message || "No se ha podido abrir", "mal"); onClose(); }); }, [id, onClose]);
+  if (!d) return <Panel titulo="Pedido" onClose={onClose} ancho={920}><Cargando /></Panel>;
+  const rec = d.recepcion;
+  const doc = d.fotos.length ? d.fotos : [rec.foto_url].filter(Boolean);
+  const esPdf = !!rec.doc_url;
+  const cambiar = (lid, c) => setEd((x) => ({ ...x, [lid]: { ...(x[lid] || {}), ...c } }));
+  const val = (l, k, def) => (ed[l.id]?.[k] !== undefined ? ed[l.id][k] : def);
+  const cambios = d.lineas.map((l) => {
+    const e = ed[l.id]; if (!e) return null;
+    const c = { linea_id: l.id };
+    if (e.q !== undefined && numero(e.q) != null && numero(e.q) !== Number(l.uds_confirmadas)) c.uds_confirmadas = numero(e.q);
+    if (e.base !== undefined && numero(e.base) != null && Math.abs(numero(e.base) - Number(l.base_unit ?? -1)) > 1e-9) c.coste_sin_iva = numero(e.base);
+    if (e.iva !== undefined && numero(e.iva) != null && numero(e.iva) !== Number(l.iva_pct)) c.iva_pct = numero(e.iva);
+    if (e.producto && e.producto.id !== l.product_id) c.product_id = e.producto.id;
+    if (e.es_producto !== undefined) { c.es_producto = e.es_producto; if (e.motivo) c.motivo = e.motivo; if (e.motivo_texto) c.motivo_texto = e.motivo_texto; }
+    return Object.keys(c).length > 1 ? c : null;
+  }).filter(Boolean);
+  const guardar = async () => {
+    if (!cambios.length) return;
+    const aviso = rec.prueba ? "Es un pedido de prueba: se corrige sin tocar el stock." : "Se ajustará el stock solo por la diferencia y quedará anotado quién y cuándo.";
+    if (!window.confirm(`¿Guardar ${cambios.length} corrección${cambios.length > 1 ? "es" : ""}? ${aviso}`)) return;
+    setBusy(true);
+    try {
+      const r = await fn("pedido_corregir", { id, cambios });
+      setD(r.pedido); setEd({});
+      if (r.errores?.length) avisar(`No se ha podido: ${r.errores.join("; ")}`, "mal");
+      else avisar(`Corregido${r.notas?.length ? ` · ${r.notas.join(" · ")}` : ""}`);
+      onCambio();
+    } catch (e) { avisar(e.message || "No se ha podido guardar", "mal"); }
+    setBusy(false);
+  };
+  const marcar = (l, motivo) => {
+    if (!motivo) return;
+    let texto = null;
+    if (motivo === "otro") { texto = window.prompt("¿Qué es?"); if (!texto) return; }
+    if (!window.confirm(`«${l.descripcion}» pasa a «No es un producto» (${MOTIVOS_NP[motivo]}). ${rec.prueba ? "" : "Se quita su stock. "}Se guarda al pulsar «Guardar correcciones».`)) return;
+    cambiar(l.id, { es_producto: false, motivo, motivo_texto: texto });
+  };
+  return (
+    <Panel titulo={`${rec.proveedor}${rec.doc_numero ? ` · ${rec.doc_numero}` : ""}`} sub={`${ESTADO[rec.estado] || rec.estado}${rec.prueba ? " · de prueba" : ""} · recepcionó ${d.recepcionado_por || "—"} · ${fechaHora(rec.confirmado_en || rec.creado_en)}`} onClose={onClose} ancho={920}
+      pie={d.corregible ? <button className="btn-p" disabled={busy || !cambios.length} onClick={guardar}>{busy ? "Guardando…" : `Guardar correcciones${cambios.length ? ` (${cambios.length})` : ""}`}</button> : <span className="sub">Solo se corrigen pedidos ya confirmados.</span>}>
+      <div style={{ display: "grid", gap: 12, marginBottom: 14 }}>
+        {rec.doc_url && <a className="btn-l" href={rec.doc_url} target="_blank" rel="noreferrer" style={{ justifySelf: "start" }}>Abrir el documento (PDF)</a>}
+        {!esPdf && doc.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer"><img src={u} alt={`Documento, foto ${i + 1}`} style={{ maxWidth: "100%", maxHeight: 420, borderRadius: 10, border: "1px solid var(--line)" }} /></a>)}
+        {!doc.length && !rec.doc_url && <p className="sub">Este pedido no tiene foto ni PDF.</p>}
+      </div>
+      {busca != null && <BuscaProducto onCerrar={() => setBusca(null)} onElegir={(p) => { cambiar(busca, { producto: p }); setBusca(null); }} />}
       <div className="tabla-scroll">
         <table className="ranking">
-          <thead><tr><th>Proveedor</th><th>Vía</th><th>Estado</th><th className="r">Total</th><th className="r">Fecha doc.</th><th className="r">Recepción</th><th className="r">Stock</th></tr></thead>
+          <thead><tr><th>Línea del documento</th><th>Producto asociado</th><th className="r">Doc.</th><th className="r">Recibida</th><th className="r">Coste s/IVA</th><th className="r">IVA %</th><th className="r">Coste completo</th><th></th></tr></thead>
           <tbody>
-            {lista.map((r) => (
-              <tr key={r.id}>
-                <td><span className="pn">{r.proveedor}</span><span className="pf">{[r.doc_tipo === "albaran" ? "Albarán" : r.doc_tipo === "factura" ? "Factura" : null, r.doc_numero].filter(Boolean).join(" ")}{r.prueba ? " · prueba" : ""}</span></td>
-                <td>{VIA[r.via] || r.via}</td>
-                <td>{ESTADO[r.estado] || r.estado}</td>
-                <td className="r">{r.total != null ? eur(r.total, 2) : "—"}</td>
-                <td className="r">{r.doc_fecha ? fechaCorta(r.doc_fecha) : "sin fecha"}</td>
-                <td className="r">{fechaCorta(r.confirmado_en || r.llegada_en || r.creado_en)}</td>
-                <td className="r">{r.stock_aplicado ? "Sumado" : r.prueba || !["confirmada", "con_diferencias"].includes(r.estado) ? "—" : <button className="btn-txt" title={r.stock_error || ""} onClick={() => reintentar(r)}>Sumar</button>}</td>
-              </tr>
-            ))}
+            {d.lineas.map((l) => {
+              const e = ed[l.id] || {};
+              const noProd = e.es_producto === false || (l.tipo !== "venta" && e.es_producto !== true);
+              const prod = e.producto || l.producto;
+              const editable = d.corregible && l.tipo === "venta" && e.es_producto !== false;
+              const base = val(l, "base", l.base_unit != null ? String(l.base_unit) : ""), iva = val(l, "iva", l.iva_pct != null ? String(l.iva_pct) : "");
+              return (
+                <tr key={l.id} style={e && Object.keys(e).length ? { background: "rgba(232,145,58,.10)" } : undefined}>
+                  <td><span className="pn">{l.descripcion}</span><span className="pf">{[l.ref, l.anadida ? "añadida a mano" : null, l.emparejado === "nuevo" ? "alta en este pedido" : null].filter(Boolean).join(" · ")}</span></td>
+                  <td>
+                    {noProd ? <span className="pf">No es un producto: {MOTIVOS_NP[e.motivo || l.no_producto_motivo] || "otro"}{(e.motivo_texto || l.no_producto_texto) ? ` (${e.motivo_texto || l.no_producto_texto})` : ""}</span> : (
+                      <>{prod ? prod.nombre : <span className="pf">Sin producto</span>}{editable && <> <button className="btn-txt" onClick={() => setBusca(l.id)}>Cambiar</button></>}</>
+                    )}
+                  </td>
+                  <td className="r">{l.cant_doc != null ? l.uds_doc ?? l.cant_doc : "—"}</td>
+                  <td className="r">{editable ? <input className="mini-input" inputMode="decimal" aria-label={`Cantidad recibida de ${l.descripcion}`} style={{ width: 70, textAlign: "right" }} value={val(l, "q", String(l.uds_confirmadas ?? 0))} onChange={(x) => cambiar(l.id, { q: x.target.value })} /> : l.tipo === "venta" ? l.uds_confirmadas : "—"}</td>
+                  <td className="r">{editable ? <input className="mini-input" inputMode="decimal" aria-label={`Coste sin IVA de ${l.descripcion}`} style={{ width: 80, textAlign: "right" }} value={base} onChange={(x) => cambiar(l.id, { base: x.target.value })} /> : l.base_unit != null && l.tipo === "venta" ? eur(l.base_unit, 4) : "—"}</td>
+                  <td className="r">{editable ? <input className="mini-input" inputMode="decimal" aria-label={`IVA de ${l.descripcion}`} style={{ width: 56, textAlign: "right" }} value={iva} onChange={(x) => cambiar(l.id, { iva: x.target.value })} /> : l.iva_pct ?? "—"}</td>
+                  <td className="r">{l.coste_unit != null && l.tipo === "venta" ? eur(l.coste_unit, 4) : "—"}</td>
+                  <td className="r">
+                    {d.corregible && (l.tipo === "venta" && e.es_producto !== false ? (
+                      <select className="mini-input" aria-label={`Marcar ${l.descripcion} como no producto`} value="" onChange={(x) => marcar(l, x.target.value)}><option value="">No es un producto…</option>{Object.entries(MOTIVOS_NP).map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
+                    ) : noProd && e.es_producto !== true ? <button className="btn-l" onClick={() => (prod ? cambiar(l.id, { es_producto: true, motivo: null }) : setBusca(l.id) || cambiar(l.id, { es_producto: true }))}>Sí es un producto</button> : null)}
+                    {Object.keys(e).length > 0 && <button className="btn-txt" onClick={() => setEd((x) => Object.fromEntries(Object.entries(x).filter(([k]) => k !== String(l.id))))}>Deshacer</button>}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
-    </>
+      <h3 style={{ marginTop: 18 }}>Factura</h3>
+      {d.facturas.length ? d.facturas.map((x) => <p key={x.id} className="sub">Factura en «Facturas»: {eur(x.importe, 2)}{x.tipo_pago ? ` · ${x.tipo_pago}` : ""}. Para cambiar el importe o la forma de pago, por ahora, hazlo en «Facturas».</p>) : <p className="sub">{rec.total != null ? `Total leído del documento: ${eur(rec.total, 2)}. ` : ""}Todavía no hay factura enlazada a este pedido.</p>}
+      {d.altas.length > 0 && <><h3 style={{ marginTop: 18 }}>Productos dados de alta en este pedido</h3><ul className="sub">{d.altas.map((a) => <li key={a.id}>{a.nombre} · {eur(a.pvp, 2)}{a.revisado ? "" : " · pendiente de revisar"}</li>)}</ul></>}
+      {d.avisos.length > 0 && <><h3 style={{ marginTop: 18 }}>Diferencias y avisos</h3><ul className="sub">{d.avisos.map((a) => <li key={a.id}>{AVISO[a.tipo] || a.tipo}: {a.texto}{a.estado !== "abierto" ? " (resuelto)" : ""}</li>)}</ul></>}
+      {d.correcciones.length > 0 && <><h3 style={{ marginTop: 18 }}>Correcciones hechas</h3><ul className="sub">{d.correcciones.map((c) => { const l = d.lineas.find((x) => x.id === c.linea_id); return <li key={c.id}>{fechaHora(c.creado_en)} · {c.usuario_nombre || "—"} · {l?.descripcion || "línea"}: {c.campo}, de {String(c.antes ?? "—")} a {String(c.despues ?? "—")}</li>; })}</ul></>}
+    </Panel>
   );
 }
 
