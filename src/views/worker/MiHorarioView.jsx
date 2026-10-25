@@ -2,13 +2,16 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C } from "../../lib/styles.js";
 import { IcoLeft, IcoRight } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
-import { TURNOS, ymd, NOTA_FINDE } from "../../lib/turnos.js";
+import { TURNOS, ymd, horasTurno } from "../../lib/turnos.js";
 import { BOLSA_ACTIVA } from "../../lib/bolsa.js"; // BOLSA
 import { cargarFestivos, PLUS_FESTIVO_8H } from "../../lib/festivos.js"; // FESTIVOS
 
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS = ["L","M","X","J","V","S","D"];
 const navBtn = { border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
+
+// "17:00-23:00" → "17–23" (con minutos solo si no son en punto)
+const horaCorta = (h) => (h || "").split("-").map((x) => { const [hh, mm] = x.split(":"); return mm === "00" ? String(Number(hh)) : `${Number(hh)}:${mm}`; }).join("–");
 
 export function MiHorarioView({ user }) {
   const [cursor, setCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
@@ -68,6 +71,7 @@ export function MiHorarioView({ user }) {
               {esFest && <span aria-label="Festivo" style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: 999, background: C.red }} />}
               <span style={{ fontFamily: F, fontSize: 12.5, fontWeight: 600, color: esFest && !def ? C.red : undefined }}>{d.getDate()}</span>
               {def && <span style={{ fontFamily: F, fontSize: 8.5, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{def.label}</span>}
+              {def && def.horas && <span style={{ fontFamily: F, fontSize: 8.5, fontWeight: 700, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{horaCorta(horasTurno(mapa[f], f))}</span>}
               {esPend && <span style={{ fontFamily: F, fontSize: 7.5, fontWeight: 700, lineHeight: 1, marginTop: 2, color: "#8A6410" }}>desc. pend.</span>}
             </div>
           );
@@ -97,12 +101,11 @@ export function MiHorarioView({ user }) {
           {usados.map(t => { const def = TURNOS[t]; if (!def) return null; return (
             <div key={t} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: F, fontSize: 12, fontWeight: 600, color: C.char, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 999, padding: "6px 12px" }}>
               <span style={{ width: 14, height: 14, borderRadius: 5, background: def.bg }} />
-              {def.label}{def.horas ? <span style={{ color: C.mutL, fontWeight: 400, marginLeft: 2 }}>{def.horas}</span> : ""}
+              {def.label}
             </div>
           ); })}
         </div>
       )}
-      {usados.some(t => String(t).startsWith("Apoyo")) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 8 }}>{NOTA_FINDE}</div>}
     </div>
   );
 }
