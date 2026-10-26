@@ -8,6 +8,7 @@ import { PersonasResumen } from "./PersonasResumen.jsx";
 import { Legado } from "./Legado.jsx";
 import { FinanzasResumen, FinanzasResultados, FinanzasCaja, FinanzasCompras } from "./Finanzas.jsx";
 import { EfectivoSobres } from "./EfectivoSobres.jsx"; // #14
+import { DineroHoy } from "./finanzas/DineroHoy.jsx"; // #62
 import { Bancos } from "./finanzas/Bancos.jsx"; // #23
 import { PagosPendientes } from "./finanzas/PagosPendientes.jsx"; // #27
 import { Inversiones } from "./finanzas/Inversiones.jsx"; // #40
@@ -226,7 +227,7 @@ export default function App() {
   else if (area.id === "plan" && sub.id === "calendario") contenido = <PlanCalendario user={user} />;
   else if (area.id === "tecnologia" && sub.id === "como-pedir") contenido = <TecGuia />;
   else if (area.id === "tecnologia") contenido = <TecSolicitudes key={extra || "lista"} user={user} extra={extra} />;
-  else if (area.id === "finanzas" && sub.id === "resumen") contenido = <FinanzasResumen />;
+  else if (area.id === "finanzas" && sub.id === "resumen") contenido = <><DineroHoy /><FinanzasResumen /></>;
   else if (area.id === "finanzas") {
     const pantalla = {
       resultados: <FinanzasResultados onEditMonth={editarMes} />, caja: <FinanzasCaja />, sobres: <EfectivoSobres />, compras: <FinanzasCompras />,
