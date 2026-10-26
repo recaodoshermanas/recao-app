@@ -224,6 +224,11 @@ function Detalle({ s, onClose, cambiar, recargar }) {
     finally { setBusy(false); }
   };
   const ultimaPregunta = (evs || []).filter((e) => e.tipo === "pregunta").slice(-1)[0];
+  // Norma: la solicitud se piensa antes de lanzarla. Se edita y se comenta mientras está «nueva» o «por hacer»;
+  // en «en espera» se puede contestar (es donde Adrián da el OK). Una vez lanzada, solo se responde a las preguntas
+  // y se valida o se piden cambios en la revisión. Un cambio de idea a mitad va en una solicitud nueva.
+  const editable = ["nueva", "por_hacer"].includes(s.estado);
+  const comentable = editable || s.estado === "standby";
 
   return (
     <Panel titulo={<input className="titulo-ed" value={titulo} onChange={(e) => setTitulo(e.target.value)} onBlur={() => titulo.trim() && titulo !== s.titulo && cambiar(s.id, { titulo: titulo.trim() })} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} aria-label="Título" />}
@@ -276,7 +281,8 @@ function Detalle({ s, onClose, cambiar, recargar }) {
           <label className="campo">Área<select value={s.area || ""} onChange={(e) => cambiar(s.id, { area: e.target.value || null })}><option value="">Sin área</option>{AREAS_PLAN.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}</select></label>
         </div>
         <label className="campo">Para cuándo (opcional)<input type="date" value={s.fecha_limite || ""} onChange={(e) => cambiar(s.id, { fecha_limite: e.target.value || null })} /></label>
-        <label className="campo">Detalles<textarea rows={filas(desc)} value={desc} onChange={(e) => setDesc(e.target.value)} onBlur={() => desc !== (s.descripcion || "") && cambiar(s.id, { descripcion: desc.trim() || null })} placeholder="Para qué es y cómo te lo imaginas" /></label>
+        <label className="campo">Detalles<textarea rows={filas(desc)} value={desc} readOnly={!editable} onChange={(e) => setDesc(e.target.value)} onBlur={() => editable && desc !== (s.descripcion || "") && cambiar(s.id, { descripcion: desc.trim() || null })} placeholder="Para qué es y cómo te lo imaginas" />
+          {!editable && <small className="sol-nota">La solicitud ya está lanzada: los detalles no se cambian. Si cambia lo que necesitas, crea una solicitud nueva.</small>}</label>
         <label className="campo">Enlace (opcional){/^https?:\/\//.test(s.enlace || "") && <a className="sol-enlace" href={s.enlace} target="_blank" rel="noopener noreferrer">Abrir enlace ↗</a>}
           <input type="url" value={enlace} onChange={(e) => setEnlace(e.target.value)} onBlur={() => enlace.trim() !== (s.enlace || "") && cambiar(s.id, { enlace: enlace.trim() || null })} placeholder="https://…" /></label>
 
@@ -284,10 +290,19 @@ function Detalle({ s, onClose, cambiar, recargar }) {
           {evs === null ? <p className="empty">Cargando…</p> : evs.length === 0 ? <p className="empty">Todavía nada.</p> : (
             <ul className="sol-hist">{evs.map((ev) => <Evento key={ev.id} ev={ev} />)}</ul>
           )}
-          <div className="nuevo-com" ref={finRef}>
-            <textarea rows={2} value={txt} onChange={(e) => setTxt(e.target.value)} placeholder="Escribe un comentario, una idea o feedback…" />
-            <button className="btn-l" disabled={busy || !txt.trim()} onClick={async () => { if (await anotar("comentario", txt.trim())) setTxt(""); }}>Comentar</button>
-          </div>
+          {comentable ? (
+            <div className="nuevo-com" ref={finRef}>
+              <textarea rows={2} value={txt} onChange={(e) => setTxt(e.target.value)} placeholder={s.estado === "standby" ? "Contesta aquí (por ejemplo «OK» para dar el visto bueno)…" : "Escribe un comentario o una aclaración antes de que se empiece…"} />
+              <button className="btn-l" disabled={busy || !txt.trim()} onClick={async () => { if (await anotar("comentario", txt.trim())) setTxt(""); }}>Comentar</button>
+            </div>
+          ) : (
+            <p className="sol-nota" ref={finRef}>
+              {s.estado === "en_curso" ? "Ya se está trabajando en esta solicitud: no se puede comentar hasta que esté lista para revisar. Si cambia lo que necesitas, espera a la revisión («Pedir cambios») o crea una solicitud nueva."
+                : s.estado === "pregunta" ? "Contesta en el recuadro de la pregunta, arriba."
+                : s.estado === "revision" ? "Revísala arriba: «Sí, funciona» o «Pedir cambios»."
+                : "Esta solicitud está cerrada. Si necesitas algo más, crea una solicitud nueva."}
+            </p>
+          )}
         </div>
       </div>
     </Panel>
