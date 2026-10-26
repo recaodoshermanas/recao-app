@@ -5,6 +5,7 @@ import { initTips } from "./charts.js";
 import { eur, eurK, pct, num, mesCorto, mesAnio, parseDate } from "./fmt.js";
 import { CajaFuerte } from "./CajaFuerte.jsx"; // CAJA FUERTE (#11)
 import { InformeMensual } from "./finanzas/InformeMensual.jsx"; // #65
+import { armarTabla, exportarExcel, exportarPdf } from "./finanzas/exportarCuenta.js"; // #71
 
 const CATS = [
   { id: "mercancia", label: "Compras de mercancía" },
@@ -344,6 +345,7 @@ export function FinanzasResultados({ onEditMonth }) {
   const { d, fallo, recargar } = useFinanzas();
   const [modo, setModo] = useState("eur");
   const [sel, setSel] = useState(null);
+  const [exportando, setExportando] = useState(null);
   const scroll = useRef(null);
   const cerrados = useMemo(() => (d ? d.meses.filter((m) => m.cerrado) : []), [d]);
   // #68: el mes en curso (sin cerrar) sale como una columna más, provisional, a la derecha del último mes cerrado
@@ -387,14 +389,27 @@ export function FinanzasResultados({ onEditMonth }) {
     { l: "Margen real", f: (m) => (m.epos_sin_iva ? (m.epos_sin_iva - m.epos_coste) / m.epos_sin_iva * 100 : null), pct: true },
     { l: "Compras − coste de lo vendido", f: (m) => (m.epos_coste ? n0(m.compras_mercancia ?? m.mercancia) - m.epos_coste : null), alerta: true },
   ];
+  // #71: se exporta exactamente lo que se ve (mismos meses, filas y modo)
+  const exportar = async (tipo) => {
+    setExportando(tipo);
+    try {
+      const t = armarTabla({ meses, filas, margenFilas, modo, mes });
+      await (tipo === "xlsx" ? exportarExcel(t) : exportarPdf(t));
+    } catch (e) { window.alert("No se ha podido generar el archivo. Inténtalo de nuevo."); }
+    setExportando(null);
+  };
   return (
     <>
       <div className="card">
         <div className="head">
           <div><h2>Cuenta de resultados</h2><p className="sub">Como la hoja de Ingresos y gastos (con IVA), pero agrupada por tipo de gasto. Pulsa un mes para ver el detalle.</p></div>
-          <div className="seg" role="group" aria-label="Unidades">
-            <button aria-pressed={modo === "eur"} onClick={() => setModo("eur")}>€</button>
-            <button aria-pressed={modo === "pct"} onClick={() => setModo("pct")}>% de ingresos</button>
+          <div className="fpl-acciones">
+            <div className="seg" role="group" aria-label="Unidades">
+              <button aria-pressed={modo === "eur"} onClick={() => setModo("eur")}>€</button>
+              <button aria-pressed={modo === "pct"} onClick={() => setModo("pct")}>% de ingresos</button>
+            </div>
+            <button className="btn-l" disabled={!!exportando} onClick={() => exportar("xlsx")}>{exportando === "xlsx" ? "Generando…" : "Descargar Excel"}</button>
+            <button className="btn-l" disabled={!!exportando} onClick={() => exportar("pdf")}>{exportando === "pdf" ? "Generando…" : "Descargar PDF"}</button>
           </div>
         </div>
         <div className="tabla-scroll" ref={scroll}>

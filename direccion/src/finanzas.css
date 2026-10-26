@@ -134,3 +134,7 @@
 .fpl td.curso { opacity: .72; font-style: italic; }
 .fpl th.curso { font-style: italic; }
 .fpl.comp td.dif.bien { color: var(--up); } .fpl.comp td.dif.mal { color: var(--down); }
+
+/* #71: botones de exportación */
+.fpl-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.fpl-acciones .btn-l:disabled { opacity: .6; cursor: default; }
