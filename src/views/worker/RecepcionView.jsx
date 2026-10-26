@@ -848,6 +848,20 @@ function Revisar({ datos, onHecho, onVolver }) {
   const [pago, setPago] = useState(null);
   const [pagoAuto, setPagoAuto] = useState(false);
   const [numFac, setNumFac] = useState(rec.doc_numero || ""); // #50
+  // #66: si el documento no trae número, sale ya puesto el código automático (siglas + DDMMAA del día de llegada)
+  const [autoCod, setAutoCod] = useState(rec.doc_numero_generado ? rec.doc_numero || "" : "");
+  useEffect(() => {
+    if (rec.doc_numero) return;
+    const dia = rec.llegada_en ? new Date(rec.llegada_en).toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }) : hoyMadrid();
+    let vivo = true;
+    sb.rpc("recepcion_codigo_generar", { p_rec: rec.id, p_prov: rec.proveedor, p_dia: dia }).then((c) => {
+      if (!vivo || typeof c !== "string" || !c) return;
+      setAutoCod(c);
+      setNumFac((n) => n.trim() ? n : c);
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, [rec.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const numEsAuto = !!autoCod && numFac.trim() === autoCod;
   const [modoProv, setModoProv] = useState(null);
   useEffect(() => {
     sb.select("proveedor_pago_defecto", "select=nombre,pago,modo").then((r) => {
@@ -858,7 +872,6 @@ function Revisar({ datos, onHecho, onVolver }) {
     }).catch(() => {});
   }, [rec.proveedor, prov?.nombre]);
   const facImporteN = importeNum(facImporte);
-  const numObligatorio = pago === "banco" && modoProv === "transferencia";
   // #31: lo que se cambia en una línea normal (producto, cómo se vende) lo sigue su línea de regalo
   const cambiar = (i, cambio) => setLineas((ls) => {
     const orden = ls[i]?.orden;
@@ -890,7 +903,7 @@ function Revisar({ datos, onHecho, onVolver }) {
     if (!lineas.some((l) => numero(l.q) > 0)) { setMsg("No hay nada que recepcionar"); return; }
     if (conFactura && !pago) { setMsg("Elige cómo se ha pagado la factura"); return; }
     if (conFactura && !sinImporte && !(Number.isFinite(facImporteN) && facImporteN !== 0)) { setMsg("Pon el importe total de la factura o marca «No sé el importe»"); return; }
-    if (conFactura && numObligatorio && !numFac.trim()) { setMsg("Pon el número de factura: dirección lo necesita para la transferencia"); return; }
+    if (!numFac.trim()) { setMsg("Pon el número de factura o albarán. Si el papel no lo trae, deja el código automático"); return; }
     // #52: el coste de un expositor se reparte entre lo que trae, en proporción al precio de venta de cada producto
     const costeExpo = new Map();
     for (const e of lineas.filter((x) => x.tipo !== "venta" && x.no_producto_motivo === "expositor" && x.orden != null)) {
@@ -907,7 +920,7 @@ function Revisar({ datos, onHecho, onVolver }) {
     setBusy(true); setMsg("");
     try {
       // #24: importe y forma de pago se guardan antes; al confirmar, la factura se crea sola en «Facturas»
-      if (conFactura) await sb.rpc("recepcion_factura_preparar", { p_id: rec.id, p_pago: pago, p_importe: sinImporte ? null : Math.round(facImporteN * 100) / 100, p_sin_importe: sinImporte, p_numero: numFac.trim() || null });
+      if (conFactura) await sb.rpc("recepcion_factura_preparar", { p_id: rec.id, p_pago: pago, p_importe: sinImporte ? null : Math.round(facImporteN * 100) / 100, p_sin_importe: sinImporte, p_numero: numEsAuto ? null : numFac.trim() || null });
       const r = await fn("confirmar", {
         id: rec.id,
         lineas: lineas.map((l) => { const ce = costeExpo.get(l.id ?? l.k); return { id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, no_producto_motivo: l.tipo !== "venta" ? (l.no_producto_motivo || "otro") : null, no_producto_texto: l.tipo !== "venta" ? l.no_producto_texto || null : null, expositor_de: l.expositor_de ?? undefined, unidades_por: l.unidades_por, descripcion: l.descripcion, nuevo: l.emparejado === "nuevo" && !l.product_id ? (ce != null ? { ...l.nuevo, coste: ce } : l.nuevo) : undefined, coste_sin_iva: ce != null && l.emparejado !== "nuevo" ? ce : l.emparejado === "nuevo" ? undefined : l.coste_txt ? subeCent(numero(l.coste_txt)) : manual && l.coste_ref != null ? l.coste_ref : undefined }; }),
@@ -958,7 +971,7 @@ function Revisar({ datos, onHecho, onVolver }) {
           <span style={{ fontFamily: SF, fontSize: 22, color: C.char, flex: 1 }}>{rec.proveedor}</span>
           {CHIPS[rec.via] && <span style={chip(CHIPS[rec.via][0], CHIPS[rec.via][1])}>{CHIPS[rec.via][2]}</span>}
         </div>
-        <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{[tipoDoc(rec.doc_tipo), rec.doc_numero, (rec.doc_tipo || rec.doc_numero || rec.doc_fecha) ? fechaDoc(rec.doc_fecha) : null, rec.total != null ? eur(rec.total) : null].filter(Boolean).join(" · ") || (manual ? "Sin factura: apunta lo que ha llegado" : "")}</div>
+        <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{[tipoDoc(rec.doc_tipo), rec.doc_numero ? `${rec.doc_numero}${rec.doc_numero_generado ? " (código interno)" : ""}` : null, (rec.doc_tipo || rec.doc_numero || rec.doc_fecha) ? fechaDoc(rec.doc_fecha) : null, rec.total != null ? eur(rec.total) : null].filter(Boolean).join(" · ") || (manual ? "Sin factura: apunta lo que ha llegado" : "")}</div>
       </div>
       {rec.prueba && <div style={{ fontFamily: F, fontSize: 12.5, background: "#EAF0F8", color: "#2F5C8F", borderRadius: 12, padding: "8px 12px" }}>Modo prueba hasta el inventario: se guarda todo, pero el stock de la caja aún no cambia. Los productos nuevos sí se dan de alta en la caja.</div>}
       <Aviso msg={msg} tipo={msg && /ya estaba/.test(msg) ? "bien" : "mal"} />
@@ -999,9 +1012,9 @@ function Revisar({ datos, onHecho, onVolver }) {
           <input type="checkbox" checked={sinImporte} onChange={(e) => setSinImporte(e.target.checked)} style={{ width: 18, height: 18 }} />
           No sé el importe (queda pendiente y se avisa a dirección)
         </label>
-        <label style={{ ...lbl, marginBottom: 0, marginTop: 4 }}>Número de factura{numObligatorio ? "" : " (opcional)"}</label>
-        <input value={numFac} onChange={(e) => setNumFac(e.target.value)} placeholder="Tal cual sale en la factura" style={{ ...inp, marginBottom: 0, ...(numObligatorio && !numFac.trim() ? { background: "#FDEBD3", borderColor: "#E8913A" } : {}) }} />
-        {numObligatorio && <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Obligatorio: este proveedor se paga por transferencia y dirección pone el número en el concepto.</div>}
+        <label style={{ ...lbl, marginBottom: 0, marginTop: 4 }}>Nº factura/albarán{numEsAuto && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 999, background: "#F0ECE2", color: "#5E5444" }}>código interno</span>}</label>
+        <input value={numFac} onChange={(e) => setNumFac(e.target.value)} placeholder="Tal cual sale en el papel" style={{ ...inp, marginBottom: 0, ...(!numFac.trim() ? { background: "#FDEBD3", borderColor: "#E8913A" } : {}) }} />
+        <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{numEsAuto ? "El documento no trae número, así que se pone un código automático. Si lo ves en el papel, escribe el número real." : "Obligatorio. Si el papel no trae número, deja el código automático."}</div>
         <label style={{ ...lbl, marginBottom: 0, marginTop: 4 }}>¿Cómo se ha pagado?</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {PAGOS_REC.map(([v, t]) => {
@@ -1175,7 +1188,7 @@ export function RecepcionView({ onContar }) {
             ) : (
               <>
                 {r.via === "email" && <div style={{ fontFamily: F, fontSize: 13, color: "#1E6B3C", fontWeight: 600 }}>Factura recibida</div>}
-                <div style={{ fontFamily: F, fontSize: 13.5, color: C.char, fontWeight: 600 }}>{[tipoDoc(r.doc_tipo) || "Documento", r.doc_numero, fechaDoc(r.doc_fecha)].filter(Boolean).join(" · ")}</div>
+                <div style={{ fontFamily: F, fontSize: 13.5, color: C.char, fontWeight: 600 }}>{[tipoDoc(r.doc_tipo) || "Documento", r.doc_numero ? `${r.doc_numero}${r.doc_numero_generado ? " (código interno)" : ""}` : null, fechaDoc(r.doc_fecha)].filter(Boolean).join(" · ")}</div>
                 <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{r.lineas} producto{r.lineas === 1 ? "" : "s"}{r.total != null ? ` · ${eur(r.total)}` : ""}{r.via !== "email" ? " · sin terminar" : ""}</div>
                 <button type="button" onClick={() => abrir(r.id)} style={{ ...btnDark, padding: 13 }}>{r.via === "email" ? "Revisar y recepcionar" : "Seguir"}</button>
               </>

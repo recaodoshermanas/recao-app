@@ -14,6 +14,12 @@ const VIA = { email: "Correo", foto: "Foto", manual: "Manual" };
 const AVISO = { sin_documento: "Sin factura", diferencia: "Diferencia", sin_codigo: "Sin código", sin_asociar: "Sin asociar", stock_error: "Stock", precio: "Precio", coste_sin_verificar: "Coste sin verificar", alta_error: "Alta fallida", expositor_sin_desglosar: "Expositor sin desglosar", alta_por_error: "Alta por error" };
 const margen = (pvp, coste) => (pvp > 0 && coste != null ? (1 - coste / pvp) * 100 : null);
 
+// #66: ids de recepciones cuyo número es el código automático (el servidor no lo manda en sus listas)
+function useGenerados(clave) {
+  const [ids, setIds] = useState(() => new Set());
+  useEffect(() => { sb.select("recepciones", "select=id&doc_numero_generado=is.true").then((r) => setIds(new Set((r || []).map((x) => x.id)))).catch(() => {}); }, [clave]);
+  return ids;
+}
 export function Recepcion() {
   const [d, setD] = useState(null);
   const [tab, setTab] = useState("precios");
@@ -124,6 +130,7 @@ function Etiquetas({ lista, onCambio }) {
 }
 
 function Diferencias({ lista, onCambio }) {
+  const gen = useGenerados(lista.length);
   const grupos = useMemo(() => {
     const g = new Map();
     for (const l of lista) { const k = l.recepciones?.proveedor || "—"; if (!g.has(k)) g.set(k, []); g.get(k).push(l); }
@@ -144,7 +151,7 @@ function Diferencias({ lista, onCambio }) {
                 {ls.map((l) => { const dif = Number(l.uds_confirmadas || 0) - Number(l.uds_doc || 0); return (
                   <tr key={l.id}>
                     <td><span className="pn">{l.descripcion}</span></td>
-                    <td><span className="pf">{l.recepciones?.doc_numero || "sin número"} · {fechaCorta(l.recepciones?.confirmado_en)}</span></td>
+                    <td><span className="pf">{l.recepciones?.doc_numero || "sin número"}{gen.has(l.recepcion_id) ? " (código interno)" : ""} · {fechaCorta(l.recepciones?.confirmado_en)}</span></td>
                     <td className="r">{Number(l.uds_doc)}</td>
                     <td className="r">{Number(l.uds_confirmadas || 0)}</td>
                     <td className="r b" style={{ color: dif < 0 ? "var(--down)" : undefined }}>{dif > 0 ? "+" : ""}{Math.round(dif * 100) / 100}</td>
@@ -187,6 +194,7 @@ const MOTIVOS_NP = { expositor: "Expositor o surtido sin desglosar", portes: "Po
 const fechaHora = (t) => (t ? new Date(t).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
 
 function Pedidos({ proveedores, onCambio }) {
+  const gen = useGenerados(0);
   const [f, setF] = useState({ q: "", proveedor: "", estado: "", desde: "", hasta: "" });
   const [filas, setFilas] = useState(null);
   const [total, setTotal] = useState(0);
@@ -219,7 +227,7 @@ function Pedidos({ proveedores, onCambio }) {
             <tbody>
               {filas.map((r) => (
                 <tr key={r.id} onClick={() => setAbierto(r.id)} style={{ cursor: "pointer" }}>
-                  <td><button className="btn-txt" style={{ textAlign: "left" }} onClick={(e) => { e.stopPropagation(); setAbierto(r.id); }}><span className="pn">{r.proveedor}</span></button><span className="pf">{[r.doc_tipo === "albaran" ? "Albarán" : r.doc_tipo === "factura" ? "Factura" : null, r.doc_numero].filter(Boolean).join(" ")}{r.prueba ? " · prueba" : ""}</span></td>
+                  <td><button className="btn-txt" style={{ textAlign: "left" }} onClick={(e) => { e.stopPropagation(); setAbierto(r.id); }}><span className="pn">{r.proveedor}</span></button><span className="pf">{[r.doc_tipo === "albaran" ? "Albarán" : r.doc_tipo === "factura" ? "Factura" : null, r.doc_numero].filter(Boolean).join(" ")}{gen.has(r.id) ? " · código interno" : ""}{r.prueba ? " · prueba" : ""}</span></td>
                   <td>{VIA[r.via] || r.via}</td>
                   <td>{ESTADO[r.estado] || r.estado}</td>
                   <td>{r.recepcionado_por || "—"}</td>
@@ -261,6 +269,7 @@ function BuscaProducto({ onElegir, onCerrar }) {
 }
 
 function PedidoDetalle({ id, onClose, onCambio }) {
+  const gen = useGenerados(id);
   const [d, setD] = useState(null);
   const [ed, setEd] = useState({});
   const [busca, setBusca] = useState(null); // id de línea
@@ -304,7 +313,7 @@ function PedidoDetalle({ id, onClose, onCambio }) {
     cambiar(l.id, { es_producto: false, motivo, motivo_texto: texto });
   };
   return (
-    <Panel titulo={`${rec.proveedor}${rec.doc_numero ? ` · ${rec.doc_numero}` : ""}`} sub={`${ESTADO[rec.estado] || rec.estado}${rec.prueba ? " · de prueba" : ""} · recepcionó ${d.recepcionado_por || "—"} · ${fechaHora(rec.confirmado_en || rec.creado_en)}`} onClose={onClose} ancho={920}
+    <Panel titulo={`${rec.proveedor}${rec.doc_numero ? ` · ${rec.doc_numero}${gen.has(rec.id) ? " (código interno)" : ""}` : ""}`} sub={`${ESTADO[rec.estado] || rec.estado}${rec.prueba ? " · de prueba" : ""} · recepcionó ${d.recepcionado_por || "—"} · ${fechaHora(rec.confirmado_en || rec.creado_en)}`} onClose={onClose} ancho={920}
       pie={d.corregible ? <button className="btn-p" disabled={busy || !cambios.length} onClick={guardar}>{busy ? "Guardando…" : `Guardar correcciones${cambios.length ? ` (${cambios.length})` : ""}`}</button> : <span className="sub">Solo se corrigen pedidos ya confirmados.</span>}>
       <div style={{ display: "grid", gap: 12, marginBottom: 14 }}>
         {rec.doc_url && <a className="btn-l" href={rec.doc_url} target="_blank" rel="noreferrer" style={{ justifySelf: "start" }}>Abrir el documento (PDF)</a>}

@@ -7,6 +7,7 @@ import { Cargando, ir, avisar, confirmar } from "../ui.jsx";
 import { FAMILIAS, COLOR_FAM, ESTADOS, n0, r0, margenPct, varPct, senales, tiene, useDatos, guardarCambios, ventaPeriodo } from "./datos.js";
 import { FichaProducto, NuevoProducto, SelectCat, SelectProv, SelectIva, BarraDeshacer, Delta } from "./Ficha.jsx";
 import { salud } from "./Salud.jsx";
+import { sb } from "../../../src/lib/supabase.js";
 export { Salud } from "./Salud.jsx";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -395,6 +396,33 @@ export function Familias() {
   );
 }
 
+// #66: siglas del proveedor (3 letras) para el código automático de las recepciones sin número
+const claveNom = (n) => String(n ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function SiglasProv({ nombre }) {
+  const [filas, setFilas] = useState(null);
+  const [edit, setEdit] = useState(null);
+  const cargar = () => sb.select("proveedor_siglas", "select=proveedor,siglas").then(setFilas).catch(() => setFilas([]));
+  useEffect(() => { cargar(); }, []);
+  if (!filas) return null;
+  const fila = filas.find((f) => claveNom(f.proveedor) === claveNom(nombre));
+  const guardar = async () => {
+    const sig = edit.trim().toUpperCase();
+    if (!/^[A-Z0-9]{3}$/.test(sig)) { avisar("Las siglas son 3 letras o números", "error"); return; }
+    if (filas.some((f) => f.siglas === sig && f !== fila)) { avisar(`«${sig}» ya es de ${filas.find((f) => f.siglas === sig).proveedor}`, "error"); return; }
+    try {
+      if (fila) await sb.update("proveedor_siglas", `proveedor=eq.${encodeURIComponent(fila.proveedor)}`, { siglas: sig });
+      else await sb.insert("proveedor_siglas", { proveedor: nombre, siglas: sig });
+      setEdit(null); await cargar(); avisar("Siglas guardadas");
+    } catch (e) { avisar("No se han podido guardar: " + e.message, "error"); }
+  };
+  return (
+    <p className="sub" style={{ margin: "4px 0 10px" }}>
+      Siglas para el código automático de recepciones sin número: {edit == null ? <><b>{fila?.siglas || "se asignan en la primera recepción"}</b> <button className="btn-txt" onClick={() => setEdit(fila?.siglas || "")}>Cambiar</button></>
+        : <><input value={edit} maxLength={3} onChange={(e) => setEdit(e.target.value.toUpperCase())} style={{ width: 60, textAlign: "center" }} aria-label="Siglas del proveedor" /> <button className="btn-p" onClick={guardar}>Guardar</button> <button className="btn-txt" onClick={() => setEdit(null)}>Cancelar</button></>}
+    </p>
+  );
+}
+
 // ---------- 4. Proveedores ----------
 export function Proveedores() {
   const R = useResumen();
@@ -432,6 +460,7 @@ export function Proveedores() {
       {abierto && (
         <div className="card mt">
           <div className="head"><h2>{abierto}: productos</h2><button className="btn-l" onClick={() => setAbierto(null)}>Cerrar</button></div>
+          {abierto !== "Sin proveedor" && <SiglasProv nombre={abierto} />}
           <ul className="movers">
             {C.d.productos.filter((p) => (abierto === "Sin proveedor" ? !p.prov : p.prov === abierto) && n0(p.v90) > 0).sort((a, b) => n0(b.v) - n0(a.v)).slice(0, 40).map((p) => (
               <li key={p.id}><button onClick={() => setFicha(p)}><span className="mv-n"><b>{p.n}</b><small>{p.fam} · margen {n0(p.c) > 0 ? pct(margenPct(p.vs, p.c), 1) : "–"}</small></span><span className="mv-d">{eur(r0(p.v))}</span></button></li>

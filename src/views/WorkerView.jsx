@@ -177,6 +177,8 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
                         {f.turno && <span style={{ textTransform: "capitalize" }}>· {f.turno}{isAdmin && f.trabajadora_id && nombres[f.trabajadora_id] ? ` (${nombres[f.trabajadora_id]})` : ""}</span>}
                         {f.recepcion_id && <span style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: "#F0ECE2", color: "#5E5444" }}>Recepción</span>}
                         {f.tipo_pago && <span style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: (ESTILO_PAGO[f.tipo_pago] || ESTILO_PAGO.efectivo)[0], color: (ESTILO_PAGO[f.tipo_pago] || ESTILO_PAGO.efectivo)[1] }}>{etiquetaPago(f.tipo_pago)}</span>}
+                        {f.doc_numero && <span>· {f.doc_numero}</span>}
+                        {f.doc_numero && f.recepcion_id && /^[A-Z0-9]{3}\d{6}(-\d+)?$/.test(f.doc_numero) && <span style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: "#F0ECE2", color: "#5E5444" }}>código interno</span>}
                         {f.nota && <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {f.nota}</span>}
                         {!canEdit && <span style={{ fontStyle: "italic", color: C.mutL }}>· de otra persona</span>}
                       </div>
