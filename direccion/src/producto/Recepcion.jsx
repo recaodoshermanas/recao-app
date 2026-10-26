@@ -57,7 +57,7 @@ export function Recepcion() {
 function Precios({ lista, onCambio }) {
   const [valores, setValores] = useState({});
   const [busy, setBusy] = useState(null);
-  if (!lista.length) return <p className="empty">No hay precios por aprobar. Aparecen aquí cuando sube el coste de un producto y ya no deja el 35 %, o cuando llega un producto nuevo.</p>;
+  if (!lista.length) return <p className="empty">No hay precios por aprobar. Aparecen aquí cuando sube el coste de un producto y ya no deja el margen objetivo de su proveedor (35 % por defecto), o cuando llega un producto nuevo.</p>;
   const aprobar = async (c) => {
     const pvp = numero(valores[c.id] ?? c.pvp_propuesto);
     if (!(pvp > 0)) { avisar("Precio no válido", "mal"); return; }

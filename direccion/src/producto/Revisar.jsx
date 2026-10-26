@@ -96,7 +96,8 @@ export function ProductosRevisar() {
   );
 }
 
-// ---------- Precio: margen por debajo del 35 % con el coste de la última factura ----------
+// ---------- Precio: margen por debajo del objetivo del proveedor (35 % por defecto) con el coste de la última factura ----------
+const objetivo = (a) => `objetivo ${pct(Math.round(Number(a.margen_objetivo ?? 0.35) * 1000) / 10)}`; // #67
 function SecPrecio({ lista, otras, onListo }) {
   const [otro, setOtro] = useState({});
   const [busy, setBusy] = useState(null);
@@ -113,7 +114,7 @@ function SecPrecio({ lista, otras, onListo }) {
   };
   return (
     <div className="card mt">
-      <div className="head"><div><h2>Precio</h2><p className="sub">Productos cuyo margen, con el coste de su última factura, queda por debajo del 35 %. «Aceptar» pone el precio de la regla (coste completo ÷ 0,65, redondeado arriba a 0,10 €). «Mantener» no cambia nada y no vuelve a avisar hasta que cambie el coste. Si hay subida de coste pendiente, resuélvela antes. «Enviar a tienda» (solo en proveedores que pueden traer precio marcado) pide a las trabajadoras que miren el envase: si trae precio marcado se pone ese precio en caja; si no, vuelve aquí con la nota.</p></div></div>
+      <div className="head"><div><h2>Precio</h2><p className="sub">Productos cuyo margen, con el coste de su última factura, queda por debajo del margen objetivo de su proveedor (35 % por defecto). «Aceptar» pone el precio de la regla (coste completo ÷ (1 − margen objetivo), redondeado arriba a 0,10 €). «Mantener» no cambia nada y no vuelve a avisar hasta que cambie el coste. Si hay subida de coste pendiente, resuélvela antes. «Enviar a tienda» (solo en proveedores que pueden traer precio marcado) pide a las trabajadoras que miren el envase: si trae precio marcado se pone ese precio en caja; si no, vuelve aquí con la nota.</p></div></div>
       {!lista.length ? <p className="empty">Nada pendiente de precio.</p> : (
         <div className="tabla-scroll">
           <table className="ranking">
@@ -126,7 +127,7 @@ function SecPrecio({ lista, otras, onListo }) {
                     <td><span className="pn">{a.nombre}</span><span className="pf">{[a.categoria, a.proveedor, a.origen].filter(Boolean).join(" · ")} · {hace(a.creado_en)}</span>{a.marcado && chip("prov", "Precio marcado")}<NotaTienda a={a} /><Otras lista={otras(a.product_id, "precio")} /></td>
                     <td className="r">{eur(a.coste_completo, 3)}</td>
                     <td className="r">{eur(a.pvp_actual, 2)}<span className="pf" style={{ color: "#A3362B" }}>margen {pct(a.margen_actual)}</span></td>
-                    <td className="r">{eur(a.pvp_regla, 2)}<span className="pf">margen {pct(margen(a.coste_completo, a.pvp_regla))}</span></td>
+                    <td className="r">{eur(a.pvp_regla, 2)}<span className="pf">margen {pct(margen(a.coste_completo, a.pvp_regla))} · {objetivo(a)}</span></td>
                     <td style={{ minWidth: 300 }}>
                       {a.en_tienda ? <EnTienda a={a} tipo="precio" onListo={onListo} busy={busy} setBusy={setBusy} /> : <>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -177,7 +178,7 @@ function SecCoste({ lista, otras, onListo }) {
                   <td className="r">{eur(c.coste_ex_actual, 3)}<span className="pf">sin IVA</span></td>
                   <td className="r">{eur(c.coste_ex_nuevo, 3)}<span className="pf">sin IVA · completo {eur(c.coste_completo_nuevo, 3)}</span></td>
                   <td className="r b" style={{ color: "#A3362B" }}>+{pct(c.subida_pct)}</td>
-                  <td className="r">{eur(c.pvp, 2)}<span className="pf">margen nuevo {pct(margen(c.coste_completo_nuevo, c.pvp))}</span></td>
+                  <td className="r">{eur(c.pvp, 2)}<span className="pf">margen nuevo {pct(margen(c.coste_completo_nuevo, c.pvp))} · {objetivo(c)}</span></td>
                   <td style={{ minWidth: 230 }}>
                     {c.en_tienda ? <EnTienda a={c} tipo="coste" onListo={onListo} busy={busy} setBusy={setBusy} /> : <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button className="btn-p" disabled={busy === c.id} onClick={() => decidir(c, "aplicado")}>Es real, aplicar coste</button>
