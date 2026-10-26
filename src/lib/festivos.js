@@ -24,4 +24,6 @@ export function horasDeTurno(turno, fecha) {
   return (fin - ini) / 60;
 }
 
-export const plusFestivo = (horas) => Math.round(PLUS_FESTIVO_8H * (horas / 8) * 100) / 100;
+// #59: 37,50 € por un turno de 8 h; si dura otra cosa, la parte proporcional redondeada hacia arriba al euro (6 h = 29 €).
+// La misma regla está en la base de datos (función extras_auto, que lo mete en Efectivo de sobres y Salarios).
+export const plusFestivo = (horas) => (!horas ? 0 : horas === 8 ? PLUS_FESTIVO_8H : Math.ceil((PLUS_FESTIVO_8H * horas) / 8));
