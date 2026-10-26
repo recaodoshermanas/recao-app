@@ -345,12 +345,17 @@ export function FinanzasResultados({ onEditMonth }) {
   const [modo, setModo] = useState("eur");
   const [sel, setSel] = useState(null);
   const scroll = useRef(null);
-  const meses = useMemo(() => (d ? d.meses.filter((m) => m.cerrado).slice(-12) : []), [d]);
-  useEffect(() => { if (meses.length && !sel) setSel(meses[meses.length - 1].mes); }, [meses, sel]);
+  const cerrados = useMemo(() => (d ? d.meses.filter((m) => m.cerrado) : []), [d]);
+  // #68: el mes en curso (sin cerrar) sale como una columna más, provisional, a la derecha del último mes cerrado
+  const enCurso = useMemo(() => (d ? d.meses.find((m) => !m.cerrado && m.mes === `${String(d.hoy || "").slice(0, 7)}-01`) || null : null), [d]);
+  const meses = useMemo(() => [...cerrados.slice(-12), ...(enCurso ? [enCurso] : [])], [cerrados, enCurso]);
+  // solo se compara con meses que existen de verdad en la app: cerrados o el mes en curso
+  const disponibles = useMemo(() => Object.fromEntries([...cerrados, ...(enCurso ? [enCurso] : [])].map((m) => [m.mes, m])), [cerrados, enCurso]);
+  useEffect(() => { if (cerrados.length && !sel) setSel(cerrados[cerrados.length - 1].mes); }, [cerrados, sel]);
   // en pantallas estrechas, que se vean primero los meses más recientes
   useEffect(() => { const el = scroll.current; if (el) el.scrollLeft = el.scrollWidth; }, [meses.length]);
   if (!d) return <Estado fallo={fallo} />;
-  const mes = meses.find((m) => m.mes === sel) || meses[meses.length - 1];
+  const mes = meses.find((m) => m.mes === sel) || cerrados[cerrados.length - 1] || meses[meses.length - 1];
   const val = (m, v) => (modo === "pct" ? (m.ingresos ? pct(v / m.ingresos * 100, 1) : "–") : num(v));
   // #69: tienda y paquetería por separado (tributan distinto). Todos los gastos son de la tienda; la paquetería no tiene gastos propios.
   const resTienda = (m) => n0(m.ventas) - n0(m.gastos);
@@ -394,31 +399,71 @@ export function FinanzasResultados({ onEditMonth }) {
         </div>
         <div className="tabla-scroll" ref={scroll}>
           <table className="fpl">
-            <thead><tr><th />{meses.map((m) => <th key={m.mes} className={m.mes === mes.mes ? "sel" : ""}><button onClick={() => setSel(m.mes)}>{mesCorto(m.mes)}<small>{String(parseDate(m.mes).getFullYear()).slice(2)}</small></button></th>)}</tr></thead>
+            <thead><tr><th />{meses.map((m) => <th key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}`}><button onClick={() => setSel(m.mes)}>{mesCorto(m.mes)}<small>{String(parseDate(m.mes).getFullYear()).slice(2)}</small>{!m.cerrado && <small className="ec"> · en curso</small>}</button></th>)}</tr></thead>
             <tbody>
               {filas.map((f) => f.sep ? <tr key={f.k} className="sep"><th colSpan={meses.length + 1}>{f.l}</th></tr> : (
                 <tr key={f.k} className={`${f.b || f.b2 ? "b" : ""}${f.r ? " r" : ""}${f.r2 ? " r tras" : ""}`}>
                   <th>{f.l}</th>
-                  {meses.map((m) => <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${f.r ? (n0(f.get ? f.get(m) : m[f.k]) >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}`}>{f.get ? (f.get(m) == null ? "–" : val(m, n0(f.get(m)))) : f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k]))}</td>)}
+                  {meses.map((m) => <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}${f.r ? (n0(f.get ? f.get(m) : m[f.k]) >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}`}>{f.get ? (f.get(m) == null ? "–" : val(m, n0(f.get(m)))) : f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k]))}</td>)}
                 </tr>
               ))}
               <tr className="sep"><th colSpan={meses.length + 1}>Margen real según Epos (sin IVA)</th></tr>
               {margenFilas.map((f) => (
                 <tr key={f.l}>
                   <th>{f.l}</th>
-                  {meses.map((m) => { const v = f.f(m); return <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${f.alerta && v > 1000 ? " down" : ""}`}>{v == null ? "–" : f.pct ? pct(v, 1) : num(v)}</td>; })}
+                  {meses.map((m) => { const v = f.f(m); return <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}${f.alerta && v > 1000 ? " down" : ""}`}>{v == null ? "–" : f.pct ? pct(v, 1) : num(v)}</td>; })}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-      {mes && <DetalleMes mes={mes} categorias={d.categorias} onCambio={recargar} onEditMonth={onEditMonth} />}
+      {mes && <DetalleMes mes={mes} disponibles={disponibles} onCambio={recargar} onEditMonth={onEditMonth} />}
     </>
   );
 }
 
-function DetalleMes({ mes, onCambio, onEditMonth }) {
+// #68: mes con el que se compara (delta = meses de diferencia, −1 anterior, −12 mismo mes del año pasado)
+function claveMes(mes, delta) { const f = parseDate(mes); const x = new Date(f.getFullYear(), f.getMonth() + delta, 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-01`; }
+
+function Comparacion({ mes, disponibles }) {
+  const ant = disponibles[claveMes(mes.mes, -1)], anio = disponibles[claveMes(mes.mes, -12)];
+  const filas = [
+    { l: "Ventas (con IVA)", k: "ventas" },
+    { l: "Ingresos", k: "ingresos", b: true },
+    ...CATS.map((c) => ({ l: c.label, k: c.id, gasto: true })),
+    { l: "Gastos", k: "gastos", gasto: true, b: true },
+    { l: "Beneficio del negocio", k: "resultado", b: true },
+  ];
+  const celdas = (f, base) => {
+    if (!base) return [<td key="v">–</td>, <td key="d">–</td>];
+    const v = n0(mes[f.k]), b = n0(base[f.k]), dif = v - b;
+    const pc = b ? dif / Math.abs(b) * 100 : null;
+    const bien = Math.abs(dif) < 0.5 ? "" : (f.gasto ? dif < 0 : dif > 0) ? " bien" : " mal";
+    return [<td key="v">{num(b)}</td>, <td key="d" className={`dif${bien}`}>{`${dif > 0.5 ? "+" : ""}${num(dif)} €`}{pc == null ? " · –" : ` · ${pc > 0 ? "+" : ""}${num(pc, 1)} %`}</td>];
+  };
+  return (
+    <div className="card c12">
+      <h2>Comparación</h2>
+      <p className="sub">{mesAnio(mes.mes)} frente al mes anterior ({mesAnio(claveMes(mes.mes, -1))}) y al mismo mes del año anterior ({mesAnio(claveMes(mes.mes, -12))}). Verde = mejor, rojo = peor.</p>
+      {!mes.cerrado && ant && <p className="sub" style={{ color: "#9A4A00", fontWeight: 700 }}>Compara un mes a medias con un mes completo.</p>}
+      <div className="tabla-scroll">
+        <table className="fpl comp">
+          <thead><tr><th /><th>{mesCorto(mes.mes)} {String(parseDate(mes.mes).getFullYear()).slice(2)}</th><th>Mes anterior</th><th>Diferencia</th><th>Año anterior</th><th>Diferencia</th></tr></thead>
+          <tbody>
+            {filas.map((f) => (
+              <tr key={f.k} className={f.b ? "b" : ""}>
+                <th>{f.l}</th><td>{num(n0(mes[f.k]))}</td>{celdas(f, ant)}{celdas(f, anio)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function DetalleMes({ mes, disponibles, onCambio, onEditMonth }) {
   const [guardando, setGuardando] = useState(null);
   const cambiar = async (concepto, categoria) => {
     setGuardando(concepto);
@@ -430,9 +475,11 @@ function DetalleMes({ mes, onCambio, onEditMonth }) {
   const FIJ = { ss: "Seguridad Social", alquiler: "Alquiler", iva_alquiler: "IVA del alquiler", luz: "Luz", agua: "Agua", ayuntamiento: "Ayuntamiento", asesoria: "Asesoría", securitas: "Securitas", epos: "Epos" };
   return (
     <div className="grid">
+      <Comparacion mes={mes} disponibles={disponibles} />
       <div className="card c6">
         <div className="head">
           <div><h2>{mesAnio(mes.mes)}</h2><p className="sub">Resultado {eur(sinDecimales(mes.resultado))} · {pct(mes.ingresos ? mes.resultado / mes.ingresos * 100 : 0)} de los ingresos</p>
+            {!mes.cerrado && <p className="sub" style={{ color: "#9A4A00", fontWeight: 700 }}>Mes en curso: cifras provisionales hasta hoy</p>}
             {n0(mes.descuadres_caja) !== 0 && <p className="sub">Incluye {eur(mes.descuadres_caja, 2)} de descuadres de caja (sobres)</p>}
             {n0(mes.sobres_sin_revisar) > 0 && <p className="sub" style={{ color: "#9A4A00", fontWeight: 700 }}>{mes.sobres_sin_revisar} sobre{mes.sobres_sin_revisar === 1 ? "" : "s"} sin revisar en la Apertura de sobres: cuentan como correctos.</p>}
           </div>

@@ -128,3 +128,9 @@
 .es-hist b { color: var(--text); }
 .es-resumen { margin-top: 10px; }
 @media (max-width: 760px) { .es .es-kpis { grid-template-columns: 1fr 1fr; } }
+
+/* #68: mes en curso y comparación */
+.fpl thead th.curso button small.ec { opacity: .8; font-weight: 500; }
+.fpl td.curso { opacity: .72; font-style: italic; }
+.fpl th.curso { font-style: italic; }
+.fpl.comp td.dif.bien { color: var(--up); } .fpl.comp td.dif.mal { color: var(--down); }
