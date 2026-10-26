@@ -352,8 +352,11 @@ export function FinanzasResultados({ onEditMonth }) {
   if (!d) return <Estado fallo={fallo} />;
   const mes = meses.find((m) => m.mes === sel) || meses[meses.length - 1];
   const val = (m, v) => (modo === "pct" ? (m.ingresos ? pct(v / m.ingresos * 100, 1) : "–") : num(v));
+  // #69: tienda y paquetería por separado (tributan distinto). Todos los gastos son de la tienda; la paquetería no tiene gastos propios.
+  const resTienda = (m) => n0(m.ventas) - n0(m.gastos);
   const filas = [
-    { k: "ventas", l: "Ventas (con IVA)" }, { k: "paqueteria", l: "Paquetería" }, { k: "ingresos", l: "Ingresos", b: true },
+    { sep: true, k: "sep_tienda", l: "Tienda" },
+    { k: "ventas", l: "Ventas (con IVA)" },
     // #61: en los meses con stock inicial y final, la mercancía es el coste de lo vendido (compras + variación de existencias)
     ...(meses.some((m) => m.variacion_existencias != null)
       ? [{ k: "compras_mercancia", l: "Compras de mercancía", neg: true, get: (m) => (m.compras_mercancia != null ? m.compras_mercancia : m.mercancia) },
@@ -362,6 +365,11 @@ export function FinanzasResultados({ onEditMonth }) {
          ...CATS.filter((c) => c.id !== "mercancia").map((c) => ({ k: c.id, l: c.label, neg: true }))]
       : CATS.map((c) => ({ k: c.id, l: c.label, neg: true }))),
     { k: "gastos", l: "Gastos", b: true, neg: true },
+    { k: "resultado_tienda", l: "Resultado de la tienda", b: true, r: true, get: resTienda },
+    { sep: true, k: "sep_paq", l: "Paquetería" },
+    { k: "paqueteria", l: "Ingresos de paquetería" },
+    { k: "resultado_paqueteria", l: "Resultado de la paquetería", b: true, r: true, get: (m) => n0(m.paqueteria) },
+    { sep: true, k: "sep_total", l: "Total del negocio" },
     // #36: desde octubre de 2026, la suma de los descuadres de los sobres (resta si falta dinero, suma si sobra)
     ...(meses.some((m) => m.mes >= "2026-10") ? [{ k: "descuadres_caja", l: "Descuadres de caja" }] : []),
     { k: "resultado", l: "Beneficio del negocio", b: true, r: true },
@@ -388,10 +396,10 @@ export function FinanzasResultados({ onEditMonth }) {
           <table className="fpl">
             <thead><tr><th />{meses.map((m) => <th key={m.mes} className={m.mes === mes.mes ? "sel" : ""}><button onClick={() => setSel(m.mes)}>{mesCorto(m.mes)}<small>{String(parseDate(m.mes).getFullYear()).slice(2)}</small></button></th>)}</tr></thead>
             <tbody>
-              {filas.map((f) => (
+              {filas.map((f) => f.sep ? <tr key={f.k} className="sep"><th colSpan={meses.length + 1}>{f.l}</th></tr> : (
                 <tr key={f.k} className={`${f.b || f.b2 ? "b" : ""}${f.r ? " r" : ""}${f.r2 ? " r tras" : ""}`}>
                   <th>{f.l}</th>
-                  {meses.map((m) => <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${f.r ? (m.resultado >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}`}>{f.get ? (f.get(m) == null ? "–" : val(m, n0(f.get(m)))) : f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k]))}</td>)}
+                  {meses.map((m) => <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${f.r ? (n0(f.get ? f.get(m) : m[f.k]) >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}`}>{f.get ? (f.get(m) == null ? "–" : val(m, n0(f.get(m)))) : f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k]))}</td>)}
                 </tr>
               ))}
               <tr className="sep"><th colSpan={meses.length + 1}>Margen real según Epos (sin IVA)</th></tr>
@@ -437,6 +445,12 @@ function DetalleMes({ mes, onCambio, onEditMonth }) {
                     {/* #46: «tarjeta» y «banco» se suman en una sola cifra «Banco» */}
           {[["facturas_efectivo", "pagadas en efectivo"], ["facturas_banco", "por banco"], ["facturas_caja_fuerte", "de la caja fuerte"], ["facturas_sobres", "con efectivo de sobres"]].map(([k, t]) => [k, t, k === "facturas_banco" ? n0(mes.facturas_banco) + n0(mes.facturas_tarjeta) : n0(mes[k])]).filter(([, , v]) => v).map(([k, t, v]) => <li key={k} className="nota"><span>de ellas, {t}</span><span>{eur(sinDecimales(v))}</span></li>)}
           {n0(mes.facturas_pendientes) > 0 && <li className="nota" style={{ color: "#9A4A00" }}><span>{mes.facturas_pendientes} pendiente{mes.facturas_pendientes > 1 ? "s" : ""} de importe (no cuentan todavía)</span><span>–</span></li>}
+        </ul>
+        {/* #69: paquetería cobrada por empresa (desde octubre de 2026, de BBVA; antes, lo metido en el Cierre de mes) */}
+        <h3 className="fh3">Paquetería</h3>
+        <ul className="pq-l">
+          {Object.entries(mes.paqueteria_det || {}).filter(([, v]) => n0(v)).sort((a, b) => n0(b[1]) - n0(a[1])).map(([k, v]) => <li key={k}><span>{k}</span><span>{eur(n0(v), 2)}</span></li>)}
+          <li className="total"><span><b>Total paquetería</b></span><b>{eur(n0(mes.paqueteria), 2)}</b></li>
         </ul>
         <h3 className="fh3">Salarios</h3>
         <ul className="pq-l">
