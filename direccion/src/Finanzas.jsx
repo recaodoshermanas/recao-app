@@ -135,8 +135,7 @@ export function FinanzasResumen({ onEditMonth }) {
   if (descuadres.length) avisos.push({ t: `${descuadres.length} día${descuadres.length > 1 ? "s" : ""} con el efectivo descuadrado más de 10 € frente a Epos.`, ruta: "finanzas/caja" });
   const dup = d.proveedores.filter((p) => p.variantes.length > 1);
   if (dup.length) avisos.push({ t: `Proveedores escritos de varias formas: ${dup.map((p) => p.variantes.join(" / ")).join("; ")}. Conviene unificarlos.`, ruta: "finanzas/compras" });
-  const mesN = parseDate(d.mes_actual).getMonth();
-  if ([0, 3, 6, 9].includes(mesN) && parseDate(hoy).getDate() <= 20) avisos.push({ t: `Este mes toca el pago trimestral de IVA (hasta el día 20). No está en la previsión de abajo.` });
+  // #64: el aviso genérico del IVA trimestral lo sustituye el bloque «Impuestos»
 
   avisos.push(...extra);
 
@@ -189,6 +188,8 @@ export function FinanzasResumen({ onEditMonth }) {
         </div>
       </div>
 
+      <ImpuestosResumen />
+
       <StockResumen />
 
       {ult && <Estructura mes={ult} />}
@@ -197,6 +198,76 @@ export function FinanzasResumen({ onEditMonth }) {
     </>
   );
 }
+// #64 · Bloque «Impuestos» del Resumen: próximo plazo de los modelos 115, 111, 131, 130 y 303 con lo estimado y lo pagado en BBVA
+const TRI = ["", "1.er trimestre", "2.º trimestre", "3.er trimestre", "4.º trimestre"];
+const fechaLarga = (f) => parseDate(f).toLocaleDateString("es-ES", { day: "numeric", month: "long" });
+const fechaCorta = (f) => parseDate(f).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" });
+function EstadoImp({ m }) {
+  if (m.estado === "pagado") return <span style={{ color: "var(--up)", fontWeight: 700 }}>Pagado el {fechaCorta(m.pagado_el)}</span>;
+  if (m.estado === "sin_pago") return <span style={{ color: "var(--down)", fontWeight: 700 }}>Sin pago en el banco</span>;
+  return <span style={{ color: "#B5651D", fontWeight: 700 }}>Pendiente</span>;
+}
+const importeImp = (m) => (m.estado === "pagado" ? eur(m.pagado, 2) : m.estimado != null ? `${eur(m.estimado, 2)} estimado` : "Sin estimación");
+function TablaImp({ modelos }) {
+  return (
+    <div className="tabla-scroll">
+      <table className="ranking">
+        <thead><tr><th>Modelo</th><th>Qué es</th><th>Fecha límite</th><th className="r">Importe</th><th>Estado</th></tr></thead>
+        <tbody>
+          {modelos.map((m) => (
+            <tr key={m.modelo + m.limite}>
+              <td className="b">{m.modelo}</td>
+              <td>{m.que}</td>
+              <td>{fechaLarga(m.limite)}</td>
+              <td className="r">{importeImp(m)}</td>
+              <td><EstadoImp m={m} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+function ImpuestosResumen() {
+  const [r, setR] = useState(null);
+  const [verAnio, setVerAnio] = useState(false);
+  useEffect(() => { supabase.rpc("finanzas_impuestos").then(({ data }) => setR(data || null), () => setR(null)); }, []);
+  const p = r?.proximo;
+  if (!p || !p.modelos) return null;
+  const naranja = !!p.naranja;
+  const titulo = p.pendientes > 0
+    ? `Próximo pago: hasta el ${fechaLarga(p.primera_fecha)} · estimado ${eur(p.total_estimado, 2)}`
+    : `${TRI[p.trimestre]} de ${p.anio}: todo pagado (${eur(p.total_pagado, 2)})`;
+  const a = r.anio;
+  return (
+    <div className="grid">
+      <div className="card c12" style={naranja ? { border: "2px solid #E8913A", background: "rgba(232,145,58,.08)" } : undefined}>
+        <div className="head">
+          <div>
+            <h2>Impuestos</h2>
+            <p style={{ margin: "6px 0 2px", fontSize: 20, fontWeight: 800, color: naranja ? "#B5651D" : "var(--text)" }}>{titulo}</p>
+            <p className="sub">{TRI[p.trimestre]} de {p.anio}{p.pendientes > 0 && p.dias != null ? ` · quedan ${p.dias} día${p.dias === 1 ? "" : "s"}` : ""}. Los presenta la gestoría y se cargan en BBVA. El estimado es lo que se pagó de ese modelo el trimestre anterior; al aparecer el cargo en el banco pasa a «Pagado».</p>
+          </div>
+          <button className="btn-txt" onClick={() => setVerAnio(!verAnio)} aria-expanded={verAnio}>{verAnio ? "Ocultar el año" : "Ver el año"}</button>
+        </div>
+        <TablaImp modelos={p.modelos} />
+        {verAnio && a && (
+          <div style={{ marginTop: 18 }}>
+            <h3 style={{ margin: "0 0 4px" }}>Año {a.anio}</h3>
+            <p className="sub">Pagado {eur(a.total_pagado, 2)} · pendiente estimado {eur(a.total_pendiente, 2)} · total del año {eur(n0(a.total_pagado) + n0(a.total_pendiente), 2)}</p>
+            {(a.trimestres || []).map((t) => (
+              <div key={t.trimestre} style={{ marginTop: 12 }}>
+                <p style={{ margin: "0 0 -6px", fontWeight: 700 }}>{TRI[t.trimestre]} · pagado {eur(t.pagado, 2)}{n0(t.pendiente) > 0 ? ` · pendiente estimado ${eur(t.pendiente, 2)}` : ""}</p>
+                <TablaImp modelos={t.modelos || []} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // #61 · Bloque «Stock» del Resumen: solo cuando dirección ha puesto la fecha del inventario inicial
 function StockResumen() {
   const [s, setS] = useState(null);
