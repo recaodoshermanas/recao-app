@@ -29,6 +29,8 @@ export function Bolsa() {
   const [resp, setResp] = useState({});
   const [tab, setTab] = useState("abiertos");
   const [publicando, setPublicando] = useState(false);
+  const [cobertura, setCobertura] = useState([]);
+  const [encargado, setEncargado] = useState("");
 
   const cargar = useCallback(async () => {
     try {
@@ -38,6 +40,9 @@ export function Bolsa() {
       ]);
       setOfertas(o || []);
       setResp(Object.fromEntries((r || []).map((x) => [x.id, x])));
+      const [c, e] = await Promise.all([sb.rpc("bolsa_cobertura_meses").catch(() => []), sb.rpc("bolsa_encargado_leer").catch(() => null)]);
+      setCobertura(c || []);
+      setEncargado(typeof e === "string" ? e : "");
     } catch (e) { setOfertas((x) => x || []); avisar("No se ha podido cargar la bolsa", "mal"); }
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
@@ -56,6 +61,10 @@ export function Bolsa() {
     if (!window.confirm(`¿Retirar de la bolsa el ${o.turno} del ${fechaLarga(o.fecha)}?`)) return;
     try { await sb.update("bolsa_turnos", `id=eq.${o.id}`, { estado: "retirado", cerrado_motivo: "retirado_por_direccion" }); avisar("Retirado de la bolsa"); cargar(); }
     catch (e) { avisar("No se ha podido retirar", "mal"); }
+  };
+  const elegirEncargado = async (id) => {
+    try { const r = await sb.rpc("bolsa_encargado_fijar", { p_id: id }); if (r?.ok) { setEncargado(id); avisar("Encargado de la bolsa guardado"); } else avisar("No se ha podido guardar", "mal"); }
+    catch (e) { avisar("No se ha podido guardar", "mal"); }
   };
   const anular = async (o) => {
     if (!window.confirm(`Se deshace la cobertura de ${nombreDe[o.cogido_por] || "esta persona"} (horario, cambio de día y horas extra) y el turno vuelve a la bolsa. ¿Seguir?`)) return;
@@ -77,6 +86,28 @@ export function Bolsa() {
         <div className="card c3 fkpi2"><h2>Descansos pendientes</h2><p className="num">{descansos.length}</p><p className="sub">compensatorios aún sin cubrir</p></div>
       </div>
 
+      <div className="card">
+        <div className="head">
+          <div><h2>Cobertura a tiempo</h2><p className="sub">Turnos del mes cubiertos con 10 días o más de antelación. Meta: 90 %. Con pocos turnos un solo hueco mueve mucho el %: mira la tendencia.</p></div>
+          <label className="sub">Encargado de la bolsa{" "}
+            <select value={encargado} onChange={(e) => e.target.value && elegirEncargado(e.target.value)}>
+              {!encargado && <option value="">Elegir…</option>}
+              {(equipo || []).filter((u) => u.rol === "admin" && u.activo !== false).map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="grid sin-margen">
+          {cobertura.map((c, i) => (
+            <div key={c.mes} className="card c3 fkpi2">
+              <h2>{new Date(c.mes + "T12:00:00").toLocaleDateString("es-ES", { month: "long" })}{i === 0 ? " (este mes)" : ""}</h2>
+              <p className={`num${c.pct != null && c.pct < 90 ? " down" : ""}`}>{c.pct == null ? "—" : `${c.pct} %`}</p>
+              <p className="sub">{c.total ? `${c.a_tiempo} de ${c.total} turnos a tiempo` : "sin turnos"}</p>
+            </div>
+          ))}
+        </div>
+        <p className="sub">Cuentan todos los turnos de la bolsa del mes (también descansos compensatorios y huecos por cambio de día). Los retirados o cubiertos a mano no cuentan como a tiempo; los que aún tienen más de 10 días por delante se esperan.</p>
+      </div>
+
       <div className="card b-reglas">
         <div className="head">
           <div><h2>Cómo funciona</h2><p className="sub">Cada turno va solo a quien puede cubrirlo. Se publica con 3 semanas y los avisos salen en un resumen cada mañana.</p></div>
@@ -85,6 +116,7 @@ export function Bolsa() {
         <ul>
           <li><Destino t="Mañana" /><span><b>Mañana y Tarde</b>: quien libra ese día. Las primeras 48 h solo las de apoyo (cambian un día de esa semana, +2 h o +3 h); después, también las principales (+8 h y descanso compensatorio si hace falta).</span></li>
           <li><Destino t="Apoyo 1" /><span><b>Apoyo 1, 2 y 3</b>: bolsa de eventuales.</span></li>
+          <li><span className="b-dest neutro">Avisos</span><span>A 10 días sin cubrir: recordatorio a quien puede y no ha respondido (WhatsApp y app). Si sigue sin cubrir 2 días después, aviso a dirección. Si 2 turnos llegan a 10 días sin cubrir en 30 días, alerta al encargado.</span></li>
           <li><span className="b-dest neutro">12 h</span><span>Nunca se ofrece un turno si no quedan 12 h de descanso con el anterior o el siguiente.</span></li>
         </ul>
       </div>
@@ -120,7 +152,7 @@ export function Bolsa() {
                     <div><dt>No pueden</dt><dd>{lista(r.no_pueden) || "—"}</dd></div>
                     <div><dt>Sin responder</dt><dd>{lista(r.sin_responder) || "—"}</dd></div>
                   </dl>
-                  {o.aviso_10d_en && <p className="b-nota">Aviso de urgencia enviado el {fechaCorta(o.aviso_10d_en)}.</p>}
+                  {o.aviso_10d_en && <p className="b-nota">Aviso a dirección enviado el {fechaCorta(o.aviso_10d_en)}.</p>}
                   {nadie && <p className="b-alerta">Nadie más puede cogerlo: cúbrelo desde Horarios.</p>}
                   <footer>
                     <button className="btn-l" onClick={() => ir("personas/horarios")}>Cubrir en Horarios</button>
