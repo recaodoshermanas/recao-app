@@ -227,7 +227,7 @@ export default function App() {
   else if (area.id === "plan" && sub.id === "calendario") contenido = <PlanCalendario user={user} />;
   else if (area.id === "tecnologia" && sub.id === "como-pedir") contenido = <TecGuia />;
   else if (area.id === "tecnologia") contenido = <TecSolicitudes key={extra || "lista"} user={user} extra={extra} />;
-  else if (area.id === "finanzas" && sub.id === "resumen") contenido = <><DineroHoy /><FinanzasResumen /></>;
+  else if (area.id === "finanzas" && sub.id === "resumen") contenido = <><DineroHoy /><FinanzasResumen onEditMonth={editarMes} /></>;
   else if (area.id === "finanzas") {
     const pantalla = {
       resultados: <FinanzasResultados onEditMonth={editarMes} />, caja: <FinanzasCaja />, sobres: <EfectivoSobres />, compras: <FinanzasCompras />,

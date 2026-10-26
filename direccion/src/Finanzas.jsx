@@ -108,8 +108,12 @@ function GraficoMeses({ meses }) {
 }
 
 // ---------- 1. Resumen ----------
-export function FinanzasResumen() {
+export function FinanzasResumen({ onEditMonth }) {
   const { d, fallo } = useFinanzas();
+  const [extra, setExtra] = useState([]);
+  useEffect(() => {
+    supabase.rpc("finanzas_avisos_extra").then(({ data }) => { if (Array.isArray(data)) setExtra(data); }, () => {});
+  }, [d]);
   if (!d) return <Estado fallo={fallo} />;
   const c = mesEnCurso(d);
   const cerrados = d.meses.filter((m) => m.cerrado).slice(-12);
@@ -132,6 +136,8 @@ export function FinanzasResumen() {
   if (dup.length) avisos.push({ t: `Proveedores escritos de varias formas: ${dup.map((p) => p.variantes.join(" / ")).join("; ")}. Conviene unificarlos.`, ruta: "finanzas/compras" });
   const mesN = parseDate(d.mes_actual).getMonth();
   if ([0, 3, 6, 9].includes(mesN) && parseDate(hoy).getDate() <= 20) avisos.push({ t: `Este mes toca el pago trimestral de IVA (hasta el día 20). No está en la previsión de abajo.` });
+
+  avisos.push(...extra);
 
   return (
     <>
@@ -160,7 +166,7 @@ export function FinanzasResumen() {
       {avisos.length > 0 && (
         <section className="avisos favisos" aria-label="Avisos">
           {avisos.map((a, i) => a.ruta
-            ? <a key={i} className="aviso" href={`#/${a.ruta}`}><b>!</b><span>{a.t}</span><i aria-hidden="true">→</i></a>
+            ? <a key={i} className="aviso" href={`#/${a.ruta}`} onClick={a.mes && onEditMonth ? (e) => { e.preventDefault(); onEditMonth(a.mes); } : undefined}><b>!</b><span>{a.t}</span><i aria-hidden="true">→</i></a>
             : <div key={i} className="aviso"><b>!</b><span>{a.t}</span></div>)}
         </section>
       )}
