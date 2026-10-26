@@ -4,6 +4,7 @@ import { supabase } from "../../src/lib/supabase.js";
 import { initTips } from "./charts.js";
 import { eur, eurK, pct, num, mesCorto, mesAnio, parseDate } from "./fmt.js";
 import { CajaFuerte } from "./CajaFuerte.jsx"; // CAJA FUERTE (#11)
+import { InformeMensual } from "./finanzas/InformeMensual.jsx"; // #65
 
 const CATS = [
   { id: "mercancia", label: "Compras de mercancía" },
@@ -189,6 +190,8 @@ export function FinanzasResumen({ onEditMonth }) {
       </div>
 
       {ult && <Estructura mes={ult} />}
+
+      <InformeMensual />
     </>
   );
 }
