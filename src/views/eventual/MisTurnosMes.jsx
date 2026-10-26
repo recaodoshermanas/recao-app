@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C, btnDark } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
-import { ymd, horasTurno } from "../../lib/turnos.js";
+import { ymd, horasTurno, horasExtraAuto } from "../../lib/turnos.js";
 import { horasDeTurno, plusFestivo } from "../../lib/festivos.js";
 import { DIAS_SOLTAR, esTurnoTrabajo, horarioDe, fechaLarga, diasHasta } from "../../lib/bolsa.js";
 import { IcoCalendar } from "../../lib/icons.jsx";
@@ -35,7 +35,8 @@ export function calcularMes({ horarios, extras, festivos, ahora = new Date() }) 
   (extras || []).forEach((e) => { extrasPorDia[e.fecha] = (extrasPorDia[e.fecha] || 0) + Number(e.horas || 0); });
   const trabajados = [], proximos = [];
   (horarios || []).filter((h) => esTurnoTrabajo(h.turno)).sort((a, b) => a.fecha.localeCompare(b.fecha)).forEach((h) => {
-    const horas = horasDeTurno(h.turno, h.fecha);
+    // La hora extra automática (Apoyo 2 del sábado) ya llega en horas_extras: no se cuenta también como hora de turno
+    const horas = horasDeTurno(h.turno, h.fecha) - horasExtraAuto(h.turno, h.fecha);
     const fin = finTurno(h.turno, h.fecha);
     const fest = festivos[h.fecha];
     const domingo = new Date(`${h.fecha}T12:00:00`).getDay() === 0;

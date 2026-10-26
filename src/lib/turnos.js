@@ -10,17 +10,28 @@ export const TURNOS = {
   "Permiso":    { label: "Permiso",    horas: "",            tipo: "libre",    bg: "#E4DAF0", fg: "#5a4a7a" },
 };
 
-// Horarios que cambian según el día de la semana (desde el sábado 24/10/2026).
-// La misma regla está en la base de datos (función turno_horas): si se cambia aquí, cambiarla también allí.
+// Horarios que cambian según el día de la semana. Cada regla vale desde su fecha (y hasta la siguiente).
+// La misma regla está en la base de datos (función turno_horas y turno_extra_auto): si se cambia aquí, cambiarla también allí.
 export const VARIANTES_DESDE = "2026-10-24";
-const VARIANTES = { 6: { "Apoyo 1": "11:00-17:00" }, 0: { "Apoyo 2": "16:00-22:00", "Apoyo 3": "17:00-23:00" } };
-export const NOTA_FINDE = "Sábado: Apoyo 1 11:00-17:00 · Domingo: Apoyo 2 16:00-22:00, Apoyo 3 17:00-23:00";
+const REGLAS = [
+  { desde: "2026-10-24", dias: { 6: { "Apoyo 1": "11:00-17:00" }, 0: { "Apoyo 2": "16:00-22:00", "Apoyo 3": "17:00-23:00" } } },
+  // #55: el Apoyo 1 del sábado vuelve a 10-16 y el Apoyo 2 del sábado es 16-23 (6 h de turno + 1 h extra automática)
+  { desde: "2026-10-31", dias: { 6: { "Apoyo 2": "16:00-23:00" }, 0: { "Apoyo 2": "16:00-22:00", "Apoyo 3": "17:00-23:00" } } },
+];
+export const NOTA_FINDE = "Sábado: Apoyo 2 16:00-23:00 (1 h extra) · Domingo: Apoyo 2 16:00-22:00, Apoyo 3 17:00-23:00";
+function reglaDe(fecha) { let r = null; for (const x of REGLAS) if (fecha >= x.desde) r = x; return r; }
 // Horas del turno un día concreto (fecha "AAAA-MM-DD"); sin fecha, las de siempre
 export function horasTurno(turno, fecha) {
   const base = TURNOS[turno]?.horas || "";
-  if (!base || !fecha || fecha < VARIANTES_DESDE) return base;
+  if (!base || !fecha) return base;
+  const r = reglaDe(fecha); if (!r) return base;
   const dow = new Date(`${fecha}T12:00:00`).getDay();
-  return VARIANTES[dow]?.[turno] || base;
+  return r.dias[dow]?.[turno] || base;
+}
+// Horas extra que se apuntan solas por hacer ese turno ese día (ya están en la tabla horas_extras)
+export function horasExtraAuto(turno, fecha) {
+  if (!fecha || fecha < "2026-10-31" || turno !== "Apoyo 2") return 0;
+  return new Date(`${fecha}T12:00:00`).getDay() === 6 ? 1 : 0;
 }
 
 export const TURNO_OPCIONES = ["Mañana", "Tarde", "Apoyo 1", "Apoyo 2", "Apoyo 3", "Descanso", "Vacaciones", "Baja", "Permiso"];
