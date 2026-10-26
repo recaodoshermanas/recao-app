@@ -386,3 +386,25 @@ button.enlace { border: 0; background: none; cursor: pointer; padding: 0; font: 
 .fest-sin { display: block; color: #a8431e; font-size: 12px; font-weight: 700; margin-top: 2px; }
 .fest-l li .pf { display: block; }
 .aviso-l { background: #fff7e0; border: 1px solid #f0d88a; color: #6a4a08; border-radius: 10px; padding: 8px 12px; font-size: 13px; margin: 0 0 12px; }
+
+/* #56 · Tareas extra del cierre de turno */
+.cierre-fila .t .extra-n { font-style: normal; margin-left: 6px; font-size: 12px; font-weight: 700; color: var(--text-2); background: var(--grid); border-radius: 999px; padding: 1px 7px; }
+.cierre-det .resumen-cierre { margin: 8px 0 0; }
+.cierre-det .sub-tit, .panel .sub-tit { font-size: 13px; font-weight: 700; margin: 14px 0 4px; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
+.checklist.ver li.extra span { color: var(--text-2); }
+.aviso-repite { background: rgba(178,65,42,.1); border: 1px solid rgba(178,65,42,.3); color: var(--down); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; font-weight: 700; margin: 0 0 12px; }
+.te-lista { list-style: none; margin: 8px 0 0; padding: 0; }
+.te-lista li { border-bottom: 1px solid var(--grid); }
+.te-lista button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 4px; border: 0; background: none; cursor: pointer; text-align: left; font-size: 14px; }
+.te-lista button:hover { background: rgba(0,0,0,.02); }
+.te-lista button.repite .te-txt b { color: var(--down); }
+.te-lista .te-txt { flex: 1; min-width: 0; }
+.te-lista .te-txt b { display: block; overflow-wrap: anywhere; }
+.te-lista .te-txt small, .te-lista .te-n small { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
+.te-lista .te-n { text-align: right; min-width: 44px; }
+.te-lista .te-n b { font-size: 17px; }
+.te-quien { display: grid; grid-template-columns: 120px 1fr 30px; gap: 10px; align-items: center; padding: 6px 4px; font-size: 14px; }
+.te-cierres { list-style: none; margin: 4px 0 0; padding: 0; }
+.te-cierres button { width: 100%; display: grid; grid-template-columns: 1fr auto 14px; gap: 10px; align-items: center; padding: 9px 4px; border: 0; border-bottom: 1px solid var(--grid); background: none; cursor: pointer; text-align: left; font-size: 14px; }
+.te-cierres button span:first-child { font-weight: 600; text-transform: capitalize; }
+.te-cierres button:hover { background: rgba(0,0,0,.02); }

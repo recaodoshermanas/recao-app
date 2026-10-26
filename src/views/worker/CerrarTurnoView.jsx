@@ -7,6 +7,10 @@ import { ymd } from "../../lib/turnos.js";
 
 function isoDow(d) { const g = d.getDay(); return g === 0 ? 7 : g; }
 const SUG = { "Mañana": "mañana", "Apoyo 1": "mañana", "Tarde": "tarde", "Apoyo 2": "tarde" };
+// #56: tareas extra (fuera de la checklist). Misma normalización que la base de datos (tarea_extra_clave)
+export const claveExtra = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+const MAX_EXTRA = 80;
+const chipExtra = { fontFamily: F, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: C.goldSub, background: "#FBF0DA", borderRadius: 999, padding: "3px 8px", flexShrink: 0 };
 const grpLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: C.mutL, margin: "2px 2px 10px" };
 
 export function CerrarTurnoView({ user }) {
@@ -28,6 +32,11 @@ export function CerrarTurnoView({ user }) {
   const [saving, setSaving] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const [msg, setMsg] = useState("");
+  const [extras, setExtras] = useState([]);
+  const [extrasCerradas, setExtrasCerradas] = useState([]);
+  const [hojaExtra, setHojaExtra] = useState(false);
+  const [txtExtra, setTxtExtra] = useState("");
+  const [sugerencias, setSugerencias] = useState(null);
 
   const [caja, setCaja] = useState({ c1e: "", c1t: "", c2e: "", c2t: "" });
   const [provList, setProvList] = useState([]);
@@ -49,6 +58,7 @@ export function CerrarTurnoView({ user }) {
       if (ex[0]) {
         const items = await sb.select("cierre_items", `select=tarea_texto,hecha,justificacion&cierre_id=eq.${ex[0].id}`);
         setYaCerrado(items);
+        try { setExtrasCerradas(await sb.select("cierre_tareas_extra", `select=texto&cierre_id=eq.${ex[0].id}&order=id.asc`)); } catch (e) { setExtrasCerradas([]); }
         try {
           const cc = await sb.select("cierres_caja", `select=*&cierre_turno_id=eq.${ex[0].id}`);
           if (cc[0]) {
@@ -75,8 +85,22 @@ export function CerrarTurnoView({ user }) {
     } catch (e) { setProvList([]); }
   }, [fecha]);
 
-  const elegir = (tn) => { setTurno(tn); setModo("ver"); load(tn); };
-  const volver = () => { setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setCajaCerrada(null); setMsg(""); };
+  const elegir = (tn) => { setTurno(tn); setModo("ver"); setExtras([]); load(tn); };
+  const volver = () => { setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setCajaCerrada(null); setExtras([]); setMsg(""); };
+
+  const abrirHojaExtra = async () => {
+    setTxtExtra(""); setHojaExtra(true);
+    if (sugerencias === null) {
+      try { const r = await sb.rpc("tareas_extra_sugerencias", {}); setSugerencias(Array.isArray(r) ? r : []); } catch (e) { setSugerencias([]); }
+    }
+  };
+  const anadirExtra = () => {
+    const t = txtExtra.replace(/\s+/g, " ").trim();
+    if (!t || t.length > MAX_EXTRA) return;
+    if (!extras.some((x) => claveExtra(x) === claveExtra(t))) setExtras((xs) => [...xs, t]);
+    setHojaExtra(false); setTxtExtra("");
+  };
+  const quitarExtra = (i) => setExtras((xs) => xs.filter((_, k) => k !== i));
   const abrirCierre = () => { setMsg(""); const st = {}; tareas.forEach(t => { st[t.id] = { estado: null, nota: "" }; }); setEstado(st); setModo("cerrar"); };
   const setEst = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], estado: v } }));
   const setNota = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], nota: v } }));
@@ -104,7 +128,7 @@ export function CerrarTurnoView({ user }) {
       const items = tareas.map(t => ({ tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", justificacion: justif(estado[t.id]) }));
       const p_caja = sinCaja ? null : { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
       const p_facturas = sinCaja ? [] : Object.entries(selProv).map(([id, c]) => ({ id, caja: c }));
-      await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas });
+      await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras });
       setConfirmando(false);
       setModo("ver");
       await load(turno);
@@ -223,6 +247,14 @@ export function CerrarTurnoView({ user }) {
                 </div>
               </div>
             ))}
+            {extrasCerradas.length > 0 && <div style={{ ...grpLbl, marginTop: 16 }}>Otras tareas que hiciste</div>}
+            {extrasCerradas.map((x, i) => (
+              <div key={`x${i}`} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 13, padding: "11px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ width: 24, height: 24, borderRadius: 7, background: C.grn, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IcoCheck size={15} color="#fff" sw={3} /></span>
+                <div style={{ flex: 1, fontFamily: F, fontSize: 14, color: C.char }}>{x.texto}</div>
+                <span style={chipExtra}>Extra</span>
+              </div>
+            ))}
             {cajaCerrada && (() => {
               const c = cajaCerrada.row;
               const facs1 = cajaCerrada.facturas.filter(f => f.caja === 1);
@@ -275,6 +307,20 @@ export function CerrarTurnoView({ user }) {
             {diarias.map(tarjetaTarea)}
             {semanales.length > 0 && <div style={{ ...grpLbl, marginTop: 18 }}>Hoy además</div>}
             {semanales.map(tarjetaTarea)}
+
+            <div style={{ ...grpLbl, marginTop: 18 }}>Otras tareas que has hecho</div>
+            <div style={{ background: "#fff", border: `1px dashed ${C.brd}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
+              <div style={{ fontFamily: F, fontSize: 13, color: C.mut, lineHeight: 1.45, marginBottom: extras.length ? 10 : 12 }}>¿Has hecho algo que no está en la lista? Apúntalo para que quede registrado.</div>
+              {extras.map((x, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: "#F3FAF5", border: "1px solid #BFE6CC", borderRadius: 11, padding: "9px 10px 9px 12px", marginBottom: 8 }}>
+                  <span style={{ width: 20, height: 20, borderRadius: 6, background: C.grn, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IcoCheck size={13} color="#fff" sw={3} /></span>
+                  <span style={{ flex: 1, minWidth: 0, fontFamily: F, fontSize: 14, color: C.char, overflowWrap: "anywhere" }}>{x}</span>
+                  <span style={chipExtra}>Extra</span>
+                  <button onClick={() => quitarExtra(i)} aria-label={`Quitar ${x}`} style={{ width: 30, height: 30, flexShrink: 0, border: "none", background: "none", color: C.mut, fontSize: 20, lineHeight: 1, cursor: "pointer" }}>×</button>
+                </div>
+              ))}
+              <button onClick={abrirHojaExtra} style={{ width: "100%", padding: "10px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 13.5, fontWeight: 700, border: `1.5px solid ${C.brd}`, background: "#fff", color: C.char }}>+ Añadir tarea hecha</button>
+            </div>
             <button onClick={irACaja} disabled={!completo} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10, opacity: !completo ? 0.5 : 1 }}>{completo ? (sinCaja ? "Cerrar turno" : "Continuar al cierre de caja") : `Revisa todas (faltan ${tareas.length - revisadas})`}</button>
           </div>
         ) : (
@@ -323,6 +369,34 @@ export function CerrarTurnoView({ user }) {
           </div>
         )}
 
+      {hojaExtra && (() => {
+        const q = claveExtra(txtExtra);
+        const ya = new Set(extras.map(claveExtra));
+        const sug = (sugerencias || []).filter((t) => !ya.has(claveExtra(t)) && (!q || claveExtra(t).includes(q))).slice(0, 5);
+        const largo = txtExtra.trim().length;
+        return (
+          <div onClick={() => setHojaExtra(false)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: C.cream, width: "100%", maxWidth: 540, maxHeight: "88vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "18px 18px 24px" }}>
+              <div style={{ width: 40, height: 4, background: C.brd, borderRadius: 999, margin: "0 auto 16px" }} />
+              <div style={{ fontFamily: SF, fontSize: 20, color: C.char, marginBottom: 14 }}>Añadir tarea hecha</div>
+              <label style={{ display: "block", fontFamily: F, fontSize: 12.5, fontWeight: 600, color: C.mut, marginBottom: 6 }} htmlFor="txt-extra">¿Qué has hecho?</label>
+              <input id="txt-extra" autoFocus value={txtExtra} maxLength={MAX_EXTRA} onChange={e => setTxtExtra(e.target.value)} onKeyDown={e => { if (e.key === "Enter") anadirExtra(); }} placeholder="Por ejemplo: limpiar la cámara de lácteos" style={{ width: "100%", boxSizing: "border-box", padding: "12px 13px", border: `1.5px solid ${C.brd}`, borderRadius: 11, fontFamily: F, fontSize: 15, color: C.char, outline: "none", background: "#fff" }} />
+              <div style={{ fontFamily: F, fontSize: 11, color: largo >= MAX_EXTRA ? C.red : C.mutL, textAlign: "right", marginTop: 4 }}>{largo}/{MAX_EXTRA}</div>
+              {sug.length > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 8 }}>{q ? "Parecidas" : "Las que más se apuntan"}</div>
+                  {sug.map((t) => (
+                    <button key={t} onClick={() => setTxtExtra(t)} style={{ display: "block", width: "100%", textAlign: "left", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 10, padding: "10px 12px", marginBottom: 7, cursor: "pointer", fontFamily: F, fontSize: 13.5, color: C.char }}>{t}</button>
+                  ))}
+                </div>
+              )}
+              <button onClick={anadirExtra} disabled={!largo} style={{ ...btnDark, fontSize: 16, padding: 15, marginTop: 12, opacity: largo ? 1 : 0.5 }}>Añadir</button>
+              <button onClick={() => setHojaExtra(false)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {confirmando && (
         <div onClick={() => setConfirmando(false)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div onClick={e => e.stopPropagation()} style={{ background: C.cream, width: "100%", maxWidth: 540, maxHeight: "88vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "18px 18px 24px" }}>
@@ -339,7 +413,20 @@ export function CerrarTurnoView({ user }) {
                 <div style={{ fontFamily: SF, fontSize: 26, color: noHechasList.length ? "#B23A2C" : C.mut, lineHeight: 1 }}>{noHechasList.length}</div>
                 <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: noHechasList.length ? "#B23A2C" : C.mut, marginTop: 4 }}>sin hacer</div>
               </div>
+              <div style={{ flex: 1, background: "#F0EADF", borderRadius: 12, padding: "12px 14px", textAlign: "center" }}>
+                <div style={{ fontFamily: SF, fontSize: 26, color: C.char, lineHeight: 1 }}>{extras.length}</div>
+                <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: C.mut, marginTop: 4 }}>extra</div>
+              </div>
             </div>
+
+            {extras.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 8 }}>Tareas extra</div>
+                {extras.map((x, i) => (
+                  <div key={i} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 10, padding: "9px 12px", marginBottom: 7, fontFamily: F, fontSize: 13, color: C.char }}>{x}</div>
+                ))}
+              </div>
+            )}
 
             {noHechasList.length > 0 && (
               <div style={{ marginBottom: 14 }}>

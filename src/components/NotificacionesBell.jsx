@@ -15,7 +15,7 @@ function hace(ts) {
 // El botón de los correos (función notificaciones-email) usa este mismo mapa: si se cambia aquí, cambiarlo también allí.
 const DESTINO = {
   aviso_incidencia: "avisos", resolucion: "avisos", plazo_alegacion: "avisos", acuse_pendiente: "avisos", sancion: "avisos",
-  incidencia_reportada: "incidencias", alegacion_presentada: "disciplina", umbral_cerca: "disciplina", prescripcion_proxima: "disciplina", acuse_5d: "disciplina", cierre_incompleto: "cierres",
+  tarea_extra_repetida: "tareas_extra", incidencia_reportada: "incidencias", alegacion_presentada: "disciplina", umbral_cerca: "disciplina", prescripcion_proxima: "disciplina", acuse_5d: "disciplina", cierre_incompleto: "cierres",
   vacaciones_pendiente: "vacaciones", vacaciones_resuelto: "vacaciones", vacaciones_conflicto: "vacaciones",
   // Recepción de pedidos: la trabajadora vuelve a «Recepcionar pedido»; dirección, a Producto → Recepción
   fichaje_resuelto: "fichajes", fichaje_solicitud: "fichajes_admin",
@@ -104,7 +104,10 @@ export function NotificacionesBell({ user }) {
   const clic = async (n) => {
     const destino = DESTINO[n.tipo];
     // Las de tecnología llevan a la solicitud concreta (el título empieza por «#N ·»)
-    const ref = destino === "solicitudes_tec" ? (/^#(\d+)/.exec(n.titulo || "") || [])[1] : undefined;
+    // Las de tarea extra repetida (#56) abren el detalle de esa tarea (va entre comillas en el texto)
+    const ref = destino === "solicitudes_tec" ? (/^#(\d+)/.exec(n.titulo || "") || [])[1]
+      : destino === "tareas_extra" ? "tareas-extra" + ((/"(.+)"/.exec(n.cuerpo || "") || [])[1] ? ":" + encodeURIComponent(/"(.+)"/.exec(n.cuerpo)[1]) : "")
+      : undefined;
     if (destino) { setOpen(false); window.dispatchEvent(new CustomEvent("recao-nav", { detail: { destino, ref } })); }
     if (!n.leida) {
       setItems(prev => prev.map(x => x.id === n.id ? { ...x, leida: true } : x));
