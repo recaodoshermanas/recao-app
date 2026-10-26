@@ -7,6 +7,7 @@ import { Sec } from "../../components/Sec.jsx";
 import { AperturaSobres, DescuadreSobres, useSobres } from "./AperturaSobres.jsx"; // SOBRES (#13)
 import { EposCierres } from "./EposCierres.jsx"; // #15
 import { SalariosMes } from "./SalariosMes.jsx"; // #18
+import { StockCierre } from "./StockCierre.jsx"; // #61
 import { GastosFijos } from "./GastosFijos.jsx"; // #28
 
 export function DatosMesView({ facturas, monthlyData, config, onReload, initialMonth }) {
@@ -17,6 +18,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
 
   const md = monthlyData[selMonth] || {};
   const sobres = useSobres(selMonth); // SOBRES (#13): solo lo ven los socios
+  const [stockActivo, setStockActivo] = useState(false); // #61
   const isSummary = !!md.resumen_legacy;
 
   const [ventas, setVentas] = useState("");
@@ -137,6 +139,9 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
       {sobres.datos !== false && <Sec title="Efectivo" sub="Los sobres de los cierres de caja" />}
       <AperturaSobres mes={selMonth} datos={sobres.datos} setDatos={sobres.setDatos} />
       {sobres.datos !== false && <EposCierres mes={selMonth} />}
+
+      {stockActivo && <Sec title="Stock" sub="Fotos del stock de Epos valorado a coste (con IVA y recargo)" />}
+      <StockCierre mes={selMonth} onActivo={setStockActivo} />
 
       <Sec title="Facturas proveedores" sub="Registradas por trabajadoras" />
       <div style={crd}>

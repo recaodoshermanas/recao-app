@@ -124,7 +124,7 @@ export function FinanzasResumen({ onEditMonth }) {
   // avisos
   const avisos = [];
   if (ult && ult.epos_coste) {
-    const gap = ult.mercancia - ult.epos_coste;
+    const gap = n0(ult.compras_mercancia ?? ult.mercancia) - ult.epos_coste;
     if (gap > 1000) avisos.push({ t: `En ${mesAnio(ult.mes).toLowerCase()} se compraron ${eur(gap)} más de lo que costó lo vendido según Epos. O crece el stock o hay costes que no cuadran.`, ruta: "finanzas/compras" });
   }
   const hoy = d.hoy;
@@ -189,12 +189,55 @@ export function FinanzasResumen({ onEditMonth }) {
         </div>
       </div>
 
+      <StockResumen />
+
       {ult && <Estructura mes={ult} />}
 
       <InformeMensual />
     </>
   );
 }
+// #61 · Bloque «Stock» del Resumen: solo cuando dirección ha puesto la fecha del inventario inicial
+function StockResumen() {
+  const [s, setS] = useState(null);
+  useEffect(() => { supabase.rpc("stock_resumen").then(({ data }) => setS(data || null), () => setS(null)); }, []);
+  if (!s || !s.activo) return null;
+  const u = s.ultima;
+  const fechaTxt = (f) => parseDate(f).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
+  const max = Math.max(1, ...(s.evolucion || []).map((e) => n0(e.valor)));
+  return (
+    <div className="grid">
+      <div className="card c12">
+        <div className="head">
+          <div><h2>Stock</h2><p className="sub">{u ? `Foto de la noche del ${fechaTxt(u.fecha)} · valorado a coste con IVA y recargo` : `Aún no hay foto del stock desde el inventario del ${fechaTxt(s.inventario)}`}</p></div>
+          <a className="enlace" href="#/finanzas/resultados/cierre">Cierre de mes →</a>
+        </div>
+        {s.error_ultimo && (!u || s.error_ultimo.fecha > u.fecha) && <p className="aviso-txt">No se pudo guardar la foto de la noche del {fechaTxt(s.error_ultimo.fecha)}: {s.error_ultimo.error}</p>}
+        {u && (
+          <div className="grid sin-margen">
+            <Kpi titulo="Valor del stock" valor={eur(sinDecimales(u.valor))} sub={`${num(u.productos_con_stock)} productos con stock`} />
+            <Kpi titulo="Unidades" valor={num(u.unidades)} sub={n0(u.kg) ? `y ${num(u.kg, 1)} kg de productos al peso` : "Sin productos al peso"} />
+            <Kpi titulo="Sin valorar" valor={`${num(u.sin_valorar_n)} productos`} sub={`${num(u.sin_valorar_unid)} unidades sin coste en Epos: no suman`} tono={u.sin_valorar_n ? "mal" : ""} />
+            <Kpi titulo="Stock negativo" valor={`${num(u.negativos_n)} productos`} sub="No restan del valor: salen aparte" tono={u.negativos_n ? "mal" : ""} />
+          </div>
+        )}
+        {(s.evolucion || []).length > 0 && (
+          <ul className="fbarras">
+            {s.evolucion.map((e) => (
+              <li key={e.fecha}>
+                <span className="n">{fechaTxt(e.fecha)}</span>
+                <span className="bar-cell"><span className="bar" style={{ width: `${(n0(e.valor) / max) * 100}%` }} /></span>
+                <span className="v">{eur(sinDecimales(e.valor))}</span>
+                <span className="m" />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const diaCortito = (f) => parseDate(f).toLocaleDateString("es-ES", { weekday: "short", day: "numeric" });
 
 function Estructura({ mes }) {
@@ -240,7 +283,13 @@ export function FinanzasResultados({ onEditMonth }) {
   const val = (m, v) => (modo === "pct" ? (m.ingresos ? pct(v / m.ingresos * 100, 1) : "–") : num(v));
   const filas = [
     { k: "ventas", l: "Ventas (con IVA)" }, { k: "paqueteria", l: "Paquetería" }, { k: "ingresos", l: "Ingresos", b: true },
-    ...CATS.map((c) => ({ k: c.id, l: c.label, neg: true })),
+    // #61: en los meses con stock inicial y final, la mercancía es el coste de lo vendido (compras + variación de existencias)
+    ...(meses.some((m) => m.variacion_existencias != null)
+      ? [{ k: "compras_mercancia", l: "Compras de mercancía", neg: true, get: (m) => (m.compras_mercancia != null ? m.compras_mercancia : m.mercancia) },
+         { k: "variacion_existencias", l: "Variación de existencias", neg: true, get: (m) => m.variacion_existencias },
+         { k: "mercancia", l: "Coste de la mercancía vendida", neg: true, b2: true, get: (m) => m.mercancia },
+         ...CATS.filter((c) => c.id !== "mercancia").map((c) => ({ k: c.id, l: c.label, neg: true }))]
+      : CATS.map((c) => ({ k: c.id, l: c.label, neg: true }))),
     { k: "gastos", l: "Gastos", b: true, neg: true },
     // #36: desde octubre de 2026, la suma de los descuadres de los sobres (resta si falta dinero, suma si sobra)
     ...(meses.some((m) => m.mes >= "2026-10") ? [{ k: "descuadres_caja", l: "Descuadres de caja" }] : []),
@@ -252,7 +301,7 @@ export function FinanzasResultados({ onEditMonth }) {
     { l: "Venta sin IVA (Epos)", f: (m) => m.epos_sin_iva },
     { l: "Coste de lo vendido (Epos)", f: (m) => m.epos_coste },
     { l: "Margen real", f: (m) => (m.epos_sin_iva ? (m.epos_sin_iva - m.epos_coste) / m.epos_sin_iva * 100 : null), pct: true },
-    { l: "Compras − coste de lo vendido", f: (m) => (m.epos_coste ? m.mercancia - m.epos_coste : null), alerta: true },
+    { l: "Compras − coste de lo vendido", f: (m) => (m.epos_coste ? n0(m.compras_mercancia ?? m.mercancia) - m.epos_coste : null), alerta: true },
   ];
   return (
     <>
@@ -269,9 +318,9 @@ export function FinanzasResultados({ onEditMonth }) {
             <thead><tr><th />{meses.map((m) => <th key={m.mes} className={m.mes === mes.mes ? "sel" : ""}><button onClick={() => setSel(m.mes)}>{mesCorto(m.mes)}<small>{String(parseDate(m.mes).getFullYear()).slice(2)}</small></button></th>)}</tr></thead>
             <tbody>
               {filas.map((f) => (
-                <tr key={f.k} className={`${f.b ? "b" : ""}${f.r ? " r" : ""}${f.r2 ? " r tras" : ""}`}>
+                <tr key={f.k} className={`${f.b || f.b2 ? "b" : ""}${f.r ? " r" : ""}${f.r2 ? " r tras" : ""}`}>
                   <th>{f.l}</th>
-                  {meses.map((m) => <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${f.r ? (m.resultado >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}`}>{f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k]))}</td>)}
+                  {meses.map((m) => <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${f.r ? (m.resultado >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}`}>{f.get ? (f.get(m) == null ? "–" : val(m, n0(f.get(m)))) : f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k]))}</td>)}
                 </tr>
               ))}
               <tr className="sep"><th colSpan={meses.length + 1}>Margen real según Epos (sin IVA)</th></tr>
@@ -450,7 +499,7 @@ export function FinanzasCompras() {
   const meses = d.meses.filter((m) => m.cerrado).slice(-6);
   const actual = d.meses[d.meses.length - 1];
   const nombres = [mesCorto(d.meses[d.meses.length - 3].mes), mesCorto(d.meses[d.meses.length - 2].mes), mesCorto(actual.mes)];
-  const total6 = meses.reduce((s, m) => s + (m.epos_coste ? m.mercancia - m.epos_coste : 0), 0);
+  const total6 = meses.reduce((s, m) => s + (m.epos_coste ? n0(m.compras_mercancia ?? m.mercancia) - m.epos_coste : 0), 0);
   return (
     <>
       <div className="card">
@@ -461,15 +510,15 @@ export function FinanzasCompras() {
             <thead><tr><th>Mes</th><th className="r">Ventas</th><th className="r">Compras</th><th className="r">Coste vendido</th><th className="r">Diferencia</th><th className="r">Compras / ventas</th></tr></thead>
             <tbody>
               {meses.map((m) => {
-                const dif = m.epos_coste ? m.mercancia - m.epos_coste : null;
+                const dif = m.epos_coste ? n0(m.compras_mercancia ?? m.mercancia) - m.epos_coste : null;
                 return (
                   <tr key={m.mes}>
                     <td>{mesAnio(m.mes)}</td>
                     <td className="r">{eur(sinDecimales(m.ventas))}</td>
-                    <td className="r">{eur(sinDecimales(m.mercancia))}</td>
+                    <td className="r">{eur(sinDecimales(m.compras_mercancia ?? m.mercancia))}</td>
                     <td className="r">{eur(sinDecimales(m.epos_coste))}</td>
                     <td className={`r b ${dif > 1000 ? "down" : ""}`}>{dif == null ? "–" : `${dif > 0 ? "+" : ""}${eur(sinDecimales(dif))}`}</td>
-                    <td className="r">{pct(m.mercancia / m.ventas * 100, 0)}</td>
+                    <td className="r">{pct(n0(m.compras_mercancia ?? m.mercancia) / m.ventas * 100, 0)}</td>
                   </tr>
                 );
               })}

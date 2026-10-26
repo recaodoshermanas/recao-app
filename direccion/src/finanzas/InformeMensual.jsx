@@ -76,9 +76,16 @@ function Informe({ inf }) {
       <Apartado n="3" titulo="Margen" texto={c.margen}>
         <Tabla cols={["", nombreMes(inf.mes), a ? mesAnio(a.mes) : "Mes anterior"]} filas={[
           ["Margen real de Epos", margenDe(m) == null ? "–" : pct(margenDe(m)), margenDe(a) == null ? "–" : pct(margenDe(a))],
-          ["Compras de mercancía (facturas)", eur(m.mercancia, 0), a ? eur(a.mercancia, 0) : "–"],
+          // #61: con stock inicial y final, «mercancia» ya es el coste de lo vendido y las compras van aparte
+          ["Compras de mercancía (facturas)", eur(m.compras_mercancia ?? m.mercancia, 0), a ? eur(a.compras_mercancia ?? a.mercancia, 0) : "–"],
+          ...((m.variacion_existencias != null || a?.variacion_existencias != null) ? [
+            ["Stock inicial", m.stock_inicial != null ? eur(m.stock_inicial, 0) : "–", a?.stock_inicial != null ? eur(a.stock_inicial, 0) : "–"],
+            ["Stock final", m.stock_final != null ? eur(m.stock_final, 0) : "–", a?.stock_final != null ? eur(a.stock_final, 0) : "–"],
+            ["Variación de existencias", m.variacion_existencias != null ? eur(m.variacion_existencias, 0) : "–", a?.variacion_existencias != null ? eur(a.variacion_existencias, 0) : "–"],
+            ["Coste de la mercancía vendida", m.variacion_existencias != null ? eur(m.mercancia, 0) : "–", a?.variacion_existencias != null ? eur(a.mercancia, 0) : "–"],
+          ] : []),
           ["Coste de lo vendido (Epos)", eur(m.epos_coste, 0), a ? eur(a.epos_coste, 0) : "–"],
-          ["Compras menos coste de lo vendido", eur(n0(m.mercancia) - n0(m.epos_coste), 0), a ? eur(n0(a.mercancia) - n0(a.epos_coste), 0) : "–"],
+          ["Compras menos coste de lo vendido", eur(n0(m.compras_mercancia ?? m.mercancia) - n0(m.epos_coste), 0), a ? eur(n0(a.compras_mercancia ?? a.mercancia) - n0(a.epos_coste), 0) : "–"],
         ]} />
       </Apartado>
 
