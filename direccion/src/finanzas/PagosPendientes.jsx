@@ -1,6 +1,6 @@
 // Finanzas → Facturas pendientes de pago (solicitud #27): facturas de proveedores que se pagan por transferencia,
 // cruzadas solas con las transferencias del banco (solicitud #23). Todo pasa por funciones pagos_* (solo dirección).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { Cargando, Panel, Pestanas, avisar, hoyStr } from "../ui.jsx";
 import { eur } from "../fmt.js";
@@ -34,6 +34,67 @@ function Numero({ p, busy, onGuardar }) {
   return <button className="btn-txt" title="Pulsa para copiar" style={{ display: "block", fontWeight: 700, marginTop: 2 }} onClick={() => copiar(p.numero, "Número copiado")}>Nº {p.numero}</button>;
 }
 
+// Foto de la factura (#53): viene de la recepción donde se metió (enlace privado y temporal de 1 hora)
+function Visor({ recepcionId, titulo, onClose }) {
+  const [paginas, setPaginas] = useState(null);
+  const [i, setI] = useState(0);
+  const [z, setZ] = useState(1);
+  const [fallo, setFallo] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    let vivo = true;
+    sb.fn("recepcion", { accion: "abrir", id: recepcionId })
+      .then((r) => { const rec = r?.recepcion || {}; const u = [rec.doc_url, rec.foto_url].filter(Boolean).filter((x, k, a) => a.indexOf(x) === k); if (vivo) { if (u.length) setPaginas(u); else setFallo(true); } })
+      .catch(() => vivo && setFallo(true));
+    return () => { vivo = false; };
+  }, [recepcionId]);
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowRight") { setI((n) => Math.min(n + 1, (paginas?.length || 1) - 1)); setZ(1); }
+      else if (e.key === "ArrowLeft") { setI((n) => Math.max(n - 1, 0)); setZ(1); }
+    };
+    document.addEventListener("keydown", k);
+    return () => document.removeEventListener("keydown", k);
+  }, [onClose, paginas]);
+  const zoom = (d) => setZ((v) => Math.min(5, Math.max(1, Math.round((v + d) * 10) / 10)));
+  const url = paginas?.[i];
+  const esPdf = url && /\.pdf(\?|$)/i.test(url);
+  const btn = { background: "rgba(255,255,255,.15)", color: "#fff", border: "1px solid rgba(255,255,255,.4)", borderRadius: 8, padding: "6px 12px", font: "inherit", cursor: "pointer" };
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Foto de la factura" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.85)", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 14px", color: "#fff", flexWrap: "wrap" }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        <strong style={{ flex: 1, minWidth: 120 }}>{titulo}</strong>
+        {paginas?.length > 1 && <>
+          <button style={btn} disabled={i === 0} aria-label="Anterior" onClick={() => { setI(i - 1); setZ(1); }}>←</button>
+          <span>{i + 1} / {paginas.length}</span>
+          <button style={btn} disabled={i === paginas.length - 1} aria-label="Siguiente" onClick={() => { setI(i + 1); setZ(1); }}>→</button>
+        </>}
+        {url && !esPdf && <>
+          <button style={btn} aria-label="Alejar" onClick={() => zoom(-0.5)}>−</button>
+          <button style={btn} aria-label="Acercar" onClick={() => zoom(0.5)}>+</button>
+        </>}
+        <button style={btn} aria-label="Cerrar" onClick={onClose}>✕</button>
+      </div>
+      <div ref={ref} style={{ flex: 1, overflow: "auto", display: "flex", justifyContent: "center", alignItems: z === 1 ? "center" : "flex-start", touchAction: "pan-x pan-y pinch-zoom" }}
+        onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        onWheel={(e) => { if (url && !esPdf && (e.ctrlKey || e.metaKey || !e.shiftKey)) zoom(e.deltaY < 0 ? 0.25 : -0.25); }}>
+        {fallo ? <p style={{ color: "#fff" }}>No se ha podido abrir la foto. Prueba de nuevo en un momento.</p>
+          : !url ? <p style={{ color: "#fff" }}>Cargando…</p>
+          : esPdf ? <iframe title="Factura en PDF" src={url} style={{ width: "min(960px, 100%)", height: "100%", border: 0, background: "#fff" }} />
+          : <img src={url} alt="Foto de la factura" style={{ width: `${z * 100}%`, maxWidth: z === 1 ? "100%" : "none", maxHeight: z === 1 ? "100%" : "none", objectFit: "contain" }} />}
+      </div>
+    </div>
+  );
+}
+
+function VerFoto({ p, onVer }) {
+  if (p.tipo !== "f") return null;
+  if (!p.recepcion_id) return <span className="pf" style={{ color: "var(--mut, #888)" }}>Sin foto</span>;
+  return <button className="btn-txt" title="Ver la foto de la factura" aria-label="Ver la foto de la factura" onClick={() => onVer(p)}>📄 Ver foto</button>;
+}
+
 const pideDias = (n) => (n <= 0 ? "hoy" : n === 1 ? "1 día" : `${n} días`);
 
 export function PagosPendientes() {
@@ -44,6 +105,7 @@ export function PagosPendientes() {
   const [busy, setBusy] = useState(false);
   const [sinClas, setSinClas] = useState({ sin_clasificar: [], ignorados: [] }); // #46
   const [verIgn, setVerIgn] = useState(false);
+  const [visor, setVisor] = useState(null); // #53
   const [sel, setSel] = useState(() => new Set()); // #50: facturas marcadas para copiar sus números juntos
   const marcar = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const guardarNumero = async (p, numero) => accion("pagos_factura_numero", { p_id: p.id, p_numero: numero }, "Número guardado");
@@ -152,6 +214,7 @@ export function PagosPendientes() {
                         <td style={{ width: 28 }}>{p.tipo === "f" && <input type="checkbox" aria-label="Marcar para copiar el número" checked={sel.has(`${p.tipo}-${p.id}`)} onChange={() => marcar(`${p.tipo}-${p.id}`)} />}</td>
                         <td style={{ whiteSpace: "nowrap" }}>{fecha(p.fecha)}<span className="pf">{p.dias > 0 ? `lleva ${pideDias(p.dias)}` : "de hoy"}</span></td>
                         <td>{p.nombre}<Numero p={p} busy={busy} onGuardar={(n) => guardarNumero(p, n)} />{p.etiqueta && <span className="es-chip com" style={{ marginLeft: 8 }}>{p.etiqueta}</span>}
+                          <VerFoto p={p} onVer={setVisor} />
                           {(p.quien || p.nota) && <span className="pf">{[p.quien && `Lo metió ${p.quien}`, p.nota].filter(Boolean).join(" · ")}</span>}</td>
                         <td className="r b">{eur(p.importe, 2)}</td>
                         <td className="r" style={{ whiteSpace: "nowrap" }}>
@@ -206,7 +269,7 @@ export function PagosPendientes() {
                   {d.pagadas.map((p) => (
                     <tr key={`${p.tipo}-${p.id}`}>
                       <td style={{ whiteSpace: "nowrap" }}>{fecha(p.pagada_fecha)}</td>
-                      <td>{p.grupo !== p.nombre && p.tipo === "f" ? `${p.grupo} · ` : ""}{p.nombre}<span className="pf">{p.tipo === "x" ? "Pago fijo" : "Factura"} del {fecha(p.fecha)}</span>{p.tipo === "f" && p.numero && <button className="btn-txt" title="Pulsa para copiar" style={{ display: "block", fontWeight: 700 }} onClick={() => copiar(p.numero, "Número copiado")}>Nº {p.numero}</button>}</td>
+                      <td>{p.grupo !== p.nombre && p.tipo === "f" ? `${p.grupo} · ` : ""}{p.nombre}<span className="pf">{p.tipo === "x" ? "Pago fijo" : "Factura"} del {fecha(p.fecha)}</span>{p.tipo === "f" && p.numero && <button className="btn-txt" title="Pulsa para copiar" style={{ display: "block", fontWeight: 700 }} onClick={() => copiar(p.numero, "Número copiado")}>Nº {p.numero}</button>}<VerFoto p={p} onVer={setVisor} /></td>
                       <td>{p.mov ? <>Banco · {fecha(p.mov.fecha)} · {eur(p.mov.importe, 2)}<span className="pf">{p.mov.concepto}</span></> : <>Marcada a mano{p.nota && <span className="pf">{p.nota}</span>}</>}</td>
                       <td className="r b">{eur(p.importe, 2)}</td>
                       <td className="r"><button className="btn-l" disabled={busy} onClick={() => { if (window.confirm("¿Volver a ponerla como pendiente de pago?")) accion("pagos_volver_pendiente", { p_tipo: p.tipo, p_id: p.id }, "Vuelve a pendiente"); }}>Volver a pendiente</button></td>
@@ -219,6 +282,7 @@ export function PagosPendientes() {
         </div>
       )}
 
+      {visor && <Visor recepcionId={visor.recepcion_id} titulo={`${visor.nombre}${visor.numero ? ` · Nº ${visor.numero}` : ""}`} onClose={() => setVisor(null)} />}
       {panel?.marcar && <PanelMarcar p={panel.marcar} onClose={() => setPanel(null)} onListo={() => { setPanel(null); cargar(); }} />}
       {panel?.importe && <PanelImporte p={panel.importe} onClose={() => setPanel(null)} onListo={() => { setPanel(null); cargar(); }} />}
       {panel?.config && <PanelFijos fijos={d.fijos} onClose={() => setPanel(null)} onListo={() => { setPanel(null); cargar(); }} />}
