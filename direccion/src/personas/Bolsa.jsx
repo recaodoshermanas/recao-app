@@ -108,6 +108,8 @@ export function Bolsa() {
         <p className="sub">Cuentan todos los turnos de la bolsa del mes (también descansos compensatorios y huecos por cambio de día). Los retirados o cubiertos a mano no cuentan como a tiempo; los que aún tienen más de 10 días por delante se esperan.</p>
       </div>
 
+      <AsignadosApp />
+
       <div className="card b-reglas">
         <div className="head">
           <div><h2>Cómo funciona</h2><p className="sub">Cada turno va solo a quien puede cubrirlo. Se publica con 3 semanas y los avisos salen en un resumen cada mañana.</p></div>
@@ -117,6 +119,7 @@ export function Bolsa() {
           <li><Destino t="Mañana" /><span><b>Mañana y Tarde</b>: quien libra ese día. Las primeras 48 h solo las de apoyo (cambian un día de esa semana, +2 h o +3 h); después, también las principales (+8 h y descanso compensatorio si hace falta).</span></li>
           <li><Destino t="Apoyo 1" /><span><b>Apoyo 1, 2 y 3</b>: bolsa de eventuales.</span></li>
           <li><span className="b-dest neutro">Avisos</span><span>A 10 días sin cubrir: recordatorio a quien puede y no ha respondido (WhatsApp y app). Si sigue sin cubrir 2 días después, aviso a dirección. Si 2 turnos llegan a 10 días sin cubrir en 30 días, alerta al encargado.</span></li>
+          <li><span className="b-dest neutro">30 días</span><span>La app publica sola los huecos a 30 días (y al momento si se marcan vacaciones, baja o permiso con menos). Un hueco de Mañana o Tarde pasa directamente a su apoyo (Mañana → Apoyo 1, Tarde → Apoyo 2) con las horas complementarias apuntadas, y su apoyo sale a la bolsa de eventuales. Si no se puede (12 h, menos de 3 días, apoyo ausente o eventual), avisa a dirección y sale a la bolsa de la plantilla. Si se anula la ausencia, se deshace todo.</span></li>
           <li><span className="b-dest neutro">12 h</span><span>Nunca se ofrece un turno si no quedan 12 h de descanso con el anterior o el siguiente.</span></li>
         </ul>
       </div>
@@ -237,5 +240,32 @@ function Publicar({ onClose, onHecho }) {
       {d != null && d < DIAS_ANTELACION && <p className="b-aviso">Faltan {d} días: menos de las 3 semanas habituales.{d <= 10 ? " Saldrá ya como urgente." : ""}</p>}
       <label className="campo">Nota (opcional)<input value={f.nota} onChange={(e) => setF({ ...f, nota: e.target.value })} placeholder="p. ej. hay que recibir al proveedor de fruta" /></label>
     </Panel>
+  );
+}
+
+// #57 · Lo que ha hecho la app sola con los huecos a 30 días
+const ACCION = { asignado: "Pasado a su apoyo", bolsa_plantilla: "No se pudo pasar: bolsa de plantilla", bolsa_eventuales: "Publicado a eventuales" };
+function AsignadosApp() {
+  const [l, setL] = useState(null);
+  useEffect(() => { sb.rpc("huecos_auto_lista", {}).then((r) => setL(Array.isArray(r) ? r : [])).catch(() => setL([])); }, []);
+  if (!l || !l.length) return null;
+  return (
+    <div className="card">
+      <div className="head"><div><h2>Asignados por la app</h2><p className="sub">Huecos que la app ha tratado sola (últimas 2 semanas y los que vienen)</p></div></div>
+      <ul className="b-auto">
+        {l.map((a) => (
+          <li key={a.id} className={a.estado === "deshecho" ? "deshecho" : a.accion === "bolsa_plantilla" ? "aviso" : ""}>
+            <span className="b-auto-f">{fechaLarga(a.fecha)}</span>
+            <span className="b-auto-t"><Turno t={a.turno} /></span>
+            <span className="b-auto-d">
+              <b>{a.estado === "deshecho" ? "Deshecho (se anuló la ausencia)" : ACCION[a.accion] || a.accion}</b>
+              {a.accion === "asignado" && <> · {a.apoyo} deja su {a.apoyo_turno}{a.horas ? ` (+${Number(a.horas).toLocaleString("es-ES")} h complementarias)` : ""}</>}
+              {a.motivo && <> · {a.motivo}</>}
+              {a.bolsa_turno && a.estado !== "deshecho" && <> · {a.bolsa_turno} en la bolsa: {a.bolsa_estado === "cubierto" ? `lo cubre ${a.cubierto_por || "—"}` : a.bolsa_estado === "abierto" ? "sin coger" : a.bolsa_estado}</>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
