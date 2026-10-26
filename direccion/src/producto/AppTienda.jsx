@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { Cargando, avisar, hace } from "../ui.jsx";
 
-const ORDEN = ["recepcion", "escanear", "sin_codigo", "anadir", "incidencia"];
+const ORDEN = ["recepcion", "escanear", "sin_codigo", "anadir", "incidencia", "marcado"];
 const msg = (e) => String(e?.message || e || "No se ha podido");
 
 export function AppTienda() {

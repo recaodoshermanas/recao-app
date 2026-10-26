@@ -35,6 +35,22 @@ const COLOR = { alta: ["#EAF0F8", "#2F5C8F"], coste: ["#FBF0DA", "#7A5410"], mar
 const chip = (k, t) => <span key={k + t} style={{ display: "inline-block", fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 999, background: COLOR[k][0], color: COLOR[k][1], marginRight: 4, whiteSpace: "nowrap" }}>{t}</span>;
 // Etiqueta «También en …» cuando el producto tiene otra tarea abierta en otra sección
 const Otras = ({ lista }) => (lista?.length ? <span style={{ display: "block", marginTop: 3 }}>{lista.map((s) => chip("otra", `También en ${NOMBRE_SEC[s]}`))}</span> : null);
+// #72: «Enviar a tienda» para comprobar si el producto trae precio marcado (solo productos de proveedores que pueden traerlo)
+function EnTienda({ a, tipo, onListo, busy, setBusy }) {
+  const hacer = async (fnName, txt) => {
+    setBusy(a.id);
+    try { onListo(await sb.rpc(fnName, { p_tipo: tipo, p_id: a.id })); avisar(txt); } catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  if (a.en_tienda) return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      {chip("alta", "En tienda")}<span className="pf" style={{ margin: 0 }}>Esperando a que lo comprueben en tienda.</span>
+      <button className="btn-txt" disabled={busy === a.id} onClick={() => hacer("marcado_recuperar", "Recuperado: ya puedes decidir")}>Recuperar</button>
+    </div>
+  );
+  return a.puede_marcado ? <button className="btn-l" disabled={busy === a.id} title="Las trabajadoras miran si el envase trae el precio marcado" onClick={() => hacer("marcado_enviar", "Enviado a tienda: lo verán en «Comprobar precio marcado»")}>Enviar a tienda</button> : null;
+}
+const NotaTienda = ({ a }) => (a.tienda_nota ? <span className="pf" style={{ color: "#5E5444", fontWeight: 700 }}>{a.tienda_nota}</span> : null);
 
 export function ProductosRevisar() {
   const [d, setD] = useState(null);
@@ -97,7 +113,7 @@ function SecPrecio({ lista, otras, onListo }) {
   };
   return (
     <div className="card mt">
-      <div className="head"><div><h2>Precio</h2><p className="sub">Productos cuyo margen, con el coste de su última factura, queda por debajo del 35 %. «Aceptar» pone el precio de la regla (coste completo ÷ 0,65, redondeado arriba a 0,10 €). «Mantener» no cambia nada y no vuelve a avisar hasta que cambie el coste. Si hay subida de coste pendiente, resuélvela antes.</p></div></div>
+      <div className="head"><div><h2>Precio</h2><p className="sub">Productos cuyo margen, con el coste de su última factura, queda por debajo del 35 %. «Aceptar» pone el precio de la regla (coste completo ÷ 0,65, redondeado arriba a 0,10 €). «Mantener» no cambia nada y no vuelve a avisar hasta que cambie el coste. Si hay subida de coste pendiente, resuélvela antes. «Enviar a tienda» (solo en proveedores que pueden traer precio marcado) pide a las trabajadoras que miren el envase: si trae precio marcado se pone ese precio en caja; si no, vuelve aquí con la nota.</p></div></div>
       {!lista.length ? <p className="empty">Nada pendiente de precio.</p> : (
         <div className="tabla-scroll">
           <table className="ranking">
@@ -107,18 +123,21 @@ function SecPrecio({ lista, otras, onListo }) {
                 const x = numero(otro[a.id]);
                 return (
                   <tr key={a.id}>
-                    <td><span className="pn">{a.nombre}</span><span className="pf">{[a.categoria, a.proveedor, a.origen].filter(Boolean).join(" · ")} · {hace(a.creado_en)}</span>{a.marcado && chip("prov", "Precio marcado")}<Otras lista={otras(a.product_id, "precio")} /></td>
+                    <td><span className="pn">{a.nombre}</span><span className="pf">{[a.categoria, a.proveedor, a.origen].filter(Boolean).join(" · ")} · {hace(a.creado_en)}</span>{a.marcado && chip("prov", "Precio marcado")}<NotaTienda a={a} /><Otras lista={otras(a.product_id, "precio")} /></td>
                     <td className="r">{eur(a.coste_completo, 3)}</td>
                     <td className="r">{eur(a.pvp_actual, 2)}<span className="pf" style={{ color: "#A3362B" }}>margen {pct(a.margen_actual)}</span></td>
                     <td className="r">{eur(a.pvp_regla, 2)}<span className="pf">margen {pct(margen(a.coste_completo, a.pvp_regla))}</span></td>
                     <td style={{ minWidth: 300 }}>
+                      {a.en_tienda ? <EnTienda a={a} tipo="precio" onListo={onListo} busy={busy} setBusy={setBusy} /> : <>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                         {!a.marcado && <button className="btn-p" disabled={busy === a.id} onClick={() => decidir(a, "aceptado")}>Aceptar {eur(a.pvp_regla, 2)}</button>}
                         <button className="btn-l" disabled={busy === a.id} onClick={() => decidir(a, "mantenido")}>Mantener</button>
                         <input className="mini-input" inputMode="decimal" placeholder="Otro precio" aria-label={`Otro precio para ${a.nombre}`} value={otro[a.id] ?? ""} onChange={(e) => setOtro({ ...otro, [a.id]: e.target.value })} style={{ width: 90 }} />
                         <button className="btn-l" disabled={busy === a.id || !(x > 0)} onClick={() => decidir(a, "otro")}>Guardar</button>
+                        <EnTienda a={a} tipo="precio" onListo={onListo} busy={busy} setBusy={setBusy} />
                       </div>
                       {x > 0 && <span className="pf">Con {eur(x, 2)}: margen {pct(margen(a.coste_completo, x))}</span>}
+                      </>}
                     </td>
                   </tr>
                 );
@@ -146,7 +165,7 @@ function SecCoste({ lista, otras, onListo }) {
   };
   return (
     <div className="card mt">
-      <div className="head"><div><h2>Subidas de coste</h2><p className="sub">La factura trae un coste más de un 20 % por encima del de Epos y no se ha aplicado. «Es real» guarda en Epos el coste completo (con IVA y recargo, impuestos incluidos) y, si el margen baja del 35 %, crea el aviso en «Precio». Conviene resolver esto antes que el precio.</p></div></div>
+      <div className="head"><div><h2>Subidas de coste</h2><p className="sub">La factura trae un coste más de un 20 % por encima del de Epos y no se ha aplicado. «Es real» guarda en Epos el coste completo (con IVA y recargo, impuestos incluidos) y, si el margen baja del 35 %, crea el aviso en «Precio». Conviene resolver esto antes que el precio. «Enviar a tienda»: si el envase trae precio marcado, se aplican el coste nuevo y ese precio; si no, vuelve aquí sin aplicar nada.</p></div></div>
       {!lista.length ? <p className="empty">No hay subidas de coste pendientes.</p> : (
         <div className="tabla-scroll">
           <table className="ranking">
@@ -154,14 +173,17 @@ function SecCoste({ lista, otras, onListo }) {
             <tbody>
               {lista.map((c) => (
                 <tr key={c.id}>
-                  <td><span className="pn">{c.nombre}</span><span className="pf">{[c.categoria, c.proveedor, c.origen].filter(Boolean).join(" · ")} · {hace(c.creado_en)}</span><Otras lista={otras(c.product_id, "coste")} /></td>
+                  <td><span className="pn">{c.nombre}</span><span className="pf">{[c.categoria, c.proveedor, c.origen].filter(Boolean).join(" · ")} · {hace(c.creado_en)}</span><NotaTienda a={c} /><Otras lista={otras(c.product_id, "coste")} /></td>
                   <td className="r">{eur(c.coste_ex_actual, 3)}<span className="pf">sin IVA</span></td>
                   <td className="r">{eur(c.coste_ex_nuevo, 3)}<span className="pf">sin IVA · completo {eur(c.coste_completo_nuevo, 3)}</span></td>
                   <td className="r b" style={{ color: "#A3362B" }}>+{pct(c.subida_pct)}</td>
                   <td className="r">{eur(c.pvp, 2)}<span className="pf">margen nuevo {pct(margen(c.coste_completo_nuevo, c.pvp))}</span></td>
                   <td style={{ minWidth: 230 }}>
-                    <button className="btn-p" disabled={busy === c.id} onClick={() => decidir(c, "aplicado")}>Es real, aplicar coste</button>{" "}
-                    <button className="btn-l" disabled={busy === c.id} onClick={() => decidir(c, "error")}>Es un error</button>
+                    {c.en_tienda ? <EnTienda a={c} tipo="coste" onListo={onListo} busy={busy} setBusy={setBusy} /> : <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button className="btn-p" disabled={busy === c.id} onClick={() => decidir(c, "aplicado")}>Es real, aplicar coste</button>
+                      <button className="btn-l" disabled={busy === c.id} onClick={() => decidir(c, "error")}>Es un error</button>
+                      <EnTienda a={c} tipo="coste" onListo={onListo} busy={busy} setBusy={setBusy} />
+                    </div>}
                   </td>
                 </tr>
               ))}
@@ -425,7 +447,7 @@ function SecTienda({ lista, nombres, otras, onHecho }) {
                   <td><span className="pn">{c.nombre}</span><span className="pf">{[c.barcode, nombres.get(c.creado_por) || "—", hace(c.creado_en)].filter(Boolean).join(" · ")}</span><Otras lista={otras(c.product_id, "tienda")} /></td>
                   <td className="r">{eur(c.pvp_antes, 2)}</td>
                   <td className="r"><b>{eur(c.pvp_nuevo, 2)}</b></td>
-                  <td>{c.motivo}{c.precio_marcado != null && <span style={{ display: "block", marginTop: 3 }}>{chip("prov", `Precio marcado · ${eur(c.precio_marcado, 2)}`)}</span>}</td>
+                  <td>{c.motivo}{c.precio_marcado != null && <span style={{ display: "block", marginTop: 3 }}>{chip("prov", `Precio marcado · ${eur(c.precio_marcado, 2)}`)}</span>}{c.foto_url && <a className="btn-txt" href={c.foto_url} target="_blank" rel="noopener noreferrer">Ver foto</a>}</td>
                   <td style={{ minWidth: 220 }}>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button className="btn-p" disabled={busy === c.id} onClick={() => revisado(c)}>Revisado</button>

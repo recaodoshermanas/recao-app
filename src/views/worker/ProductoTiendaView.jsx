@@ -255,3 +255,89 @@ function CambiarPrecio({ p, onVolver, onListo }) {
     </div>
   );
 }
+
+// ---------- #72 · Comprobar precio marcado: dirección manda productos a mirar en tienda ----------
+export function ComprobarMarcadoView({ onTerminar }) {
+  const [lista, setLista] = useState(null);
+  const [abierto, setAbierto] = useState(null);
+  const [hecho, setHecho] = useState(null);
+  const [msg, setMsg] = useState("");
+  const cargar = () => fn("marcado_lista").then((r) => setLista(r.productos || [])).catch((e) => { setMsg(e.message || "No he podido cargar la lista"); setLista([]); });
+  useEffect(() => { cargar(); }, []);
+  if (abierto) return <><Instrucciones pantalla="marcado" /><ResponderMarcado p={abierto} onVolver={() => setAbierto(null)} onListo={(t) => { setAbierto(null); setHecho(t); cargar(); }} /></>;
+  return (
+    <div style={caja}>
+      <Instrucciones pantalla="marcado" sinMargen />
+      <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut }}>Dirección quiere saber si estos productos traen el precio marcado en el envase. Búscalos en la estantería y di lo que ves.</div>
+      <Aviso msg={hecho} tipo="bien" />
+      <Aviso msg={msg} />
+      {lista === null ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>Cargando…</div> : lista.length === 0 ? (
+        <div style={{ ...card, alignItems: "center", textAlign: "center" }}>
+          <IcoCheck size={30} color={C.grn} sw={2.4} />
+          <div style={{ fontFamily: F, fontSize: 14.5, color: C.char, fontWeight: 600 }}>No hay nada que comprobar</div>
+        </div>
+      ) : lista.map((p) => (
+        <button key={p.id} type="button" onClick={() => { setHecho(null); setAbierto(p); }} style={{ textAlign: "left", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 14, padding: "12px 14px", minHeight: 56, fontFamily: F, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ flex: 1 }}>
+            <span style={{ display: "block", fontSize: 15, fontWeight: 700, color: C.char }}>{p.nombre}</span>
+            <span style={{ display: "block", fontSize: 12.5, color: C.mut }}>{[p.barcode || "sin código", p.proveedor, `en caja ${eur(p.pvp)}`].filter(Boolean).join(" · ")}</span>
+          </span>
+          <IcoRight size={16} color={C.mut} />
+        </button>
+      ))}
+      <button type="button" onClick={onTerminar} style={{ ...btnGhost, minHeight: 48 }}>Volver al inicio</button>
+    </div>
+  );
+}
+
+function ResponderMarcado({ p, onVolver, onListo }) {
+  const [tiene, setTiene] = useState(null); // true | false
+  const [precio, setPrecio] = useState("");
+  const [foto, setFoto] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const input = useRef(null);
+  const valor = numero(precio);
+  const lejos = valor > 0 && p.pvp > 0 && Math.abs(valor - p.pvp) / p.pvp > 0.3;
+  const mandar = async () => {
+    if (tiene && !(valor > 0)) { setMsg("Escribe el precio que trae la etiqueta"); return; }
+    if (tiene && lejos && !window.confirm(`El precio marcado (${eur(valor)}) es muy distinto del de la caja (${eur(p.pvp)}). ¿Lo has escrito bien?`)) return;
+    setBusy(true); setMsg("");
+    try {
+      const r = await fn("marcado_responder", { id: p.id, marcado: !!tiene, precio: tiene ? valor : null, foto: tiene ? foto : null });
+      onListo(tiene ? `${r.nombre}: precio ${eur(r.pvp)} puesto en la caja.` : `${r.nombre}: avisado a dirección de que no trae precio marcado.`);
+    } catch (e) { setMsg(e.message || "No se ha podido guardar"); }
+    setBusy(false);
+  };
+  const opcion = (v, texto) => (
+    <button type="button" role="radio" aria-checked={tiene === v} onClick={() => { setTiene(v); setMsg(""); }}
+      style={{ minHeight: 52, padding: "10px 14px", borderRadius: 14, cursor: "pointer", fontFamily: F, fontSize: 15, fontWeight: 700, textAlign: "left", border: tiene === v ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: tiene === v ? "#F6F1E6" : "#fff", color: C.char }}>{texto}</button>
+  );
+  return (
+    <div style={caja}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: SF, fontSize: 22 }}>{p.nombre}</div>
+          <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{[p.barcode || "sin código", p.proveedor].filter(Boolean).join(" · ")}</div>
+          <div style={{ fontFamily: F, fontSize: 13.5, color: C.char, marginTop: 4 }}>En la caja: <b>{eur(p.pvp)}</b></div>
+        </div>
+        <button type="button" onClick={onVolver} style={{ ...btnPeq, height: 38 }}>Volver</button>
+      </div>
+      <div role="radiogroup" aria-label="¿Trae precio marcado?" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {opcion(true, "Tiene precio marcado")}
+        {opcion(false, "No tiene precio marcado")}
+      </div>
+      {tiene === true && <>
+        <label style={lbl} htmlFor="pm-precio">Precio de la etiqueta (€)</label>
+        <input id="pm-precio" inputMode="decimal" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="0,00" style={{ ...inp, marginTop: -6, fontSize: 20, fontWeight: 700 }} />
+        {valor > 0 && <div style={{ fontFamily: F, fontSize: 13.5, color: lejos ? "#A3362B" : C.char }}>{Math.abs(valor - p.pvp) < 0.005 ? "Es el mismo precio que la caja: queda guardado como precio marcado." : <>En la caja pasa de <b>{eur(p.pvp)}</b> a <b>{eur(valor)}</b>.{lejos ? " Ojo: es muy distinto, revisa que esté bien escrito." : ""}</>}</div>}
+        <input ref={input} type="file" accept="image/*" capture="environment" style={{ display: "none" }} aria-hidden="true" tabIndex={-1}
+          onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; try { setFoto(await prepararFoto(f)); } catch (er) { setMsg(er.message); } }} />
+        <button type="button" onClick={() => input.current?.click()} style={{ height: 46, borderRadius: 12, border: "1.5px dashed #C9C0B0", background: "transparent", fontFamily: F, fontSize: 13.5, fontWeight: 600, color: "#4A4236", cursor: "pointer" }}>{foto ? "Foto añadida ✓ (cambiar)" : "Foto de la etiqueta (opcional)"}</button>
+      </>}
+      {tiene === false && <div style={{ fontFamily: F, fontSize: 13.5, color: C.char }}>Se lo devuelvo a dirección para que decida el precio. En la caja no cambia nada.</div>}
+      <Aviso msg={msg} />
+      <button type="button" disabled={tiene === null || busy || (tiene && !(valor > 0))} onClick={mandar} style={{ ...btnDark, opacity: tiene === null || busy || (tiene && !(valor > 0)) ? 0.5 : 1 }}>{busy ? "Guardando…" : tiene ? "Poner este precio en la caja" : "Mandar a dirección"}</button>
+    </div>
+  );
+}

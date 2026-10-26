@@ -14,7 +14,7 @@ import { MiSeguimientoView } from "./MiSeguimientoView.jsx";
 import { MisAvisosView } from "./MisAvisosView.jsx";
 import { CubrirTurnosView } from "./CubrirTurnosView.jsx"; // BOLSA
 import { RecepcionView, AnadirProductoView, SinCodigo } from "./RecepcionView.jsx"; // RECEPCION
-import { EscanearProductoView } from "./ProductoTiendaView.jsx"; // #35
+import { EscanearProductoView, ComprobarMarcadoView } from "./ProductoTiendaView.jsx"; // #35 · #72
 import { CajaView } from "./CajaView.jsx"; // CAJA (caída de Epos)
 import { MisFichajesView } from "./MisFichajesView.jsx"; // FICHAJES
 import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
@@ -32,6 +32,7 @@ const IcoFactura = (p) => <Ico {...p}><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 
 const IcoLista = (p) => <Ico {...p}><path d="M9 6h11" /><path d="M9 12h11" /><path d="M9 18h11" /><path d="M4 6l1 1 2-2" /><path d="M4 12l1 1 2-2" /><path d="M4 18l1 1 2-2" /></Ico>;
 const IcoEscaner = (p) => <Ico {...p}><path d="M4 7V5a1 1 0 0 1 1-1h2" /><path d="M17 4h2a1 1 0 0 1 1 1v2" /><path d="M20 17v2a1 1 0 0 1-1 1h-2" /><path d="M7 20H5a1 1 0 0 1-1-1v-2" /><path d="M8 8v8" /><path d="M11 8v8" /><path d="M14 8v8" /><path d="M17 8v8" /></Ico>;
 const IcoSinCodigo = (p) => <Ico {...p}><path d="M5 6v12" /><path d="M8 6v7" /><path d="M11 6v4" /><path d="M14 6v2" /><path d="M19 6v5" /><path d="M14 15l5 5" /><path d="M19 15l-5 5" /></Ico>;
+const IcoEtiqueta = (p) => <Ico {...p}><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9" /><circle cx="7.5" cy="7.5" r="1.5" /></Ico>;
 const IcoDoc = (p) => <Ico {...p}><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2" /><path d="M9 13h6" /><path d="M9 17h6" /></Ico>;
 
 // #35: bloque «Producto» con su circulito de pendientes (como el de las notificaciones de una app)
@@ -39,6 +40,7 @@ const PRODUCTO = [
   { id: "recepcion", label: "Recepcionar pedido", Ico: IcoCaja },
   { id: "escanear", label: "Escanear producto", Ico: IcoEscaner },
   { id: "sincodigo", label: "Productos sin código", Ico: IcoSinCodigo },
+  { id: "marcado", label: "Comprobar precio marcado", Ico: IcoEtiqueta }, // #72
 ];
 const EN_TIENDA = [
   { id: "facturas", label: "Facturas", Ico: IcoFactura },
@@ -53,7 +55,7 @@ const LO_TUYO = [
   { id: "documentos", label: "Mis documentos", Ico: IcoDoc },
   { id: "seguimiento", label: "Mi seguimiento", sub: "Avisos, plus y faltas", Ico: (p) => <IcoBars size={20} color={TOSTADO} sw={1.9} {...p} /> },
 ];
-const TITULOS = { caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", cambio: "Cambiar turno", horasextra: "Horas extra", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", marcado: "Comprobar precio marcado", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", cambio: "Cambiar turno", horasextra: "Horas extra", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 // A dónde lleva cada destino de la campana o del correo (?ir=…) en la organización nueva: [pantalla, pestaña]
 const DESTINOS = {
@@ -77,6 +79,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [porCubrir, setPorCubrir] = useState(0); // BOLSA
   const [porRecepcionar, setPorRecepcionar] = useState({ n: 0, listos: 0 }); // RECEPCION
   const [sinCodigoN, setSinCodigoN] = useState(0); // #35: altas sin código por escanear
+  const [marcadoN, setMarcadoN] = useState(0); // #72: productos que dirección manda comprobar
   const [codigoNuevo, setCodigoNuevo] = useState(""); // #35: código escaneado que no existe → «Añadir producto»
   const [avisos, setAvisos] = useState([]); // avisos de incidencia por responder (sin alegación y con plazo abierto)
   const [dudosos, setDudosos] = useState([]); // FICHAJES: fichajes dudosos de los últimos 14 días
@@ -96,6 +99,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
     if (BOLSA_ACTIVA) sb.rpc("bolsa_disponibles").then(r => setPorCubrir((r || []).filter(x => x.destino === "plantilla" && !x.rechazado).length)).catch(() => {}); // BOLSA
     sb.fn("recepcion", { accion: "inicio" }).then(r => { const p = r.pendientes || []; setPorRecepcionar({ n: p.length, listos: p.filter(x => x.estado === "por_revisar" && x.via === "email").length }); }).catch(() => {}); // RECEPCION
     sb.fn("recepcion", { accion: "sin_codigo" }).then(r => setSinCodigoN((r.productos || []).length)).catch(() => {}); // #35
+    sb.fn("producto-tienda", { accion: "marcado_lista" }).then(r => setMarcadoN((r.productos || []).length)).catch(() => {}); // #72
     sb.fn("disciplina", { action: "mis_avisos" }).then(r => setAvisos((r.avisos || []).filter(a => a.estado === "emitido" && !a.alegacion_en && a.plazo_alegacion && new Date(a.plazo_alegacion) > new Date()))).catch(() => {});
     sb.rpc("mis_fichajes_dudosos").then(r => setDudosos(Array.isArray(r) ? r : [])).catch(() => {}); // FICHAJES
     sb.select("horarios", `select=turno&usuario_id=eq.${user.id}&fecha=eq.${ymd(new Date())}`).then(r => setTurnoHoy((r && r[0] && r[0].turno) || null)).catch(() => {});
@@ -153,9 +157,9 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
         <NovedadesEquipo compacta estilo={{ marginTop: 12 }} />
 
         <div style={seccion}>Producto</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           {PRODUCTO.map(t => {
-            const n = t.id === "recepcion" ? porRecepcionar.n : t.id === "sincodigo" ? sinCodigoN : 0;
+            const n = t.id === "recepcion" ? porRecepcionar.n : t.id === "sincodigo" ? sinCodigoN : t.id === "marcado" ? marcadoN : 0;
             return (
               <button key={t.id} type="button" onClick={() => abrir(t.id)} aria-label={n ? `${t.label}: ${n} pendiente${n > 1 ? "s" : ""}` : t.label} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 7, minHeight: 92, padding: "12px 6px", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 15, cursor: "pointer", textAlign: "center", boxShadow: SHADOW.card }}>
                 <span style={{ position: "relative", display: "inline-flex" }}>
@@ -203,6 +207,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       {screen === "anadir" && <AnadirProductoView codigoInicial={codigoNuevo} onFin={() => { setCodigoNuevo(""); setScreen("home"); }} />}
       {screen === "escanear" && <EscanearProductoView onAnadir={(c) => { setCodigoNuevo(c || ""); setScreen("anadir"); }} onFin={() => setScreen("home")} />}
       {screen === "sincodigo" && <SinCodigo onTerminar={() => setScreen("home")} />}
+      {screen === "marcado" && <ComprobarMarcadoView onTerminar={() => setScreen("home")} />}
       {screen === "horarios" && <HorariosYFichajes user={user} pestana={pestana} mesFichajes={mesFichajes} />}
       {screen === "documentos" && <MisDocumentosView />}
       {screen === "cerrar" && <CerrarTurnoView user={user} />}

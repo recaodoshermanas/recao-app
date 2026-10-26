@@ -367,16 +367,19 @@ function PedidoDetalle({ id, onClose, onCambio }) {
 
 function Fichas({ fichas, proveedores, onCambio }) {
   const [editando, setEditando] = useState(null);
+  const [marcado, setMarcado] = useState({}); // #72: precio marcado por proveedor
+  const cargarMarcado = () => sb.rpc("proveedor_marcado_lista").then((r) => setMarcado(Object.fromEntries((r || []).map((x) => [x.proveedor, x])))).catch(() => {});
+  useEffect(() => { cargarMarcado(); }, [fichas]);
   const filas = useMemo(() => {
     const porNombre = new Map(fichas.map((f) => [f.proveedor, f]));
-    return proveedores.map((p) => ({ ...p, ficha: porNombre.get(p.nombre) || null }));
-  }, [fichas, proveedores]);
+    return proveedores.map((p) => ({ ...p, ficha: porNombre.get(p.nombre) || null, marcado: marcado[p.nombre] || null }));
+  }, [fichas, proveedores, marcado]);
   return (
     <>
       <div className="head"><div><h2>Ficha de proveedores</h2><p className="sub">Por dónde llega su factura, si hay que contarla línea a línea y si cobra recargo de equivalencia. Sin ficha: la trabajadora elige y se revisa todo.</p></div></div>
       <div className="tabla-scroll">
         <table className="ranking">
-          <thead><tr><th>Proveedor</th><th>Canal</th><th>Revisión</th><th>Recargo</th><th>Remitentes</th><th></th></tr></thead>
+          <thead><tr><th>Proveedor</th><th>Canal</th><th>Revisión</th><th>Recargo</th><th>Precio marcado</th><th>Remitentes</th><th></th></tr></thead>
           <tbody>
             {filas.map((p) => (
               <tr key={p.nombre}>
@@ -384,6 +387,7 @@ function Fichas({ fichas, proveedores, onCambio }) {
                 <td>{p.ficha?.canal ? VIA[p.ficha.canal] || p.ficha.canal : "—"}</td>
                 <td>{p.ficha ? (p.ficha.revision === false ? "No" : "Sí") : "Sí"}</td>
                 <td>{p.ficha ? (p.ficha.recargo === false ? "No" : "Sí") : "Sí"}</td>
+                <td>{p.marcado?.posible ? (p.marcado.filtro ? `Sí, si contiene «${p.marcado.filtro}»` : "Sí") : "No"}</td>
                 <td><span className="pf">{(p.ficha?.remitentes || []).join(", ")}</span></td>
                 <td className="r"><button className="btn-l" onClick={() => setEditando(p)}>Editar</button></td>
               </tr>
@@ -391,7 +395,7 @@ function Fichas({ fichas, proveedores, onCambio }) {
           </tbody>
         </table>
       </div>
-      {editando && <EditarFicha p={editando} onClose={() => setEditando(null)} onGuardado={() => { setEditando(null); onCambio(); }} />}
+      {editando && <EditarFicha p={editando} onClose={() => setEditando(null)} onGuardado={() => { setEditando(null); onCambio(); cargarMarcado(); }} />}
     </>
   );
 }
@@ -399,14 +403,25 @@ function Fichas({ fichas, proveedores, onCambio }) {
 function EditarFicha({ p, onClose, onGuardado }) {
   const f0 = p.ficha || {};
   const [f, setF] = useState({ proveedor: p.nombre, canal: f0.canal || "", revision: f0.revision !== false, recargo: f0.recargo !== false, remitentes: (f0.remitentes || []).join(", "), formato: f0.formato || "", nota: f0.nota || "" });
+  const [m, setM] = useState({ posible: !!p.marcado?.posible, filtro: p.marcado?.filtro || "" }); // #72
   const [busy, setBusy] = useState(false);
-  const guardar = async () => { setBusy(true); try { await fn("guardar_ficha", { ficha: f }); avisar("Ficha guardada"); onGuardado(); } catch (e) { avisar(e.message, "mal"); } setBusy(false); };
+  const guardar = async () => {
+    setBusy(true);
+    try {
+      await fn("guardar_ficha", { ficha: f });
+      await sb.rpc("proveedor_marcado_guardar", { p_proveedor: p.nombre, p_posible: m.posible, p_filtro: m.posible ? m.filtro : "" });
+      avisar("Ficha guardada"); onGuardado();
+    } catch (e) { avisar(e.message, "mal"); }
+    setBusy(false);
+  };
   return (
     <Panel titulo={p.nombre} sub="Ficha del proveedor" onClose={onClose} pie={<button className="btn-p" disabled={busy} onClick={guardar}>{busy ? "Guardando…" : "Guardar"}</button>}>
       <label className="campo">Cómo llega su factura<select value={f.canal} onChange={(e) => setF({ ...f, canal: e.target.value })}><option value="">Sin definir (lo elige la trabajadora)</option><option value="email">Por correo</option><option value="foto">En papel (foto)</option><option value="manual">Sin papel (a mano)</option></select></label>
       <label className="campo">Direcciones de correo desde las que manda la factura<input value={f.remitentes} onChange={(e) => setF({ ...f, remitentes: e.target.value })} placeholder="facturas@proveedor.com, otra@proveedor.com" /></label>
       <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}><input type="checkbox" checked={f.revision} onChange={(e) => setF({ ...f, revision: e.target.checked })} /> Hay que contar el pedido línea a línea</label>
       <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}><input type="checkbox" checked={f.recargo} onChange={(e) => setF({ ...f, recargo: e.target.checked })} /> Cobra recargo de equivalencia</label>
+      <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: m.posible ? 8 : 14 }}><input type="checkbox" checked={m.posible} onChange={(e) => setM({ ...m, posible: e.target.checked })} /> Puede traer precio marcado</label>
+      {m.posible && <label className="campo">Solo productos que contengan… (vacío = todos los de este proveedor)<input value={m.filtro} onChange={(e) => setM({ ...m, filtro: e.target.value })} placeholder="Por ejemplo: BANG" /></label>}
       <label className="campo">Formato del documento<input value={f.formato} onChange={(e) => setF({ ...f, formato: e.target.value })} placeholder="PDF, .txt…" /></label>
       <label className="campo">Nota<textarea rows={3} value={f.nota} onChange={(e) => setF({ ...f, nota: e.target.value })} /></label>
       <p className="sub">Recuerda añadir también el remitente al filtro «Facturas» de Gmail para que su correo entre solo.</p>
