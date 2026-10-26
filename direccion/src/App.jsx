@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../../src/hooks/useAuth.js";
 import { useRecaoData } from "../../src/hooks/useRecaoData.js";
 import { NotificacionesBell } from "../../src/components/NotificacionesBell.jsx";
-import { AREAS, DESTINOS, leerRuta } from "./areas.js";
+import { AREAS, DESTINOS, FIN_PESTANAS, leerRuta } from "./areas.js";
 import { Pulso } from "./Pulso.jsx";
 import { PersonasResumen } from "./PersonasResumen.jsx";
 import { Legado } from "./Legado.jsx";
@@ -27,7 +27,7 @@ import { AppTienda } from "./producto/AppTienda.jsx";
 import { MarketingResumen, MarketingClientes, MarketingCaptacion, MarketingCampanas, MarketingReputacion } from "./marketing/Marketing.jsx";
 import { TecSolicitudes } from "./tecnologia/Solicitudes.jsx";
 import { TecGuia } from "./tecnologia/Guia.jsx";
-import { Avisos } from "./ui.jsx";
+import { Avisos, Pestanas } from "./ui.jsx";
 import { tokenRecuperar, limpiarTokenRecuperar, pedirRecuperacion, cambiarConToken } from "../../src/lib/recuperar.js";
 
 const ICONO = "/icono.png";
@@ -192,7 +192,7 @@ export default function App() {
     return () => window.removeEventListener("recao-nav", h);
   }, []);
 
-  const editarMes = useCallback((mk) => { setMesFoco(mk); ir("finanzas/cierre"); }, []);
+  const editarMes = useCallback((mk) => { setMesFoco(mk); ir("finanzas/resultados/cierre"); }, []);
 
   if (checking) return <div className="state">Cargando…</div>;
   if (!esAdmin || tokenRecuperar()) return <Login onLogin={async (e, p) => { setAviso(""); return login(e, p); }} aviso={aviso} />;
@@ -227,14 +227,20 @@ export default function App() {
   else if (area.id === "tecnologia" && sub.id === "como-pedir") contenido = <TecGuia />;
   else if (area.id === "tecnologia") contenido = <TecSolicitudes key={extra || "lista"} user={user} extra={extra} />;
   else if (area.id === "finanzas" && sub.id === "resumen") contenido = <FinanzasResumen />;
-  else if (area.id === "finanzas" && sub.id === "resultados") contenido = <FinanzasResultados onEditMonth={editarMes} />;
-  else if (area.id === "finanzas" && sub.id === "caja") contenido = <FinanzasCaja />;
-  else if (area.id === "finanzas" && sub.id === "sobres") contenido = <EfectivoSobres />;
-  else if (area.id === "finanzas" && sub.id === "compras") contenido = <FinanzasCompras />;
-  else if (area.id === "finanzas" && sub.id === "bancos") contenido = <Bancos />;
-  else if (area.id === "finanzas" && sub.id === "pagos") contenido = <PagosPendientes />;
-  else if (area.id === "finanzas" && sub.id === "inversiones") contenido = <Inversiones />;
-  else if (area.id === "finanzas" && sub.id === "mantenimiento") contenido = <Mantenimiento />;
+  else if (area.id === "finanzas") {
+    const pantalla = {
+      resultados: <FinanzasResultados onEditMonth={editarMes} />, caja: <FinanzasCaja />, sobres: <EfectivoSobres />, compras: <FinanzasCompras />,
+      bancos: <Bancos />, pagos: <PagosPendientes />, inversiones: <Inversiones />, mantenimiento: <Mantenimiento />,
+    }[extra] || <Legado area={area.id} sub={extra} datos={datos} user={user} mesFoco={mesFoco} onEditMonth={editarMes} />;
+    contenido = (
+      <>
+        <div className="barra-sec">
+          <Pestanas valor={extra} etiqueta={sub.label} opciones={FIN_PESTANAS[sub.id]} onChange={(t) => ir(`finanzas/${sub.id}/${t}`)} />
+        </div>
+        {pantalla}
+      </>
+    );
+  }
   else contenido = <Legado area={area.id} sub={sub.id} datos={datos} user={user} mesFoco={mesFoco} onEditMonth={editarMes} />;
 
   return (

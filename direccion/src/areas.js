@@ -21,17 +21,10 @@ export const AREAS = [
     id: "finanzas", label: "Finanzas", quien: "Miguel",
     subs: [
       { id: "resumen", label: "Resumen" },
-      { id: "resultados", label: "Cuenta de resultados" },
-      { id: "caja", label: "Caja" },
-      { id: "sobres", label: "Efectivo de sobres" },
-      { id: "compras", label: "Compras" },
-      { id: "bancos", label: "Bancos" }, // #23
-      { id: "pagos", label: "Facturas pendientes de pago" }, // #27
-      { id: "inversiones", label: "Inversiones" }, // #40
-      { id: "mantenimiento", label: "Mantenimiento" }, // #42
-      { id: "facturas", label: "Facturas", legado: true },
-      { id: "cierre", label: "Cierre de mes", legado: true },
-      { id: "tesoreria", label: "Tesorería", legado: true },
+      { id: "resultados", label: "Resultados" },
+      { id: "efectivo", label: "Efectivo" },
+      { id: "banco", label: "Banco" },
+      { id: "gastos", label: "Gastos" },
     ],
   },
   {
@@ -74,6 +67,17 @@ export const AREAS = [
   { id: "ajustes", label: "Ajustes", oculto: true, subs: [{ id: "general", label: "Ajustes", legado: true }] },
 ];
 
+// #60: Finanzas se agrupa en 5 apartados; cada uno tiene dentro sus pestañas (la primera es la de por defecto).
+// La URL es #/finanzas/<apartado>/<pestaña>. Las pantallas "legado" vienen de la app (Facturas, Cierre de mes, Tesorería).
+export const FIN_PESTANAS = {
+  resultados: [{ id: "resultados", label: "Cuenta de resultados" }, { id: "cierre", label: "Cierre de mes" }],
+  efectivo: [{ id: "caja", label: "Caja" }, { id: "sobres", label: "Efectivo de sobres" }],
+  banco: [{ id: "bancos", label: "Bancos" }, { id: "pagos", label: "Facturas pendientes de pago" }, { id: "tesoreria", label: "Tesorería" }],
+  gastos: [{ id: "facturas", label: "Facturas" }, { id: "compras", label: "Compras" }, { id: "mantenimiento", label: "Mantenimiento" }, { id: "inversiones", label: "Inversiones" }],
+};
+// Enlaces antiguos de Finanzas (#/finanzas/caja…) → apartado nuevo; la pestaña es la propia antigua
+const FIN_ANTIGUAS = { cierre: "resultados", caja: "efectivo", sobres: "efectivo", bancos: "banco", pagos: "banco", tesoreria: "banco", facturas: "gastos", compras: "gastos", mantenimiento: "gastos", inversiones: "gastos" };
+
 // Lo que mandan las notificaciones de la app (evento "recao-nav") → dónde se abre aquí
 // El botón de los correos (función notificaciones-email) usa estas mismas rutas: si se cambian aquí, cambiarlas también allí.
 export const DESTINOS = {
@@ -82,7 +86,7 @@ export const DESTINOS = {
   disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
   candidatos: "personas/seleccion", plus: "personas/equipo", bolsa: "personas/bolsa",
   recepcion_admin: "producto/recepcion", fichajes_admin: "personas/fichajes", documentos_admin: "personas/documentos",
-  tareas_extra: "personas/seguimiento", solicitudes_tec: "tecnologia/solicitudes", caja_fuerte: "finanzas/caja", bancos: "finanzas/bancos", pagos: "finanzas/pagos", productos_revisar: "producto/revisar",
+  tareas_extra: "personas/seguimiento", solicitudes_tec: "tecnologia/solicitudes", caja_fuerte: "finanzas/efectivo/caja", bancos: "finanzas/banco/bancos", pagos: "finanzas/banco/pagos", productos_revisar: "producto/revisar",
 };
 
 // Enlaces antiguos de Personas → secciones nuevas
@@ -91,6 +95,14 @@ const ANTIGUAS = { cobertura: "horarios", vacaciones: "solicitudes", cambios: "s
 export function leerRuta(hash) {
   const [a, s0, extra] = String(hash || "").replace(/^#\/?/, "").split("/");
   const area = AREAS.find((x) => x.id === a && !x.pronto) || AREAS[0];
+  if (area.id === "finanzas") {
+    const antigua = FIN_ANTIGUAS[s0];
+    const sub = area.subs.find((x) => x.id === (antigua || s0)) || area.subs[0];
+    const pestanas = FIN_PESTANAS[sub.id];
+    const pedida = antigua ? s0 : extra;
+    const tab = pestanas ? (pestanas.find((t) => t.id === pedida) || pestanas[0]).id : undefined;
+    return { area, sub, extra: tab };
+  }
   const s = area.id === "personas" && ANTIGUAS[s0] ? ANTIGUAS[s0] : s0;
   const sub = area.subs ? (area.subs.find((x) => x.id === s) || area.subs[0]) : null;
   const extraFinal = extra || (area.id === "personas" && ["cierres", "incidencias", "disciplina"].includes(s0) ? (s0 === "incidencias" ? "incidencias" : s0) : undefined);
