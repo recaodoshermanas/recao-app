@@ -19,7 +19,10 @@ export function EfectivoSobres() {
   const [mes, setMes] = useState(hoyStr().slice(0, 7));
   const [d, setD] = useState(null);
   const [fallo, setFallo] = useState(null);
-  const [panel, setPanel] = useState(null); // {tipo} | {editar: salida} | {config:true}
+  const [panel, setPanel] = useState(null); // {tipo} | {editar: salida} | {config:true} | {partida:true}
+  const [evo, setEvo] = useState(null);
+  const cargarEvo = useCallback(() => { sb.rpc("efectivo_evolucion").then(setEvo).catch(() => setEvo([])); }, []);
+  useEffect(() => { cargarEvo(); }, [cargarEvo, d?.saldo]);
   const cargar = useCallback(async () => {
     setD(null);
     try { setD(await sb.rpc("efectivo_sobres_mes", { p_mes: mes })); setFallo(null); }
@@ -35,6 +38,7 @@ export function EfectivoSobres() {
   const saldo = Number(d.saldo);
   const pt = d.por_tipo || {};
   const listo = (r) => { setD(r); setPanel(null); };
+  const sp = d.saldo_partida; // solo en octubre de 2026
   return (
     <>
       <div className="card es">
@@ -49,8 +53,14 @@ export function EfectivoSobres() {
         {!d.apertura_registrada && <p className="es-aviso">Falta registrar la apertura de los sobres de {mesAnio(`${d.mes_sobres}-01`).toLowerCase()} (Cierre de mes → Apertura de sobres). Hasta entonces la entrada cuenta 0 €.</p>}
         {saldo < 0 && <p className="es-rojo">Se ha registrado más salida que efectivo: el saldo está en negativo.</p>}
         <div className="es-kpis">
-          <div><small>Saldo inicial</small><b>{eur(d.saldo_inicial, 2)}</b><span>Lo que quedó del mes anterior</span></div>
-          <div><small>Entrada</small><b>{eur(d.entrada, 2)}</b><span>Sobres de {mesAnio(`${d.mes_sobres}-01`).toLowerCase()}, abiertos el día 1</span></div>
+          {sp ? (
+            <div><small>Saldo de partida</small><b>{sp.registrado ? eur(sp.importe, 2) : "Sin poner"}</b>
+              <span>{sp.registrado ? `Efectivo guardado a 1 de octubre${sp.nota ? ` · ${sp.nota}` : ""}${sp.quien ? ` · ${sp.quien}` : ""}` : "El efectivo que ya se tenía guardado de meses anteriores"}</span>
+              <button className="btn-l" onClick={() => setPanel({ partida: true })}>{sp.registrado ? "Corregir saldo de partida" : "Poner saldo de partida"}</button></div>
+          ) : (
+            <div><small>Saldo inicial</small><b>{eur(d.saldo_inicial, 2)}</b><span>Lo que quedó del mes anterior</span></div>
+          )}
+          <div><small>{sp ? "Sobres de septiembre" : "Entrada"}</small><b>{eur(d.entrada, 2)}</b><span>Sobres de {mesAnio(`${d.mes_sobres}-01`).toLowerCase()}, abiertos el día 1{sp ? " (se meten en Cierre de mes → Apertura de sobres)" : ""}</span></div>
           <div><small>Salidas</small><b>{eur(d.total_salidas, 2)}</b><span>{d.salidas.length} movimiento{d.salidas.length === 1 ? "" : "s"}</span></div>
           <div className={`es-saldo${saldo < 0 ? " neg" : ""}`}><small>Queda guardado</small><b>{eur(saldo, 2)}</b></div>
         </div>
@@ -86,11 +96,78 @@ export function EfectivoSobres() {
           <p className="sub es-resumen">{Object.entries(pt).map(([k, v]) => `${TIPOS[k]?.label || k}: ${eur(v, 2)}`).join(" · ")}</p>
         )}
       </div>
+      {panel?.partida && <PanelPartida sp={sp} onClose={() => setPanel(null)} onListo={listo} />}
+      <Evolucion evo={evo} mes={mes} onAbrir={setMes} />
       {panel?.tipo === "reparto" && <PanelReparto d={d} mes={mes} onClose={() => setPanel(null)} onListo={listo} />}
       {panel?.tipo && panel.tipo !== "reparto" && <PanelSalida tipo={panel.tipo} d={d} mes={mes} onClose={() => setPanel(null)} onListo={listo} />}
       {panel?.editar && <PanelCorregir s={panel.editar} d={d} onClose={() => setPanel(null)} onListo={(r) => { setPanel(null); if (r?.mes === mes) setD(r); else cargar(); }} />}
       {panel?.config && <PanelConfig d={d} onClose={() => setPanel(null)} onListo={() => { setPanel(null); cargar(); }} />}
     </>
+  );
+}
+
+function PanelPartida({ sp, onClose, onListo }) {
+  const [imp, setImp] = useState(sp?.registrado ? String(sp.importe).replace(".", ",") : "");
+  const [nota, setNota] = useState(sp?.nota || "");
+  const [busy, setBusy] = useState(false);
+  const x = imp === "0" ? 0 : numero(imp);
+  const guardar = async () => {
+    setBusy(true);
+    try { onListo(await sb.rpc("efectivo_saldo_partida_guardar", { p_importe: x, p_nota: nota })); avisar("Saldo de partida guardado"); }
+    catch (e) { avisar(e.message || "No se ha podido guardar", "mal"); }
+    setBusy(false);
+  };
+  return (
+    <Panel titulo="Saldo de partida" sub="El efectivo del negocio que ya tenías guardado de meses anteriores, a 1 de octubre de 2026. Queda registro de quién y cuándo." onClose={onClose} ancho="440px"
+      pie={<button className="btn-p" disabled={busy || !Number.isFinite(x)} onClick={guardar}>{busy ? "Guardando…" : "Guardar"}</button>}>
+      <label className="campo">Importe (€)<input inputMode="decimal" value={imp} onChange={(e) => setImp(e.target.value)} placeholder="0,00" autoFocus /></label>
+      {imp && !Number.isFinite(x) && <p className="es-rojo" style={{ marginTop: 0 }}>Pon un importe válido, con 2 decimales como mucho.</p>}
+      <label className="campo">Nota (opcional)<input value={nota} maxLength={200} onChange={(e) => setNota(e.target.value)} placeholder="Ej.: contado en casa el 30/9" /></label>
+    </Panel>
+  );
+}
+
+function Evolucion({ evo, mes, onAbrir }) {
+  if (!evo || evo.length === 0) return null;
+  const W = 640, H = 150, P = 28;
+  const vals = evo.map((m) => Number(m.saldo));
+  const max = Math.max(...vals, 1), min = Math.min(...vals, 0);
+  const x = (i) => (evo.length === 1 ? W / 2 : P + (i * (W - 2 * P)) / (evo.length - 1));
+  const y = (v) => H - P - ((v - min) / (max - min || 1)) * (H - 2 * P);
+  const pts = evo.map((m, i) => `${x(i)},${y(Number(m.saldo))}`).join(" ");
+  const tipos = Object.keys(TIPOS).filter((t) => evo.some((m) => Number(m.por_tipo?.[t]) > 0));
+  return (
+    <div className="card es">
+      <div className="head"><div><h2>Evolución</h2><p className="sub">Cómo cambia el efectivo guardado mes a mes. Pulsa un mes para abrirlo arriba.</p></div></div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Queda guardado de cada mes" style={{ width: "100%", maxHeight: 190 }}>
+        <line x1={P} x2={W - P} y1={y(0)} y2={y(0)} stroke="currentColor" strokeOpacity=".2" />
+        <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="2" />
+        {evo.map((m, i) => (
+          <g key={m.mes}>
+            <circle cx={x(i)} cy={y(Number(m.saldo))} r="4" fill="currentColor" />
+            <text x={x(i)} y={y(Number(m.saldo)) - 9} textAnchor="middle" fontSize="11" fill="currentColor">{eur(m.saldo, 0)}</text>
+            <text x={x(i)} y={H - 6} textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity=".7">{m.mes.slice(5)}/{m.mes.slice(2, 4)}</text>
+          </g>
+        ))}
+      </svg>
+      <div className="tabla-scroll">
+        <table className="ranking es-tabla">
+          <thead><tr><th>Mes</th><th className="r">Saldo inicial</th><th className="r">Entrada de sobres</th><th className="r">Otras entradas</th>{tipos.map((t) => <th key={t} className="r">{TIPOS[t].label}</th>)}<th className="r">Queda guardado</th></tr></thead>
+          <tbody>
+            {evo.map((m) => (
+              <tr key={m.mes} onClick={() => { onAbrir(m.mes); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ cursor: "pointer", fontWeight: m.mes === mes ? 700 : undefined }}>
+                <td>{mesAnio(`${m.mes}-01`)}{m.en_curso && <span className="pf">en curso</span>}</td>
+                <td className="r">{eur(m.saldo_inicial, 2)}</td>
+                <td className="r">{eur(m.entrada, 2)}</td>
+                <td className="r">{eur(m.otras_entradas, 2)}</td>
+                {tipos.map((t) => <td key={t} className="r">{Number(m.por_tipo?.[t]) > 0 ? `−${eur(m.por_tipo[t], 2)}` : "–"}</td>)}
+                <td className="r b">{eur(m.saldo, 2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
