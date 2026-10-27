@@ -93,7 +93,7 @@ export const DESTINOS = {
 const ANTIGUAS = { cobertura: "horarios", vacaciones: "solicitudes", cambios: "solicitudes", cierres: "seguimiento", incidencias: "seguimiento", disciplina: "seguimiento", plus: "equipo", horas: "equipo" };
 
 export function leerRuta(hash) {
-  const [a, s0, extra] = String(hash || "").replace(/^#\/?/, "").split("/");
+  const [a, s0, extra] = String(hash || "").split("?")[0].replace(/^#\/?/, "").split("/"); // #81: «?mes=…» no cuenta para la ruta
   const area = AREAS.find((x) => x.id === a && !x.pronto) || AREAS[0];
   if (area.id === "finanzas") {
     const antigua = FIN_ANTIGUAS[s0];

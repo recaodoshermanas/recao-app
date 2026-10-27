@@ -5,6 +5,7 @@ import { Panel } from "./ui.jsx"; // #70
 import { initTips } from "./charts.js";
 import { eur, eurK, pct, num, mesCorto, mesAnio, parseDate } from "./fmt.js";
 import { CajaFuerte } from "./CajaFuerte.jsx"; // CAJA FUERTE (#11)
+import { CuadreTurnos } from "./finanzas/CuadreTurnos.jsx"; // #81
 import { InformeMensual } from "./finanzas/InformeMensual.jsx"; // #65
 import { armarTabla, exportarExcel, exportarPdf } from "./finanzas/exportarCuenta.js"; // #71
 
@@ -664,11 +665,43 @@ function difEfectivo(x) {
   const porPagos = n0(x.pagos_efectivo) > 0 && Math.abs(ajustada) < Math.abs(bruto);
   return { v: porPagos ? ajustada : bruto, porPagos };
 }
+// #81: mes del cuadre (por defecto el mes en curso; «#/finanzas/efectivo/caja?mes=2026-10» abre ese mes)
+const mesDeRuta = () => { const m = /[?&]mes=(\d{4}-\d{2})/.exec(window.location.hash || ""); return m ? m[1] : null; };
+function SelectorMes({ mes, meses, onChange }) {
+  return (
+    <label className="filtros-linea" style={{ margin: 0 }}>
+      <span className="sub" style={{ margin: 0 }}>Mes</span>
+      <select value={mes} onChange={(e) => onChange(e.target.value)}>{meses.map((m) => <option key={m} value={m}>{mesAnio(`${m}-01`)}</option>)}</select>
+    </label>
+  );
+}
 export function FinanzasCaja() {
   const { d, fallo } = useFinanzas();
+  const [mesSel, setMesSel] = useState(() => mesDeRuta());
+  useEffect(() => { const h = () => { const m = mesDeRuta(); if (m) setMesSel(m); }; window.addEventListener("hashchange", h); return () => window.removeEventListener("hashchange", h); }, []);
   if (!d) return <Estado fallo={fallo} />;
-  const dias = d.caja.filter((x) => x.fecha < d.hoy);
-  const hoyFila = d.caja.find((x) => x.fecha === d.hoy);
+  const mesHoy = d.hoy.slice(0, 7);
+  const meses = [...new Set([...d.caja.map((x) => x.fecha.slice(0, 7)).filter((m) => m < "2026-10"), ...(() => { const r = []; for (let m = "2026-10"; m <= mesHoy; m = claveMes(`${m}-01`, 1).slice(0, 7)) r.push(m); return r; })()])].sort().reverse();
+  const mes = mesSel && meses.includes(mesSel) ? mesSel : mesHoy;
+  const cambiarMes = (m) => { setMesSel(m); try { window.history.replaceState(null, "", `#/finanzas/efectivo/caja${m === mesHoy ? "" : `?mes=${m}`}`); } catch (e) { /* sin historial */ } };
+  if (mes >= "2026-10") {
+    return (
+      <>
+        <div className="grid"><div className="c12"><CajaFuerte /></div></div>
+        <div className="grid">
+          <div className="card c12">
+            <div className="head">
+              <div><h2>Cuadre por turno</h2><p className="sub">Cada cierre de Epos (turno y caja): efectivo y tarjeta frente a lo contado, y la tarjeta de cada día frente al banco. Aquí se confirma; el Cierre de mes solo enseña los totales.</p></div>
+              <SelectorMes mes={mes} meses={meses} onChange={cambiarMes} />
+            </div>
+            <CuadreTurnos mes={mes} />
+          </div>
+        </div>
+        <RecorridoEfectivo meses={d.meses} />
+      </>
+    );
+  }
+  const dias = d.caja.filter((x) => x.fecha < d.hoy && x.fecha.startsWith(mes));
   const completos = dias.filter((x) => x.cierres >= 2);
   const difEf = completos.reduce((s, x) => s + difEfectivo(x).v, 0);
   const difTj = completos.reduce((s, x) => s + n0(x.contado_tarjeta) - n0(x.epos_tarjeta), 0);
@@ -676,7 +709,7 @@ export function FinanzasCaja() {
     <>
       <div className="grid"><div className="c12"><CajaFuerte /></div></div>
       <div className="grid">
-        <Kpi titulo="Días con los dos cierres" valor={`${completos.length} de ${dias.length}`} sub={`Últimos ${dias.length} días cerrados`} tono={completos.length < dias.length ? "mal" : ""} />
+        <Kpi titulo="Días con los dos cierres" valor={`${completos.length} de ${dias.length}`} sub={`${dias.length} días con datos de ${mesAnio(`${mes}-01`).toLowerCase()}`} tono={completos.length < dias.length ? "mal" : ""} />
         <Kpi titulo="Descuadre de efectivo" valor={eur(difEf, 0)} sub="Contado menos Epos en los días con los dos cierres, descontando las facturas pagadas de la caja" tono={Math.abs(difEf) > 50 ? "mal" : ""} />
         <Kpi titulo="Descuadre de tarjeta" valor={eur(difTj, 0)} sub="Datáfono contado menos Epos" tono={Math.abs(difTj) > 50 ? "mal" : ""} />
       </div>
@@ -684,7 +717,7 @@ export function FinanzasCaja() {
         <div className="card c12">
           <div className="head">
             <div><h2>Cuadre diario</h2><p className="sub">Lo que registra Epos frente a lo que cuentan las trabajadoras al cerrar cada turno (desde el 24 de octubre, lo contado en los cierres de Epos)</p></div>
-            {hoyFila && <p className="sub">Hoy: {hoyFila.cierres} de 2 cierres hechos</p>}
+            <SelectorMes mes={mes} meses={meses} onChange={cambiarMes} />
           </div>
           <div className="tabla-scroll">
             <table className="ranking fcaja">

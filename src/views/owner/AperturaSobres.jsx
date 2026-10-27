@@ -49,95 +49,15 @@ export function useSobres(mes) {
 
 // ---------- #36: desde octubre de 2026, sobre a sobre (un sobre = un cierre de Epos de un turno y una caja) ----------
 const AMBAR = "#8A5A00";
-const turnoTxt = (s) => (s.dos_turnos ? "mañana y tarde" : s.turno);
-const ESTADO = { correcto: ["Correcto", "#EAF4EE", "#1E6B3C"], incorrecto: ["Incorrecto", ROJO, "#fff"], null: ["Sin revisar", "#F0ECE2", "#5E5444"] };
 
-function Sobre({ s, mes, setDatos, umbralCajon }) {
-  const [modo, setModo] = useState(null); // null · "incorrecto"
-  const [billetes, setBilletes] = useState(s.billetes != null ? String(s.billetes).replace(".", ",") : "");
-  const [nota, setNota] = useState(s.nota || "");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-  const editando = modo === "incorrecto";
-  const x = numero(billetes);
-  const valido = Number.isFinite(x) && x >= 0 && /^\d+(\.\d{1,2})?$/.test(limpio(billetes));
-  const guardar = async (estado, b, n) => {
-    setBusy(true); setMsg("");
-    try { setDatos(await sb.rpc("sobre_revisar", { p_eod_id: s.eod_id, p_estado: estado, p_billetes: b, p_nota: n })); setModo(null); }
-    catch (e) { setMsg(e.message || "No se ha podido guardar"); }
-    setBusy(false);
-  };
-  const cajon = Number(s.ef_dif || 0);
-  const est = ESTADO[s.estado] || ESTADO.null;
-  const real = editando && valido ? x + Number(s.facturas_total) : s.estado === "incorrecto" ? Number(s.billetes) + Number(s.facturas_total) : null;
-  const descPrev = editando && valido ? Math.round((x - Number(s.deberia)) * 100) / 100 : Number(s.descuadre);
-  const btn = (activo, color) => ({ border: `1.5px solid ${activo ? color : C.brd}`, background: activo ? color : "#fff", color: activo ? "#fff" : C.char, borderRadius: 9, padding: "7px 12px", fontFamily: F, fontSize: 12.5, fontWeight: 700, cursor: busy ? "default" : "pointer" });
-  return (
-    <div style={{ borderTop: `1px solid ${C.brdL}`, padding: "10px 0" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-          <div style={{ fontFamily: F, fontSize: 13.5, fontWeight: 700, color: C.char }}><span style={{ textTransform: "capitalize" }}>{dia(s.fecha)}</span> · {turnoTxt(s)} · caja {s.caja}</div>
-          <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{(s.personas || []).join(", ") || "Sin turno en Horarios"}</div>
-          <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 3, lineHeight: 1.5 }}>
-            Epos esperaba {dinero(s.ef_esperado)} · marcaron {dinero(s.ef_contado)} · cajón{" "}
-            <span style={{ fontWeight: 700, color: Math.abs(cajon) > umbralCajon ? "#fff" : cajon < 0 ? ROJO : C.char, background: Math.abs(cajon) > umbralCajon ? ROJO : "transparent", borderRadius: 6, padding: Math.abs(cajon) > umbralCajon ? "0 5px" : 0 }}>{conSigno(cajon)}</span>
-            {Number(s.facturas_total) > 0 && <> · facturas −{dinero(s.facturas_total)}</>}
-          </div>
-          {Number(s.facturas_total) > 0 && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL }}>{(s.facturas || []).map((f) => `${f.proveedor} ${dinero(f.importe)}`).join(" · ")}</div>}
-          {s.emergencia && <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 700, color: AMBAR }}>Con ventas de emergencia: el descuadre del cajón no es una falta de dinero.</div>}
-        </div>
-        <div style={{ textAlign: "right", flex: "0 0 auto" }}>
-          <div style={{ fontFamily: F, fontSize: 11, color: C.mut }}>Debería haber en billetes</div>
-          <div style={{ fontFamily: SF, fontSize: 18, color: Number(s.deberia) < 0 ? ROJO : C.char }}>{dinero(s.deberia)}</div>
-          <span style={{ display: "inline-block", marginTop: 3, fontFamily: F, fontSize: 11.5, fontWeight: 800, padding: "3px 9px", borderRadius: 999, background: est[1], color: est[2] }}>{est[0]}{s.estado === "incorrecto" ? ` ${conSigno(s.descuadre)}` : ""}</span>
-        </div>
-      </div>
-      {Number(s.deberia) < 0 && <div style={{ fontFamily: F, fontSize: 12, color: ROJO, marginTop: 4 }}>Las facturas superan el efectivo del cierre: revisa si alguna se pagó de otro sitio.</div>}
-      {s.estado === "incorrecto" && !editando && (
-        <div style={{ fontFamily: F, fontSize: 12.5, color: C.char, marginTop: 6 }}>
-          Contado {dinero(s.billetes)} en billetes · efectivo real del turno {dinero(real)} · <b style={{ color: ROJO }}>descuadre {conSigno(s.descuadre)}</b>{s.nota ? ` · ${s.nota}` : ""}
-        </div>
-      )}
-      {s.revisado_por && !editando && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 3 }}>Revisado por {s.revisado_por} el {cuando(s.revisado_en)}</div>}
-      {editando ? (
-        <div style={{ background: "#FBF4E6", borderRadius: 10, padding: 10, marginTop: 8 }}>
-          <label style={lbl}>Billetes contados en este sobre</label>
-          <input inputMode="decimal" value={billetes} onChange={(e) => setBilletes(e.target.value)} placeholder="0,00" style={{ ...inp, marginBottom: 8 }} autoFocus />
-          {valido && (
-            <div style={{ fontFamily: F, fontSize: 13, marginBottom: 8, color: C.char }}>
-              Efectivo real del turno {dinero(real)} · <b style={{ color: descPrev ? "#fff" : C.char, background: descPrev ? ROJO : "transparent", borderRadius: 6, padding: descPrev ? "1px 6px" : 0 }}>descuadre {conSigno(descPrev)}</b>
-            </div>
-          )}
-          <label style={lbl}>Nota (opcional)</label>
-          <input value={nota} maxLength={300} onChange={(e) => setNota(e.target.value)} placeholder="Opcional" style={{ ...inp, marginBottom: 8 }} />
-          {billetes && !valido && <div style={{ fontFamily: F, fontSize: 12.5, color: ROJO, marginBottom: 6 }}>Pon un importe válido, con 2 decimales como mucho.</div>}
-          {msg && <div role="alert" style={{ fontFamily: F, fontSize: 12.5, color: ROJO, marginBottom: 6 }}>{msg}</div>}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={() => { setModo(null); setMsg(""); }} style={btn(false)}>Cancelar</button>
-            <button type="button" disabled={!valido || busy} onClick={() => guardar("incorrecto", Math.round(x * 100) / 100, nota.trim() || null)} style={{ ...btn(valido, ROJO), opacity: valido ? 1 : 0.5 }}>{busy ? "Guardando…" : "Guardar como incorrecto"}</button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-          <button type="button" disabled={busy} onClick={() => guardar("correcto", null, null)} style={btn(s.estado === "correcto", "#1E6B3C")}>Correcto</button>
-          <button type="button" disabled={busy} onClick={() => setModo("incorrecto")} style={btn(s.estado === "incorrecto", ROJO)}>{s.estado === "incorrecto" ? "Cambiar importe" : "Incorrecto"}</button>
-          {s.estado && <button type="button" disabled={busy} onClick={() => guardar(null, null, null)} style={btn(false)}>Dejar sin revisar</button>}
-          {msg && <span role="alert" style={{ fontFamily: F, fontSize: 12.5, color: ROJO, alignSelf: "center" }}>{msg}</span>}
-        </div>
-      )}
-    </div>
-  );
-}
+// #81: la confirmación sobre a sobre está en el panel, Finanzas → Efectivo → Caja → «Cuadre por turno» (finanzas/CuadreTurnos.jsx).
 
 function AperturaSobresTurnos({ mes, datos, setDatos }) {
   const [abierta, setAbierta] = useState(false);
-  const [filtro, setFiltro] = useState("todos");
   const [nota, setNota] = useState(datos.nota || "");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   useEffect(() => { setNota(datos.nota || ""); }, [datos.nota]);
-  const sobres = datos.sobres || [];
-  const lista = sobres.filter((s) => filtro === "todos" || (filtro === "sin" ? !s.estado : filtro === "cajon" ? Math.abs(Number(s.ef_dif || 0)) > Number(datos.umbral_cajon) : s.estado === "incorrecto"));
   const guardarNota = async () => {
     setBusy(true); setMsg("");
     try { setDatos(await sb.rpc("sobres_nota", { p_mes: mes, p_nota: nota.trim() || null })); }
@@ -145,7 +65,6 @@ function AperturaSobresTurnos({ mes, datos, setDatos }) {
     setBusy(false);
   };
   const fila = (t, v, fuerte) => <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontFamily: F, fontSize: fuerte ? 15 : 13.5, fontWeight: fuerte ? 700 : 500, color: C.char, padding: "5px 0" }}><span>{t}</span><span>{v}</span></div>;
-  const chip = (id, t) => <button key={id} type="button" onClick={() => setFiltro(id)} style={{ border: `1.5px solid ${filtro === id ? C.char : C.brd}`, background: filtro === id ? C.char : "#fff", color: filtro === id ? C.gold : C.mut, borderRadius: 999, padding: "5px 11px", fontFamily: F, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{t}</button>;
   return (
     <div style={{ ...crd, padding: 0, overflow: "hidden", border: datos.descuadre ? `2px solid ${ROJO}` : crd.border }}>
       <button type="button" onClick={() => setAbierta(!abierta)} aria-expanded={abierta} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
@@ -161,7 +80,7 @@ function AperturaSobresTurnos({ mes, datos, setDatos }) {
       {abierta && (
         <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${C.brdL}` }}>
           <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.45, margin: "12px 0 8px" }}>
-            Un sobre por cada cierre de Epos (turno y caja). Debería haber en billetes lo que marcaron al cerrar menos las facturas pagadas con «Efectivo de caja» de ese turno. Al contarlo: «Correcto» si cuadra (vale lo marcado) o «Incorrecto» y los billetes que hay. Los que quedan sin revisar cuentan como correctos.
+            Un sobre por cada cierre de Epos (turno y caja). Debería haber en billetes lo que marcaron al cerrar menos las facturas pagadas con «Efectivo de caja» de ese turno. Se confirman uno a uno en Caja; los que quedan sin revisar cuentan como correctos.
           </div>
           {datos.sin_revisar > 0 && <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: AMBAR, background: "#FBF0DA", borderRadius: 10, padding: "9px 12px", marginBottom: 8 }}>{datos.sin_revisar} sobre{datos.sin_revisar === 1 ? "" : "s"} sin revisar: las cifras usan lo que marcaron en ellos.</div>}
           {(datos.facturas_sin_sobre || []).length > 0 && <div style={{ fontFamily: F, fontSize: 12.5, color: AMBAR, background: "#FBF0DA", borderRadius: 10, padding: "9px 12px", marginBottom: 8 }}>Facturas en efectivo de caja sin ningún cierre de Epos en su turno (no se restan de ningún sobre): {datos.facturas_sin_sobre.map((f) => `${dia(f.fecha)} · ${f.proveedor} ${dinero(f.importe)}`).join("; ")}.</div>}
@@ -180,11 +99,9 @@ function AperturaSobresTurnos({ mes, datos, setDatos }) {
               {(nota.trim() || "") !== (datos.nota || "") && <button type="button" disabled={busy} onClick={guardarNota} style={{ border: "none", borderRadius: 10, background: C.char, color: C.gold, padding: "9px 16px", fontFamily: SF, fontSize: 14, cursor: "pointer" }}>{busy ? "Guardando…" : "Guardar nota"}</button>}
             </div>
           )}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "6px 0 4px" }}>
-            {chip("todos", `Todos (${sobres.length})`)}{chip("sin", `Sin revisar (${datos.sin_revisar})`)}{chip("cajon", "Cajón > 5 €")}{chip("mal", `Incorrectos (${datos.incorrectos})`)}
-          </div>
-          {lista.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, padding: "10px 0" }}>{sobres.length ? "Ningún sobre con este filtro." : "Todavía no hay cierres de Epos en este mes."}</div>
-            : lista.map((s) => <Sobre key={`${s.eod_id}-${s.estado}-${s.billetes}`} s={s} mes={mes} setDatos={setDatos} umbralCajon={Number(datos.umbral_cajon)} />)}
+          {fila("Sobres revisados", `${datos.revisados} de ${datos.cierres}${datos.incorrectos ? ` · ${datos.incorrectos} incorrecto${datos.incorrectos === 1 ? "" : "s"}` : ""}`)}
+          <a href={`#/finanzas/efectivo/caja?mes=${mes}`} style={{ display: "inline-block", marginTop: 8, fontFamily: F, fontSize: 13.5, fontWeight: 700, color: C.char }}>Revisar en Caja →</a>
+          <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 2 }}>Cada sobre se confirma en Finanzas → Efectivo → Caja («Cuadre por turno»).</div>
           {(datos.historial || []).length > 0 && (
             <details style={{ marginTop: 8, fontFamily: F, fontSize: 12.5, color: C.mut }}>
               <summary style={{ cursor: "pointer" }}>Cambios ({datos.historial.length})</summary>

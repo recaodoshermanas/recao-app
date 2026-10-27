@@ -38,6 +38,9 @@ export function CierreLista({ mes, estado, onEstado, irA }) {
     setBusy(false);
   };
   const ir = (p) => {
+    // #81: los sobres y la tarjeta se revisan en Finanzas → Efectivo → Caja (salvo que falte subir el extracto de La Caixa)
+    if (p.k === "sobres" || p.k === "tarjeta" || (p.k === "tarjeta2" && !/extracto/i.test(p.falta || ""))) { window.location.hash = `/finanzas/efectivo/caja?mes=${mes}`; return; }
+    if (p.k === "tarjeta2") { window.location.hash = "/finanzas/banco/bancos"; return; }
     if (String(p.ir).startsWith("#/")) window.location.hash = p.ir.slice(1);
     else irA(p.ir);
   };

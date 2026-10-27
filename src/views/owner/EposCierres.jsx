@@ -25,7 +25,6 @@ const turnoTxt = (r) => (r.dos_turnos ? "Mañana y tarde" : r.turno === "mañana
 function EposCierresTurnos({ mes }) {
   const [d, setD] = useState(null);
   const [abierta, setAbierta] = useState(false);
-  const [fila, setFila] = useState(null);
   const cargar = useCallback(async () => {
     try { setD(await sb.rpc("epos_cierres_mes", { p_mes: mes })); } catch (e) { setD(false); }
   }, [mes]);
@@ -36,7 +35,8 @@ function EposCierresTurnos({ mes }) {
   const malo = d.marcados > 0;
   const ult = (() => { try { return d.ultimo ? JSON.parse(d.ultimo) : null; } catch (e) { return null; } })();
   const err = (() => { try { return d.error ? JSON.parse(d.error) : null; } catch (e) { return null; } })();
-  const celda = { padding: "5px 6px", textAlign: "right", whiteSpace: "nowrap" };
+  const sum = (k) => filas.reduce((t, r) => t + (Number(r[k]) || 0), 0);
+  const tot = { efE: sum("ef_esperado"), efC: sum("ef_contado"), taE: sum("ta_esperado"), taC: sum("ta_contado") };
   const dif = (v, fuerte) => <span style={{ fontWeight: fuerte ? 800 : 600, color: Number(v) < 0 ? ROJO : Number(v) > 0 ? "#1E6B3C" : C.mut }}>{v == null ? "–" : conSigno(v)}</span>;
   return (
     <div style={{ ...crd, padding: 0, overflow: "hidden", border: malo ? `2px solid ${ROJO}` : crd.border }}>
@@ -53,59 +53,21 @@ function EposCierresTurnos({ mes }) {
       {abierta && (
         <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${C.brdL}` }}>
           <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.45, margin: "12px 0 8px" }}>
-            Lo que Epos esperaba en cada cierre frente a lo que contaron al cerrar, por forma de pago (debajo de cada diferencia: esperado → contado). Neto = diferencia de efectivo + diferencia de tarjeta; en color si pasa de ±5 €. «Cruce» = sobra en una forma de pago y falta en la otra: un cobro marcado con la forma de pago equivocada, no una falta de dinero. Pulsa una fila para ver sus facturas y los billetes que deben ir al sobre.
+            Lo que Epos esperaba en los cierres del mes frente a lo que contaron al cerrar. Neto = diferencia de efectivo + diferencia de tarjeta. El detalle turno a turno, con sus facturas y los billetes que deben ir al sobre, está en Caja.
           </div>
           {err && <div role="alert" style={{ fontFamily: F, fontSize: 12.5, color: "#fff", background: ROJO, borderRadius: 10, padding: "9px 12px", marginBottom: 8 }}>La última carga de Epos ha fallado ({err.error}). Puede faltar algún cierre reciente.</div>}
           {(d.facturas_sin_sobre || []).length > 0 && <div style={{ fontFamily: F, fontSize: 12.5, color: AMBAR, background: "#FBF0DA", borderRadius: 10, padding: "9px 12px", marginBottom: 8 }}>Facturas en efectivo de caja sin ningún cierre en su turno: {d.facturas_sin_sobre.map((f) => `${dia(f.fecha)} ${f.turno || ""} · ${f.proveedor} ${dinero(f.importe)}`).join("; ")}.</div>}
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F, fontSize: 12.5 }}>
-              <thead>
-                <tr style={{ color: C.mut, textAlign: "left" }}>
-                  <th style={{ padding: "4px 6px" }}>Día</th><th style={{ padding: "4px 6px" }}>Turno y caja</th><th style={{ padding: "4px 6px" }}>Quién</th>
-                  <th style={celda}>Efectivo</th><th style={celda}>Tarjeta</th><th style={celda}>Neto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filas.map((r) => {
-                  const abierto = fila === r.eod_id;
-                  return [
-                    <tr key={r.eod_id} onClick={() => setFila(abierto ? null : r.eod_id)} style={{ borderTop: `1px solid ${C.brdL}`, cursor: "pointer", background: r.marcado ? "#FBE3DE" : r.cruce || r.emergencia ? "#FBF4E6" : "transparent" }}>
-                      <td style={{ padding: "5px 6px", textTransform: "capitalize", whiteSpace: "nowrap" }}>{dia(r.fecha)}</td>
-                      <td style={{ padding: "5px 6px", whiteSpace: "nowrap" }}>{turnoTxt(r)} · caja {r.caja}<span style={{ display: "block", fontSize: 11, color: C.mut }}>{hora(r.abre)}–{hora(r.cierra)}</span></td>
-                      <td style={{ padding: "5px 6px", color: C.mut, minWidth: 110 }}>{(r.personas || []).join(", ") || "–"}</td>
-                      <td style={celda}>{dif(r.ef_dif)}<span style={{ display: "block", fontSize: 11, color: C.mut }}>{dinero(r.ef_esperado)} → {dinero(r.ef_contado)}</span></td>
-                      <td style={celda}>{dif(r.ta_dif)}<span style={{ display: "block", fontSize: 11, color: C.mut }}>{dinero(r.ta_esperado)} → {dinero(r.ta_contado)}</span></td>
-                      <td style={celda}>
-                        {dif(r.neto, true)}
-                        {r.cruce && <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: AMBAR }}>Cruce</span>}
-                        {r.emergencia && <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: AMBAR }}>Con ventas de emergencia</span>}
-                      </td>
-                    </tr>,
-                    abierto && (
-                      <tr key={`${r.eod_id}-d`}><td colSpan={6} style={{ padding: "4px 6px 12px", background: "#FBF8F1" }}>
-                        <div style={{ fontFamily: F, fontSize: 12.5, color: C.char, lineHeight: 1.5 }}>
-                          {(r.facturas || []).length ? (
-                            <>
-                              <b>Facturas pagadas con «Efectivo de caja» que salen de este sobre</b>
-                              {r.facturas.map((f) => <div key={f.id} style={{ display: "flex", justifyContent: "space-between", maxWidth: 360 }}><span>· {f.proveedor}</span><span>{dinero(f.importe)}</span></div>)}
-                            </>
-                          ) : <span style={{ color: C.mut }}>Sin facturas en efectivo de caja en este sobre.</span>}
-                          <div style={{ display: "flex", justifyContent: "space-between", maxWidth: 360, marginTop: 6, fontWeight: 700 }}><span>Billetes que deben ir al sobre</span><span>{dinero(r.deberia)}</span></div>
-                          <div style={{ fontSize: 11.5, color: C.mut }}>Efectivo contado en el cierre ({dinero(r.ef_contado)}) menos esas facturas. Las facturas del turno se restan en el sobre de la caja 1; si ese turno no tiene caja 1, en el de la caja 2.</div>
-                          {Number(r.deberia) < 0 && <div style={{ color: ROJO, fontWeight: 700, marginTop: 4 }}>Las facturas superan el efectivo del cierre: revisa si alguna se pagó de otro sitio (caja fuerte, sobres…).</div>}
-                          {r.emergencia && <div style={{ color: AMBAR, marginTop: 4 }}>Este turno tuvo ventas de la caja de emergencia, que se subieron a Epos después del cierre: el descuadre no es una falta de dinero.</div>}
-                        </div>
-                      </td></tr>
-                    ),
-                  ];
-                })}
-                <tr style={{ borderTop: `2px solid ${C.char}`, fontWeight: 700 }}>
-                  <td style={{ padding: "6px" }} colSpan={3}>Total del mes{(d.emergencia || []).length ? " (sin los turnos con ventas de emergencia)" : ""}</td>
-                  <td style={celda}>{dif(d.ef, true)}</td><td style={celda}>{dif(d.ta, true)}</td><td style={celda}>{dif(d.neto, true)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {[
+            ["Efectivo: esperado → contado", `${dinero(tot.efE)} → ${dinero(tot.efC)}`, d.ef],
+            ["Tarjeta: esperado → datáfono", `${dinero(tot.taE)} → ${dinero(tot.taC)}`, d.ta],
+          ].map(([t, v, x]) => (
+            <div key={t} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontFamily: F, fontSize: 13.5, color: C.char, padding: "5px 0", borderTop: `1px solid ${C.brdL}` }}>
+              <span>{t}<span style={{ display: "block", fontSize: 11.5, color: C.mut }}>{v}</span></span>{dif(x, true)}
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 14, fontWeight: 700, color: C.char, padding: "6px 0", borderTop: `2px solid ${C.char}` }}><span>Neto del mes{(d.emergencia || []).length ? " (sin los turnos con ventas de emergencia)" : ""}</span>{dif(d.neto, true)}</div>
+          <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{filas.length} cierre{filas.length === 1 ? "" : "s"}{malo ? ` · ${d.marcados} con más de 5 €` : ""}{filas.filter((r) => r.cruce).length ? ` · ${filas.filter((r) => r.cruce).length} con cruce de forma de pago` : ""}</div>
+          <a href={`#/finanzas/efectivo/caja?mes=${mes}`} style={{ display: "inline-block", marginTop: 8, fontFamily: F, fontSize: 13.5, fontWeight: 700, color: C.char }}>Revisar en Caja →</a>
           {ult && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 8 }}>Cierres traídos de Epos el {new Date(ult.en).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}. Se actualiza solo a las 00:20 y a las 7:20.</div>}
         </div>
       )}
