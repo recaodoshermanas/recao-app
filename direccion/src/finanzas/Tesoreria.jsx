@@ -167,10 +167,11 @@ function Repartir() {
         <div><span>+ Cobros previstos a 60 días</span><b>{eur(r.cobros, 2)}</b></div>
         <div><span>− Pagos previstos a 60 días</span><b>{eur(r.pagos, 2)}</b></div>
         <div><span>− Colchón: un mes de gastos fijos</span><b>{eur(r.colchon, 2)}</b></div>
+        {n(r.reserva_impuestos) > 0 && <div><span>− Reserva para los impuestos del {r.reserva_impuestos_fechas}</span><b>{eur(r.reserva_impuestos, 2)}</b></div>}
         <div className="res"><span>= Se puede repartir</span><b className={mal ? "te-neg" : ""}>{eur(r.repartir, 2)}</b></div>
       </div>
       <p className="sub"><a href="#/finanzas/efectivo/sobres" style={{ color: "inherit" }}>De eso, en efectivo guardado hay <b>{eur(r.en_efectivo, 2)}</b></a>{n(r.ya_repartido) > 0 && <> · Ya repartido este mes: <b>{eur(r.ya_repartido, 2)}</b></>}</p>
-      <p className="sub">Es una orientación: la app no impide registrar un reparto mayor (se registra en Efectivo de sobres). El colchón es la misma cifra de «Gastos fijos al mes» del Resumen; cobros y pagos son la previsión de «Próximos días» a 60 días.</p>
+      <p className="sub">Es una orientación: la app no impide registrar un reparto mayor (se registra en Efectivo de sobres). El colchón es la misma cifra de «Gastos fijos al mes» del Resumen; cobros y pagos son la previsión de «Próximos días» a 60 días. La reserva de impuestos aparece solo cuando el siguiente plazo cae más allá de esos 60 días (si no, ya está en los pagos previstos); es el importe estimado del calendario.</p>
     </div>
   );
 }
