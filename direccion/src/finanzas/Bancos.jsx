@@ -18,6 +18,8 @@ const mesDe = (f) => String(f || "").slice(0, 7);
 const nombreMes = (m) => { const d = new Date(`${m}-15T12:00:00`); const t = d.toLocaleDateString("es-ES", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const msg = (e) => { const t = String(e?.message || e || ""); const m = /"error"\s*:\s*"([^"]+)"/.exec(t); return m ? m[1] : t || "No se ha podido"; };
 
+const ETIQUETAS = ["Proveedor", "Gasto fijo", "Nóminas", "Seguridad Social", "Impuestos", "Paquetería", "Datáfono", "Retirada de efectivo", "Traspaso entre bancos", "Bizum", "Gastos del banco", "Otros"]; // #86
+const sinTildes = (t) => String(t || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const DESDE_CONC = "2026-10-01"; // #87: la conciliación solo mira los movimientos desde esta fecha
 // La cuenta manual va con activa=false para que la sincronización con el banco (que solo recorre las activas) no la toque
 const esManual = (c) => c.aspsp_nombre === "Extracto manual";
@@ -92,6 +94,10 @@ export function Bancos() {
   const [fMes, setFMes] = useState("");
   const [fExp, setFExp] = useState("");
   const [conc, setConc] = useState({});
+  const [etq, setEtq] = useState({}); // #86: etiqueta de cada movimiento (automática o puesta a mano)
+  const [fTexto, setFTexto] = useState("");
+  const [fEtq, setFEtq] = useState("");
+  const [editEtq, setEditEtq] = useState(null);
   const [manual, setManual] = useState(null);
   const [nota, setNota] = useState("");
   const [volviendo, setVolviendo] = useState(false);
@@ -102,6 +108,7 @@ export function Bancos() {
       const m = c.length ? await sb.select("movimientos_banco", "select=id,cuenta_id,fecha_operacion,importe,concepto,contraparte&order=fecha_operacion.desc,id.desc&limit=5000") : [];
       setCuentas(c); setMovs(m); setFallo(false);
       // #87: lo que explica cada movimiento desde el 1/10/2026 (si falla, la lista sigue sin la columna)
+      sb.rpc("banco_movimientos_etiquetados").then((r) => setEtq(Object.fromEntries((r || []).map((x) => [x.id, x])))).catch(() => setEtq({}));
       sb.rpc("banco_conciliacion").then((r) => setConc(Object.fromEntries((r || []).map((x) => [x.movimiento_id, x])))).catch(() => setConc({}));
     } catch (e) { setFallo(true); }
   }, []);
@@ -140,7 +147,9 @@ export function Bancos() {
   const C = useMemo(() => Object.fromEntries((cuentas || []).map((c) => [c.id, c])), [cuentas]);
   const meses = useMemo(() => [...new Set(movs.map((m) => mesDe(m.fecha_operacion)).filter(Boolean))].sort().reverse(), [movs]);
   const aplica = (m) => String(m.fecha_operacion).slice(0, 10) >= DESDE_CONC;
-  const lista = useMemo(() => movs.filter((m) => (!fBanco || C[m.cuenta_id]?.banco === fBanco) && (!fMes || mesDe(m.fecha_operacion) === fMes) && (fExp !== "sin" || (aplica(m) && !conc[m.id]))), [movs, fBanco, fMes, fExp, conc, C]);
+  const busca = sinTildes(fTexto.trim());
+  const lista = useMemo(() => movs.filter((m) => (!fBanco || C[m.cuenta_id]?.banco === fBanco) && (!fMes || mesDe(m.fecha_operacion) === fMes) && (fExp !== "sin" || (aplica(m) && !conc[m.id]))
+    && (!busca || sinTildes(`${m.concepto || ""} ${m.contraparte || ""}`).includes(busca)) && (!fEtq || etq[m.id]?.etiqueta === fEtq)), [movs, fBanco, fMes, fExp, conc, C, busca, fEtq, etq]);
   const sinExp = useMemo(() => movs.filter((m) => (!fBanco || C[m.cuenta_id]?.banco === fBanco) && (!fMes || mesDe(m.fecha_operacion) === fMes) && aplica(m) && !conc[m.id]), [movs, fBanco, fMes, conc, C]);
   const sinExpEntra = sinExp.filter((m) => m.importe > 0).reduce((s, m) => s + Number(m.importe), 0);
   const sinExpSale = -sinExp.filter((m) => m.importe < 0).reduce((s, m) => s + Number(m.importe), 0);
@@ -155,6 +164,20 @@ export function Bancos() {
     setBusy(`m-${id}`);
     try { await sb.rpc("banco_quitar_explicacion", { p_movimiento: id }); await cargar(); }
     catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  // #86: cambiar la etiqueta; si tiene ordenante o beneficiario, se pregunta si aplicarla a todos los suyos (y a los que lleguen)
+  const cambiarEtq = async (m, etiqueta) => {
+    setEditEtq(null);
+    if (!etiqueta || etiqueta === etq[m.id]?.etiqueta) return;
+    const aplicar = !!m.contraparte && window.confirm(`¿Poner «${etiqueta}» también a los demás movimientos de ${m.contraparte} y a los que lleguen después?\n\nAceptar: a todos · Cancelar: solo a este`);
+    setBusy(`e-${m.id}`);
+    try {
+      const n = await sb.rpc("banco_etiqueta_cambiar", { p_mov: m.id, p_etiqueta: etiqueta, p_aplicar: aplicar });
+      avisar(aplicar ? `«${etiqueta}» puesta a ${n} movimiento${n === 1 ? "" : "s"}` : `Etiqueta cambiada a «${etiqueta}»`, "ok");
+      const r = await sb.rpc("banco_movimientos_etiquetados");
+      setEtq(Object.fromEntries((r || []).map((x) => [x.id, x])));
+    } catch (e) { avisar(msg(e), "mal"); }
     setBusy(null);
   };
   const entra = lista.filter((m) => m.importe > 0).reduce((s, m) => s + Number(m.importe), 0);
@@ -229,8 +252,10 @@ export function Bancos() {
 
       <div className="card mt" style={{ marginTop: 16 }}>
         <div className="head" style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div><h2>Movimientos</h2><p className="sub">{lista.length} movimientos · entra <span style={{ color: "var(--up)", fontWeight: 700 }}>{eur(entra, 2)}</span> · sale <span style={{ color: "var(--down)", fontWeight: 700 }}>{eur(sale, 2)}</span></p></div>
+          <div><h2>Movimientos</h2><p className="sub">{lista.length} movimientos · entradas <span style={{ color: "var(--up)", fontWeight: 700 }}>{eur(entra, 2)}</span> · salidas <span style={{ color: "var(--down)", fontWeight: 700 }}>{eur(-sale, 2)}</span> · diferencia <b>{eur(entra + sale, 2)}</b></p></div>
           <div className="filtros-t" style={{ marginBottom: 0 }}>
+            <label><span className="sr">Buscar</span><input type="search" value={fTexto} onChange={(e) => setFTexto(e.target.value)} placeholder="Buscar concepto u ordenante" style={{ minWidth: 190 }} /></label>
+            <label><span className="sr">Etiqueta</span><select value={fEtq} onChange={(e) => setFEtq(e.target.value)}><option value="">Todas las etiquetas</option>{ETIQUETAS.map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
             <label><span className="sr">Banco</span><select value={fBanco} onChange={(e) => setFBanco(e.target.value)}><option value="">Todos los bancos</option>{[...conectados].map((b) => <option key={b} value={b}>{b}</option>)}</select></label>
             <label><span className="sr">Explicación</span><select value={fExp} onChange={(e) => setFExp(e.target.value)}><option value="">Todos</option><option value="sin">Sin explicar</option></select></label>
             <label><span className="sr">Mes</span><select value={fMes} onChange={(e) => setFMes(e.target.value)}><option value="">Todos los meses</option>{meses.map((m) => <option key={m} value={m}>{nombreMes(m)}</option>)}</select></label>
@@ -240,7 +265,7 @@ export function Bancos() {
         {!lista.length ? <p className="empty">No hay movimientos con estos filtros.</p> : (
           <div className="tabla-scroll">
             <table className="ranking">
-              <thead><tr><th>Fecha</th><th>Banco</th><th>Concepto</th><th className="r">Importe</th><th>Explicado por</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Banco</th><th>Concepto</th><th className="r">Importe</th><th>Etiqueta</th><th>Explicado por</th></tr></thead>
               <tbody>
                 {lista.slice(0, 1000).map((m) => (
                   <tr key={m.id}>
@@ -248,6 +273,15 @@ export function Bancos() {
                     <td style={{ whiteSpace: "nowrap" }}>{C[m.cuenta_id]?.banco}</td>
                     <td>{m.concepto || "—"}{m.contraparte && <span className="pf">{m.contraparte}</span>}</td>
                     <td className="r" style={{ fontWeight: 700, color: m.importe < 0 ? "var(--down)" : "var(--up)" }}>{m.importe > 0 ? "+" : ""}{eur(m.importe, 2)}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {editEtq === m.id ? (
+                        <select autoFocus value={etq[m.id]?.etiqueta || ""} onChange={(e) => cambiarEtq(m, e.target.value)} onBlur={() => setEditEtq(null)}>
+                          {ETIQUETAS.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      ) : etq[m.id] ? (
+                        <button className="btn-txt" title="Cambiar la etiqueta" disabled={!!busy} onClick={() => setEditEtq(m.id)} style={{ fontWeight: 600 }}>{busy === `e-${m.id}` ? "Guardando…" : etq[m.id].etiqueta}{etq[m.id].manual ? " ✎" : ""}</button>
+                      ) : <span className="pf">—</span>}
+                    </td>
                     <td>
                       {!aplica(m) ? <span className="pf">—</span> : conc[m.id] ? (
                         <>
