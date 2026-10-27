@@ -1,5 +1,6 @@
 // Finanzas → Banco → Tesorería (solicitud #89): el dinero real de hoy y a fin de cada mes. Sustituye al «Saldo estimado».
 // «Próximos días» (solicitud #90) sale de tesoreria_prevision(): bancos de hoy + cobros previstos − pagos previstos, día a día.
+// «¿Cuánto podemos repartir?» (solicitud #91) sale de tesoreria_repartir(): hoy + cobros − pagos a 60 días − un mes de gastos fijos. Solo socios.
 // «Hoy» lee lo mismo que Bancos, Caja fuerte y Efectivo de sobres; «Evolución» sale de tesoreria_evolucion() (solo dirección; sobres, solo socios).
 import { useEffect, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
@@ -26,6 +27,11 @@ a.te-f:hover { background: var(--grid); }
 .te-pv .fin b { font-size: 22px; }
 .te-neg { color: var(--down); }
 .te-est td:nth-child(2) { font-style: italic; }
+.te-rp { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 6px 0 2px; }
+.te-rp.mal { color: var(--down); }
+.te-rl { display: grid; gap: 2px; margin: 10px 0 6px; }
+.te-rl > div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 2px; font-variant-numeric: tabular-nums; }
+.te-rl > div.res { border-top: 1.5px solid var(--line); margin-top: 4px; font-weight: 800; }
 .te-fecha td { border-top: 1.5px solid var(--line); }
 `;
 const n = (v) => Number(v) || 0;
@@ -119,6 +125,34 @@ function Prevision() {
   );
 }
 
+function Repartir() {
+  const [r, setR] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    sb.rpc("tesoreria_repartir").then((v) => { if (vivo) setR(v); }, () => { if (vivo) setR(false); });
+    return () => { vivo = false; };
+  }, []);
+  if (r === false) return null; // la cuenta «Recao» y quien no es socio no ve el bloque
+  if (!r) return <div className="card"><h2>¿Cuánto podemos repartir?</h2><Cargando /></div>;
+  const mal = n(r.repartir) <= 0;
+  return (
+    <div className="card">
+      <h2>¿Cuánto podemos repartir?</h2>
+      {mal ? <p className="te-rp mal">Ahora no conviene repartir</p> : <p className="te-rp">{eur(r.repartir, 2)}</p>}
+      {mal && <p className="sub"><b className="te-neg">Faltan {eur(r.falta, 2)} para cubrir el colchón de un mes de gastos fijos.</b></p>}
+      <div className="te-rl">
+        <div><span>Dinero de hoy <small style={{ color: "var(--muted)" }}>(bancos {eur(r.bancos, 2)} + efectivo vivo {eur(r.efectivo, 2)})</small></span><b>{eur(r.dinero_hoy, 2)}</b></div>
+        <div><span>+ Cobros previstos a 60 días</span><b>{eur(r.cobros, 2)}</b></div>
+        <div><span>− Pagos previstos a 60 días</span><b>{eur(r.pagos, 2)}</b></div>
+        <div><span>− Colchón: un mes de gastos fijos</span><b>{eur(r.colchon, 2)}</b></div>
+        <div className="res"><span>= Se puede repartir</span><b className={mal ? "te-neg" : ""}>{eur(r.repartir, 2)}</b></div>
+      </div>
+      <p className="sub"><a href="#/finanzas/efectivo/sobres" style={{ color: "inherit" }}>De eso, en efectivo guardado hay <b>{eur(r.en_efectivo, 2)}</b></a>{n(r.ya_repartido) > 0 && <> · Ya repartido este mes: <b>{eur(r.ya_repartido, 2)}</b></>}</p>
+      <p className="sub">Es una orientación: la app no impide registrar un reparto mayor (se registra en Efectivo de sobres). El colchón es la misma cifra de «Gastos fijos al mes» del Resumen; cobros y pagos son la previsión de «Próximos días» a 60 días.</p>
+    </div>
+  );
+}
+
 export function Tesoreria() {
   const [d, setD] = useState(null);
   const [fallo, setFallo] = useState(false);
@@ -162,7 +196,8 @@ export function Tesoreria() {
   return (
     <>
       <style>{CSS}</style>
-      <div className="card">
+      <Repartir />
+      <div className="card" style={{ marginTop: 16 }}>
         <h2>Hoy</h2>
         <p className="sub">El dinero real que hay ahora: bancos, caja fuerte{verSobres ? " y efectivo de sobres guardado" : ""}. Son las mismas cifras de Bancos y Efectivo.</p>
         <div className="te-l">
