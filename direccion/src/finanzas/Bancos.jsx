@@ -18,6 +18,7 @@ const mesDe = (f) => String(f || "").slice(0, 7);
 const nombreMes = (m) => { const d = new Date(`${m}-15T12:00:00`); const t = d.toLocaleDateString("es-ES", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const msg = (e) => { const t = String(e?.message || e || ""); const m = /"error"\s*:\s*"([^"]+)"/.exec(t); return m ? m[1] : t || "No se ha podido"; };
 
+const DESDE_CONC = "2026-10-01"; // #87: la conciliación solo mira los movimientos desde esta fecha
 // La cuenta manual va con activa=false para que la sincronización con el banco (que solo recorre las activas) no la toque
 const esManual = (c) => c.aspsp_nombre === "Extracto manual";
 
@@ -89,6 +90,10 @@ export function Bancos() {
   const [elegir, setElegir] = useState(false);
   const [fBanco, setFBanco] = useState("");
   const [fMes, setFMes] = useState("");
+  const [fExp, setFExp] = useState("");
+  const [conc, setConc] = useState({});
+  const [manual, setManual] = useState(null);
+  const [nota, setNota] = useState("");
   const [volviendo, setVolviendo] = useState(false);
 
   const cargar = useCallback(async () => {
@@ -96,6 +101,8 @@ export function Bancos() {
       const c = await sb.select("cuentas_bancarias", "select=*&or=(activa.eq.true,aspsp_nombre.eq.Extracto%20manual)&order=banco");
       const m = c.length ? await sb.select("movimientos_banco", "select=id,cuenta_id,fecha_operacion,importe,concepto,contraparte&order=fecha_operacion.desc,id.desc&limit=5000") : [];
       setCuentas(c); setMovs(m); setFallo(false);
+      // #87: lo que explica cada movimiento desde el 1/10/2026 (si falla, la lista sigue sin la columna)
+      sb.rpc("banco_conciliacion").then((r) => setConc(Object.fromEntries((r || []).map((x) => [x.movimiento_id, x])))).catch(() => setConc({}));
     } catch (e) { setFallo(true); }
   }, []);
 
@@ -132,7 +139,24 @@ export function Bancos() {
 
   const C = useMemo(() => Object.fromEntries((cuentas || []).map((c) => [c.id, c])), [cuentas]);
   const meses = useMemo(() => [...new Set(movs.map((m) => mesDe(m.fecha_operacion)).filter(Boolean))].sort().reverse(), [movs]);
-  const lista = useMemo(() => movs.filter((m) => (!fBanco || C[m.cuenta_id]?.banco === fBanco) && (!fMes || mesDe(m.fecha_operacion) === fMes)), [movs, fBanco, fMes, C]);
+  const aplica = (m) => String(m.fecha_operacion).slice(0, 10) >= DESDE_CONC;
+  const lista = useMemo(() => movs.filter((m) => (!fBanco || C[m.cuenta_id]?.banco === fBanco) && (!fMes || mesDe(m.fecha_operacion) === fMes) && (fExp !== "sin" || (aplica(m) && !conc[m.id]))), [movs, fBanco, fMes, fExp, conc, C]);
+  const sinExp = useMemo(() => movs.filter((m) => (!fBanco || C[m.cuenta_id]?.banco === fBanco) && (!fMes || mesDe(m.fecha_operacion) === fMes) && aplica(m) && !conc[m.id]), [movs, fBanco, fMes, conc, C]);
+  const sinExpEntra = sinExp.filter((m) => m.importe > 0).reduce((s, m) => s + Number(m.importe), 0);
+  const sinExpSale = -sinExp.filter((m) => m.importe < 0).reduce((s, m) => s + Number(m.importe), 0);
+  const explicarMano = async (id) => {
+    if (!nota.trim()) { avisar("Escribe una nota para explicarlo", "mal"); return; }
+    setBusy(`m-${id}`);
+    try { await sb.rpc("banco_explicar_a_mano", { p_movimiento: id, p_nota: nota.trim() }); setManual(null); setNota(""); await cargar(); }
+    catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  const quitarMano = async (id) => {
+    setBusy(`m-${id}`);
+    try { await sb.rpc("banco_quitar_explicacion", { p_movimiento: id }); await cargar(); }
+    catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
   const entra = lista.filter((m) => m.importe > 0).reduce((s, m) => s + Number(m.importe), 0);
   const sale = lista.filter((m) => m.importe < 0).reduce((s, m) => s + Number(m.importe), 0);
 
@@ -208,13 +232,15 @@ export function Bancos() {
           <div><h2>Movimientos</h2><p className="sub">{lista.length} movimientos · entra <span style={{ color: "var(--up)", fontWeight: 700 }}>{eur(entra, 2)}</span> · sale <span style={{ color: "var(--down)", fontWeight: 700 }}>{eur(sale, 2)}</span></p></div>
           <div className="filtros-t" style={{ marginBottom: 0 }}>
             <label><span className="sr">Banco</span><select value={fBanco} onChange={(e) => setFBanco(e.target.value)}><option value="">Todos los bancos</option>{[...conectados].map((b) => <option key={b} value={b}>{b}</option>)}</select></label>
+            <label><span className="sr">Explicación</span><select value={fExp} onChange={(e) => setFExp(e.target.value)}><option value="">Todos</option><option value="sin">Sin explicar</option></select></label>
             <label><span className="sr">Mes</span><select value={fMes} onChange={(e) => setFMes(e.target.value)}><option value="">Todos los meses</option>{meses.map((m) => <option key={m} value={m}>{nombreMes(m)}</option>)}</select></label>
           </div>
         </div>
+        {sinExp.length > 0 && <p className="sub" style={{ color: "#c2570c", fontWeight: 700 }}>{sinExp.length} movimiento{sinExp.length === 1 ? "" : "s"} sin explicar ({eur(sinExpEntra, 2)} entradas · {eur(sinExpSale, 2)} salidas)</p>}
         {!lista.length ? <p className="empty">No hay movimientos con estos filtros.</p> : (
           <div className="tabla-scroll">
             <table className="ranking">
-              <thead><tr><th>Fecha</th><th>Banco</th><th>Concepto</th><th className="r">Importe</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Banco</th><th>Concepto</th><th className="r">Importe</th><th>Explicado por</th></tr></thead>
               <tbody>
                 {lista.slice(0, 1000).map((m) => (
                   <tr key={m.id}>
@@ -222,6 +248,22 @@ export function Bancos() {
                     <td style={{ whiteSpace: "nowrap" }}>{C[m.cuenta_id]?.banco}</td>
                     <td>{m.concepto || "—"}{m.contraparte && <span className="pf">{m.contraparte}</span>}</td>
                     <td className="r" style={{ fontWeight: 700, color: m.importe < 0 ? "var(--down)" : "var(--up)" }}>{m.importe > 0 ? "+" : ""}{eur(m.importe, 2)}</td>
+                    <td>
+                      {!aplica(m) ? <span className="pf">—</span> : conc[m.id] ? (
+                        <>
+                          {conc[m.id].ir ? <a className="enlace" href={conc[m.id].ir}>{conc[m.id].texto}</a> : conc[m.id].texto}
+                          {conc[m.id].tipo === "manual" && <span className="pf">{conc[m.id].nota} · {conc[m.id].quien}, {fechaHora(conc[m.id].cuando)} · <button className="btn-txt" disabled={!!busy} onClick={() => quitarMano(m.id)}>Quitar</button></span>}
+                        </>
+                      ) : manual === m.id ? (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <input autoFocus value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Nota obligatoria (p. ej. Bizum de un cliente)" style={{ minWidth: 200 }} />
+                          <button className="btn-p" disabled={!!busy} onClick={() => explicarMano(m.id)}>Guardar</button>
+                          <button className="btn-txt" onClick={() => { setManual(null); setNota(""); }}>Cancelar</button>
+                        </div>
+                      ) : (
+                        <><b style={{ color: "#c2570c" }}>Sin explicar</b> <button className="btn-l" onClick={() => { setManual(m.id); setNota(""); }}>Explicar a mano</button></>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
