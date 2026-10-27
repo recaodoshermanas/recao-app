@@ -100,7 +100,7 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
             <span style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{f.t.nombre}</span>
             <span style={{ fontFamily: F, fontSize: 15, fontWeight: 800, color: C.char }}>{fmt2(f.total)}</span>
           </div>
-          {f.cambiado && <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: "#7A4A0C", background: "#FFF1E0", borderRadius: 8, padding: "5px 8px", marginBottom: 6 }}>Han cambiado desde el último guardado: al guardar se actualizan.</div>}
+          {f.cambiado && <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: "#7A4A0C", background: "#FFF1E0", borderRadius: 8, padding: "5px 8px", marginBottom: 6 }}>Han cambiado desde el último guardado: se actualizan solos.</div>}
           {f.manual ? (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontFamily: F, fontSize: 13, color: C.char, padding: "3px 0" }}>
               <span>Nómina (líquido){f.falta && <b style={{ color: ROJO }}> · Falta nómina</b>}</span>
@@ -138,7 +138,7 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
         {fila("Nóminas y extras manuales", fmt2(totBase))}
         {totSobres > 0 && fila("En efectivo con los sobres (eventuales, horas extras, festivos, plus y otros)", fmt2(totSobres))}
         {fila("Total salarios del mes", fmt2(r2(totBase + totSobres)), { fontSize: 15, fontWeight: 800, borderTop: `1px solid ${C.brdL}`, marginTop: 4, paddingTop: 6 })}
-        {incompleto && <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: ROJO, marginTop: 4 }}>Incompleto: falta alguna nómina. Se puede guardar igual.</div>}
+        {incompleto && <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: ROJO, marginTop: 4 }}>Incompleto: falta alguna nómina (sale en la lista de cierre).</div>}
         <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 6, lineHeight: 1.4 }}>Lo de los sobres sale solo del horario, las horas extras, los festivos y el plus, y se ve también en Finanzas → Efectivo de sobres. En la Cuenta de resultados entra una sola vez, dentro de Personal.</div>
       </div>
     </div>

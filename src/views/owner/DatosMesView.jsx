@@ -10,14 +10,24 @@ import { SalariosMes } from "./SalariosMes.jsx"; // #18
 import { StockCierre } from "./StockCierre.jsx"; // #61
 import { GastosFijos } from "./GastosFijos.jsx"; // #28
 import { TarjetaBanco } from "./TarjetaBanco.jsx"; // #74
+import { CierreLista } from "./CierreLista.jsx"; // #76
+
+// #77: el Cierre de mes se guarda solo (al salir del campo, al añadir o quitar una línea y tras rellenar del banco).
+// Guardar ya no cierra el mes: eso se hace con «Cerrar mes» en la lista de cierre (#76).
+const ESPERA = 1500; // ms sin tocar nada antes de guardar mientras se escribe
+const estable = (x) => JSON.stringify(x, (k, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map((c) => [c, v[c]])) : v)); // compara sin importar el orden de las claves
 
 export function DatosMesView({ facturas, monthlyData, config, onReload, initialMonth }) {
-  const allMonths = [...new Set([...Object.keys(monthlyData), currentMK])].sort().reverse();
+  // #76: desde octubre de 2026 salen todos los meses hasta el actual, aunque aún no tengan nada guardado
+  const desdeOct = [];
+  for (let m = "2026-10"; m <= currentMK; ) { desdeOct.push(m); const [a, n] = m.split("-").map(Number); m = n === 12 ? `${a + 1}-01` : `${a}-${String(n + 1).padStart(2, "0")}`; }
+  const allMonths = [...new Set([...Object.keys(monthlyData), ...desdeOct, currentMK])].sort().reverse();
   const [selMonth, setSelMonth] = useState(() => initialMonth || Object.keys(monthlyData).sort().reverse()[0] || currentMK);
 
   useEffect(() => { if (initialMonth) setSelMonth(initialMonth); }, [initialMonth]);
 
-  const md = monthlyData[selMonth] || {};
+  const guardadosRef = useRef({}); // #77: lo último guardado en esta pantalla, por mes (por si la recarga aún no ha llegado)
+  const md = { ...(monthlyData[selMonth] || {}), ...(guardadosRef.current[selMonth] || {}) };
   const sobres = useSobres(selMonth); // SOBRES (#13): solo lo ven los socios
   const [stockActivo, setStockActivo] = useState(false); // #61
   const isSummary = !!md.resumen_legacy;
@@ -32,15 +42,26 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
   const [mantenimiento, setMantenimiento] = useState([]); // #42
   const [tarjeta, setTarjeta] = useState(null); // #74: desde octubre de 2026, ventas de Epos y tarjeta de la caja 1 frente a BBVA (false = sin acceso)
   const [repartoSobres, setRepartoSobres] = useState(null); // #75: solo lectura, sale de Efectivo de sobres (null = no es socio)
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [cierre, setCierre] = useState(null); // #76: estado de la lista de cierre (null cargando · false error)
+  const [guardado, setGuardado] = useState(null); // #77: { zona, estado: "guardando" | "ok" | "error" }
+  const sucio = useRef(false);
+  const zona = useRef("");
+  const temporizador = useRef(null);
+  const enMarcha = useRef(false);
+  const otraVez = useRef(false);
+  const guardarRef = useRef(null);
+  const iniciado = useRef("");
   const gfGuardar = useRef(null); // #28: apunta el origen (banco / a mano) de los gastos fijos al guardar
   const [salNuevo, setSalNuevo] = useState(null); // #18: null cargando · true tarjetas por trabajadora · false lista de antes
   const [salV2, setSalV2] = useState([]);
   useEffect(() => { setSalNuevo(null); }, [selMonth]);
 
+  // #77: el formulario se rellena al cambiar de mes (no en cada recarga, para no pisar lo que se está escribiendo)
   useEffect(() => {
-    const d = monthlyData[selMonth] || {};
+    if (iniciado.current === selMonth) return;
+    iniciado.current = selMonth;
+    sucio.current = false; setGuardado(null);
+    const d = { ...(monthlyData[selMonth] || {}), ...(guardadosRef.current[selMonth] || {}) };
     if (d.resumen_legacy) {
       setVentas(""); setPaqueteria({}); setGastosFijos({});
       setSalarios(config.salarios_template || []); setOtrosGastos([]);
@@ -66,7 +87,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
       setPaqueteria(r.efectiva || {});
     }).catch(() => {});
     return () => { vivo = false; };
-  }, [selMonth, monthlyData]);
+  }, [selMonth]); // #77: solo al cambiar de mes, para no pisar lo que se está escribiendo
 
   // #42: el mantenimiento del mes sale de Finanzas → Mantenimiento (solo lectura aquí)
   useEffect(() => {
@@ -105,8 +126,26 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
     return () => { vivo = false; };
   }, [selMonth, monthlyData]);
 
-  const handleSave = async () => {
-    setSaving(true);
+  // #76: lista de cierre del mes
+  const cargarCierre = () => sb.rpc("cierre_mes_estado", { p_mes: selMonth }).then((r) => setCierre(r)).catch(() => setCierre(false));
+  useEffect(() => {
+    let vivo = true;
+    setCierre(null);
+    sb.rpc("cierre_mes_estado", { p_mes: selMonth }).then((r) => { if (vivo) setCierre(r); }).catch(() => { if (vivo) setCierre(false); });
+    return () => { vivo = false; };
+  }, [selMonth]);
+  const cerrado = !!(cierre && cierre.cerrado);
+
+  // #77: guardado automático. Guarda lo mismo y en el mismo sitio que el antiguo botón «Guardar datos del mes».
+  guardarRef.current = async () => {
+    clearTimeout(temporizador.current);
+    if (!sucio.current) return;
+    if (!cierre || cierre.cerrado) { if (cierre && cierre.cerrado) sucio.current = false; return; } // mes cerrado: no se guarda nada
+    if (salNuevo === null || iniciado.current !== selMonth) return;
+    if (enMarcha.current) { otraVez.current = true; return; }
+    enMarcha.current = true; sucio.current = false;
+    const z = zona.current;
+    setGuardado({ zona: z, estado: "guardando" });
     try {
       const payload = {
         mes: selMonth,
@@ -117,15 +156,55 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
       };
       if (paqBanco) payload.paqueteria = await sb.rpc("paqueteria_guardar", { p_mes: selMonth, p_valores: paqueteria }); // #43
       await sb.upsert("datos_mes", payload, "mes");
-      try { await gfGuardar.current?.(); } catch (e) { alert("Guardado, pero no se ha podido apuntar el origen de los gastos fijos: " + e.message); }
+      await gfGuardar.current?.(); // #28: origen (banco / a mano) de los gastos fijos
       if (!salNuevo && salarios.length > 0) {
         await sb.upsert("config", { key: "salarios_template", value: salarios }, "key");
       }
-      await onReload();
-      setSaved(true); setTimeout(() => setSaved(false), 2000);
-    } catch (e) { alert("Error: " + e.message); }
-    setSaving(false);
+      guardadosRef.current[selMonth] = payload;
+      setGuardado({ zona: z, estado: "ok" });
+      setTimeout(() => setGuardado((g) => (g && g.estado === "ok" ? null : g)), 2000);
+      cargarCierre();
+      onReload();
+    } catch (e) {
+      sucio.current = true;
+      setGuardado({ zona: z, estado: "error", msg: e.message });
+    }
+    enMarcha.current = false;
+    if (otraVez.current) { otraVez.current = false; guardarRef.current(); }
   };
+  const tocar = (z, ms = ESPERA) => {
+    sucio.current = true; zona.current = z;
+    clearTimeout(temporizador.current);
+    temporizador.current = setTimeout(() => guardarRef.current?.(), ms);
+  };
+  const salir = () => { if (sucio.current) guardarRef.current?.(); };
+  // Salarios (formato nuevo): se guardan cuando cambian respecto a lo guardado (nóminas fijas, sobres…)
+  useEffect(() => {
+    if (salNuevo !== true || iniciado.current !== selMonth) return;
+    if (estable(salV2) !== estable(md.salarios || null)) tocar("salarios");
+  }, [salV2, salNuevo]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Si había algo pendiente mientras cargaba la lista de cierre, se guarda ahora (o se descarta si el mes está cerrado)
+  useEffect(() => { if (cierre && sucio.current) tocar(zona.current || "ingresos", 300); }, [cierre]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Al salir de la pantalla o cerrar la pestaña, se guarda lo pendiente
+  useEffect(() => {
+    const antes = (e) => { if (sucio.current) { guardarRef.current?.(); e.preventDefault(); e.returnValue = ""; } };
+    window.addEventListener("beforeunload", antes);
+    return () => { window.removeEventListener("beforeunload", antes); if (sucio.current) guardarRef.current?.(); };
+  }, []);
+  const cambiarMes = async (m) => { if (sucio.current) await guardarRef.current?.(); setSelMonth(m); };
+  const irA = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
+  const Aviso = ({ z }) => {
+    if (!guardado || guardado.zona !== z) return null;
+    if (guardado.estado === "guardando") return <div style={{ fontFamily: F, fontSize: 12, color: C.mut, margin: "-6px 2px 10px" }}>Guardando…</div>;
+    if (guardado.estado === "ok") return <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: "#1E6B3C", margin: "-6px 2px 10px" }}>Guardado ✓</div>;
+    return (
+      <div role="alert" style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: "#B3261E", margin: "-6px 2px 10px" }}>
+        No se ha guardado: <button type="button" onClick={() => { sucio.current = true; guardarRef.current?.(); }} style={{ background: "none", border: "none", padding: 0, fontFamily: F, fontSize: 12.5, fontWeight: 700, color: "#B3261E", textDecoration: "underline", cursor: "pointer" }}>reintentar</button>
+      </div>
+    );
+  };
+  // Cualquier cambio dentro de un apartado lo marca para guardar; al salir del campo se guarda
+  const zonaProps = (z) => ({ onChange: () => tocar(z), onBlur: salir, onClick: (e) => { if (e.target.closest("button")) tocar(z, 200); } });
 
   const setGF = (k, v) => setGastosFijos(p => ({ ...p, [k]: pn(v) }));
   const setPQ = (k, v) => setPaqueteria(p => ({ ...p, [k]: pn(v) }));
@@ -138,12 +217,17 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
     <div style={{ padding: "20px", maxWidth: 540, margin: "0 auto", paddingBottom: "60px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
         <h2 style={{ fontFamily: SF, fontSize: "20px", color: C.char, margin: 0 }}>Datos del mes</h2>
-        <select value={selMonth} onChange={e => setSelMonth(e.target.value)} style={{ ...inp, width: "auto", padding: "8px 12px", fontSize: "13px" }}>
-          {allMonths.map(m => <option key={m} value={m}>{mkLabel(m)}{monthlyData[m]?.resumen_legacy ? " (resumen)" : ""}</option>)}
+        <select value={selMonth} onChange={e => cambiarMes(e.target.value)} style={{ ...inp, width: "auto", padding: "8px 12px", fontSize: "13px" }}>
+          {allMonths.map(m => <option key={m} value={m}>{mkLabel(m)}{monthlyData[m]?.resumen_legacy ? " (resumen)" : ""}{(m === selMonth ? cerrado : monthlyData[m]?.cerrado) ? " · cerrado" : ""}</option>)}
         </select>
       </div>
 
+      <CierreLista mes={selMonth} estado={cierre} onEstado={(r) => { setCierre(r); onReload(); }} irA={irA} />
+
       <DescuadreSobres datos={sobres.datos} />
+
+      {/* #76: con el mes cerrado, todo lo de abajo queda en solo lectura */}
+      <fieldset disabled={cerrado} style={{ border: "none", margin: 0, padding: 0, minWidth: 0 }}>
 
       {isSummary && (
         <div style={{ ...crd, border: `2px solid ${C.gold}`, background: "#FFFBF0", marginBottom: "20px" }}>
@@ -154,9 +238,9 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
       )}
 
       {sobres.datos !== false && <Sec title="Efectivo" sub="Los sobres de los cierres de caja" />}
-      <AperturaSobres mes={selMonth} datos={sobres.datos} setDatos={sobres.setDatos} />
-      {sobres.datos !== false && <EposCierres mes={selMonth} />}
-      <TarjetaBanco mes={selMonth} datos={tarjeta} setDatos={setTarjeta} />
+      <div id="cm-sobres"><AperturaSobres mes={selMonth} datos={sobres.datos} setDatos={(r) => { sobres.setDatos(r); if (r) cargarCierre(); }} /></div>
+      <div id="cm-epos">{sobres.datos !== false && <EposCierres mes={selMonth} />}</div>
+      <div id="cm-tarjeta"><TarjetaBanco mes={selMonth} datos={tarjeta} setDatos={(r) => { setTarjeta(r); cargarCierre(); }} /></div>
 
       {stockActivo && <Sec title="Stock" sub="Fotos del stock de Epos valorado a coste (con IVA y recargo)" />}
       <StockCierre mes={selMonth} onActivo={setStockActivo} />
@@ -169,6 +253,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         </div>
       </div>
 
+      <div id="cm-ingresos" {...zonaProps("ingresos")}>
       <Sec title="Ingresos" />
       <div style={crd}>
         <label style={lbl}>Ventas EPOS (€)</label>
@@ -191,7 +276,10 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
           ))}
         </div>
       </div>
+      <Aviso z="ingresos" />
+      </div>
 
+      <div id="cm-salarios" {...zonaProps("salarios")}>
       <Sec title="Salarios" />
       <SalariosMes mes={selMonth} guardado={md.salarios} onCambio={setSalV2} onModo={setSalNuevo} />
       {salNuevo === false && <div style={crd}>
@@ -204,12 +292,18 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         ))}
         <button onClick={() => setSalarios(p => [...p, { id: uid(), nombre: "", amount: 0 }])} style={{ border: `1.5px dashed ${C.brd}`, background: "none", fontFamily: F, fontSize: "12px", color: C.mut, padding: "10px", borderRadius: "8px", width: "100%", cursor: "pointer" }}>+ Añadir salario</button>
       </div>}
-
-      <Sec title="Gastos fijos" />
-      <div style={crd}>
-        <GastosFijos mes={selMonth} valores={gastosFijos} onValores={v => setGastosFijos(p => ({ ...p, ...v }))} guardarRef={gfGuardar} />
+      <Aviso z="salarios" />
       </div>
 
+      <div id="cm-gf" {...zonaProps("gf")}>
+      <Sec title="Gastos fijos" />
+      <div style={crd}>
+        <GastosFijos mes={selMonth} valores={gastosFijos} onValores={v => { setGastosFijos(p => ({ ...p, ...v })); tocar("gf"); }} guardarRef={gfGuardar} />
+      </div>
+      <Aviso z="gf" />
+      </div>
+
+      <div {...zonaProps("otros")}>
       <Sec title="Otros gastos operativos" />
       <div style={crd}>
         {otrosGastos.map(o => (
@@ -220,6 +314,8 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
           </div>
         ))}
         <button onClick={() => setOtrosGastos(p => [...p, { id: uid(), concepto: "", amount: 0 }])} style={{ border: `1.5px dashed ${C.brd}`, background: "none", fontFamily: F, fontSize: "12px", color: C.mut, padding: "10px", borderRadius: "8px", width: "100%", cursor: "pointer" }}>+ Añadir gasto</button>
+      </div>
+      <Aviso z="otros" />
       </div>
 
       <Sec title="Mantenimiento" sub="Solo lectura: se gestiona en Finanzas → Mantenimiento" />
@@ -254,9 +350,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         </>}
       </div>
 
-      <button onClick={handleSave} disabled={saving || salNuevo === null} style={{ width: "100%", padding: "16px", border: "none", borderRadius: "12px", background: saving ? "#D8D0C4" : C.char, color: saving ? "#A09888" : C.gold, fontFamily: SF, fontSize: "16px", cursor: saving ? "default" : "pointer", marginTop: "8px", marginBottom: "40px", boxShadow: "0 4px 16px rgba(0,0,0,0.15)" }}>
-        {saving ? "Guardando..." : saved ? "✓ Guardado" : "Guardar datos del mes"}
-      </button>
+      </fieldset>
     </div>
   );
 }

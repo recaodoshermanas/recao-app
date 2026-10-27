@@ -3,7 +3,7 @@ import { num, mesCorto, mesAnio, parseDate } from "../fmt.js";
 
 const n0 = (v) => Number(v) || 0;
 const yy = (m) => String(parseDate(m).getFullYear()).slice(2);
-export const etiquetaMes = (m) => `${mesCorto(m.mes)} ${yy(m.mes)}${m.cerrado ? "" : " (en curso)"}`;
+export const etiquetaMes = (m) => `${mesCorto(m.mes)} ${yy(m.mes)}${m.cerrado ? "" : " (provisional)"}`;
 
 // Tabla tal y como se ve en pantalla: mismos meses, mismas filas y mismo modo (€ o % de ingresos)
 export function armarTabla({ meses, filas, margenFilas, modo, mes }) {
@@ -20,7 +20,7 @@ export function armarTabla({ meses, filas, margenFilas, modo, mes }) {
     margen: margenFilas.map((f) => ({ label: f.l, valores: meses.map((m) => { const v = f.f(m); return v == null ? null : v; }), pct: !!f.pct })),
     desde: `${mesCorto(meses[0].mes)}${yy(meses[0].mes)}`,
     hasta: `${mesCorto(meses[meses.length - 1].mes)}${yy(meses[meses.length - 1].mes)}`,
-    detalle: { titulo: `${mesAnio(mes.mes)}${mes.cerrado ? "" : " (en curso)"}`, hoja: `Detalle ${mesCorto(mes.mes)} ${yy(mes.mes)}`, filas: filasDetalle(mes) },
+    detalle: { titulo: `${mesAnio(mes.mes)}${mes.cerrado ? "" : " (provisional)"}`, hoja: `Detalle ${mesCorto(mes.mes)} ${yy(mes.mes)}`, filas: filasDetalle(mes) },
   };
 }
 

@@ -350,11 +350,12 @@ export function FinanzasResultados({ onEditMonth }) {
   const [cifra, setCifra] = useState(null); // #70: {f, m} de la cifra pulsada
   const scroll = useRef(null);
   const cerrados = useMemo(() => (d ? d.meses.filter((m) => m.cerrado) : []), [d]);
-  // #68: el mes en curso (sin cerrar) sale como una columna más, provisional, a la derecha del último mes cerrado
-  const enCurso = useMemo(() => (d ? d.meses.find((m) => !m.cerrado && m.mes === `${String(d.hoy || "").slice(0, 7)}-01`) || null : null), [d]);
-  const meses = useMemo(() => [...cerrados.slice(-12), ...(enCurso ? [enCurso] : [])], [cerrados, enCurso]);
-  // solo se compara con meses que existen de verdad en la app: cerrados o el mes en curso
-  const disponibles = useMemo(() => Object.fromEntries([...cerrados, ...(enCurso ? [enCurso] : [])].map((m) => [m.mes, m])), [cerrados, enCurso]);
+  // #68 / #76: los meses sin cerrar (el mes en curso, los de desde octubre de 2026 aún sin cerrar y los reabiertos) salen como columnas provisionales
+  const mesHoy = d ? `${String(d.hoy || "").slice(0, 7)}-01` : "";
+  const abiertos = useMemo(() => (d ? d.meses.filter((m) => !m.cerrado && m.mes <= mesHoy && (m.mes === mesHoy || m.mes >= "2026-10-01" || m.con_datos)) : []), [d, mesHoy]);
+  const meses = useMemo(() => [...cerrados.slice(-12), ...abiertos].sort((a, b) => (a.mes < b.mes ? -1 : 1)), [cerrados, abiertos]);
+  // solo se compara con meses que existen de verdad en la app: cerrados o sin cerrar (provisionales)
+  const disponibles = useMemo(() => Object.fromEntries([...cerrados, ...abiertos].map((m) => [m.mes, m])), [cerrados, abiertos]);
   useEffect(() => { if (cerrados.length && !sel) setSel(cerrados[cerrados.length - 1].mes); }, [cerrados, sel]);
   // en pantallas estrechas, que se vean primero los meses más recientes
   useEffect(() => { const el = scroll.current; if (el) el.scrollLeft = el.scrollWidth; }, [meses.length]);
@@ -416,7 +417,7 @@ export function FinanzasResultados({ onEditMonth }) {
         </div>
         <div className="tabla-scroll" ref={scroll}>
           <table className="fpl">
-            <thead><tr><th />{meses.map((m) => <th key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}`}><button onClick={() => setSel(m.mes)}>{mesCorto(m.mes)}<small>{String(parseDate(m.mes).getFullYear()).slice(2)}</small>{!m.cerrado && <small className="ec"> · en curso</small>}</button></th>)}</tr></thead>
+            <thead><tr><th />{meses.map((m) => <th key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}`}><button onClick={() => setSel(m.mes)}>{mesCorto(m.mes)}<small>{String(parseDate(m.mes).getFullYear()).slice(2)}</small>{!m.cerrado && <small className="ec"> · {m.mes === mesHoy ? "en curso" : "provisional"}</small>}</button></th>)}</tr></thead>
             <tbody>
               {filas.map((f) => f.sep ? <tr key={f.k} className="sep"><th colSpan={meses.length + 1}>{f.l}</th></tr> : (
                 <tr key={f.k} className={`${f.b || f.b2 ? "b" : ""}${f.r ? " r" : ""}${f.r2 ? " r tras" : ""}`}>
@@ -508,7 +509,7 @@ function VentanaCifra({ f, m, filas, socio, onClose, onEditMonth }) {
   };
   const signo = f.k === "reparto_sobres" && total ? "−" : "";
   return (
-    <Panel titulo={`${f.l} · ${mesAnio(m.mes)}`} sub={!m.cerrado ? "Mes en curso: cifras provisionales hasta hoy" : undefined} onClose={onClose} ancho="520px"
+    <Panel titulo={`${f.l} · ${mesAnio(m.mes)}`} sub={!m.cerrado ? avisoProvisional(m) : undefined} onClose={onClose} ancho="520px"
       pie={pant ? <button className="btn-l" onClick={ir}>Cambiar en {pant.l} →</button> : null}>
       <div className="vc-total"><span>Total</span><b>{signo}{eur(total, 2)}</b></div>
       {fallo ? <p className="empty">No se han podido cargar las partidas. Inténtalo de nuevo.</p>
@@ -536,6 +537,8 @@ function VentanaCifra({ f, m, filas, socio, onClose, onEditMonth }) {
 }
 
 // #68: mes con el que se compara (delta = meses de diferencia, −1 anterior, −12 mismo mes del año pasado)
+// #76: aviso de los meses sin cerrar (el mes en curso, o uno pasado aún sin cerrar o reabierto)
+function avisoProvisional(m) { const h = new Date(); const hoy = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, "0")}-01`; return m.mes === hoy ? "Mes en curso: cifras provisionales hasta hoy" : "Mes sin cerrar: cifras provisionales"; }
 function claveMes(mes, delta) { const f = parseDate(mes); const x = new Date(f.getFullYear(), f.getMonth() + delta, 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-01`; }
 
 function Comparacion({ mes, disponibles }) {
@@ -591,7 +594,7 @@ function DetalleMes({ mes, disponibles, onCambio, onEditMonth }) {
       <div className="card c6">
         <div className="head">
           <div><h2>{mesAnio(mes.mes)}</h2><p className="sub">Resultado {eur(sinDecimales(mes.resultado))} · {pct(mes.ingresos ? mes.resultado / mes.ingresos * 100 : 0)} de los ingresos</p>
-            {!mes.cerrado && <p className="sub" style={{ color: "#9A4A00", fontWeight: 700 }}>Mes en curso: cifras provisionales hasta hoy</p>}
+            {!mes.cerrado && <p className="sub" style={{ color: "#9A4A00", fontWeight: 700 }}>{avisoProvisional(mes)}</p>}
             {n0(mes.descuadres_caja) !== 0 && <p className="sub">Incluye {eur(mes.descuadres_caja, 2)} de descuadres de caja{mes.descuadre_tarjeta != null ? `: efectivo de los sobres ${eur(n0(mes.descuadre_efectivo), 2)} · tarjeta de la caja 1 ${eur(n0(mes.descuadre_tarjeta), 2)}` : " (sobres)"}</p>}
             {n0(mes.sobres_sin_revisar) > 0 && <p className="sub" style={{ color: "#9A4A00", fontWeight: 700 }}>{mes.sobres_sin_revisar} sobre{mes.sobres_sin_revisar === 1 ? "" : "s"} sin revisar en la Apertura de sobres: cuentan como correctos.</p>}
           </div>
