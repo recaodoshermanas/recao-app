@@ -9,6 +9,7 @@ import { EposCierres } from "./EposCierres.jsx"; // #15
 import { SalariosMes } from "./SalariosMes.jsx"; // #18
 import { StockCierre } from "./StockCierre.jsx"; // #61
 import { GastosFijos } from "./GastosFijos.jsx"; // #28
+import { TarjetaBanco } from "./TarjetaBanco.jsx"; // #74
 
 export function DatosMesView({ facturas, monthlyData, config, onReload, initialMonth }) {
   const allMonths = [...new Set([...Object.keys(monthlyData), currentMK])].sort().reverse();
@@ -29,6 +30,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
   const [otrosGastos, setOtrosGastos] = useState([]);
   const [inversiones, setInversiones] = useState([]);
   const [mantenimiento, setMantenimiento] = useState([]); // #42
+  const [tarjeta, setTarjeta] = useState(null); // #74: desde octubre de 2026, ventas de Epos y tarjeta de la caja 1 frente a BBVA (false = sin acceso)
   const [repartoSobres, setRepartoSobres] = useState(null); // #75: solo lectura, sale de Efectivo de sobres (null = no es socio)
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -94,12 +96,21 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
     return () => { vivo = false; };
   }, [selMonth, monthlyData]);
 
+  // #74: desde octubre de 2026 las ventas salen de Epos (no se escriben) y la tarjeta de la caja 1 se cruza con BBVA
+  const desdeEpos = selMonth >= "2026-10";
+  useEffect(() => {
+    let vivo = true;
+    setTarjeta(null);
+    if (selMonth >= "2026-10") sb.rpc("tarjeta_banco_mes", { p_mes: selMonth }).then((r) => { if (vivo) setTarjeta(r); }).catch(() => { if (vivo) setTarjeta(false); });
+    return () => { vivo = false; };
+  }, [selMonth, monthlyData]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const payload = {
         mes: selMonth,
-        ventas_epos: pn(ventas),
+        ventas_epos: desdeEpos && tarjeta && tarjeta.venta_epos != null ? Number(tarjeta.venta_epos) : pn(ventas),
         paqueteria, gastos_fijos: gastosFijos, salarios: salNuevo ? salV2 : salarios,
         otros_gastos: otrosGastos,
         resumen_legacy: null,
@@ -145,6 +156,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
       {sobres.datos !== false && <Sec title="Efectivo" sub="Los sobres de los cierres de caja" />}
       <AperturaSobres mes={selMonth} datos={sobres.datos} setDatos={sobres.setDatos} />
       {sobres.datos !== false && <EposCierres mes={selMonth} />}
+      <TarjetaBanco mes={selMonth} datos={tarjeta} setDatos={setTarjeta} />
 
       {stockActivo && <Sec title="Stock" sub="Fotos del stock de Epos valorado a coste (con IVA y recargo)" />}
       <StockCierre mes={selMonth} onActivo={setStockActivo} />
@@ -160,7 +172,14 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
       <Sec title="Ingresos" />
       <div style={crd}>
         <label style={lbl}>Ventas EPOS (€)</label>
-        <input type="number" inputMode="decimal" value={ventas} onChange={e => setVentas(e.target.value)} placeholder="50349" style={{ ...inp, marginBottom: "16px" }} />
+        {desdeEpos ? (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "16px", fontFamily: F, fontSize: "15px", color: C.char }}>
+            <span style={{ fontWeight: 700 }}>{tarjeta === null ? "Cargando…" : tarjeta && tarjeta.venta_epos != null ? fmt2(tarjeta.venta_epos) : "Sin ventas de Epos"}</span>
+            <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 9px", borderRadius: "999px", background: "#EAF4EE", color: "#1E6B3C" }}>De Epos</span>
+          </div>
+        ) : (
+          <input type="number" inputMode="decimal" value={ventas} onChange={e => setVentas(e.target.value)} placeholder="50349" style={{ ...inp, marginBottom: "16px" }} />
+        )}
         <label style={lbl}>Paquetería</label>
         {paqBanco && <div style={{ fontFamily: F, fontSize: "11px", color: C.mut, marginBottom: "8px" }}>Cobros recibidos en BBVA en el mes (del día 1 al último). Si cambias una cifra a mano, se respeta.</div>}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
