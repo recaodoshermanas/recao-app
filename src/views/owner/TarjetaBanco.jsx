@@ -57,12 +57,12 @@ function TarjetaCaja({ caja, mes, datos, d, setDatos }) {
             {tot("Descuadre", conSigno(t.descuadre), color(t.descuadre))}
             {tot("Días por revisar", String(t.por_revisar || 0), revisar ? { color: AMBAR } : null)}
           </div>
-          {revisar && <div style={{ fontSize: 12.5, color: AMBAR, fontWeight: 700, lineHeight: 1.45, marginBottom: 8 }}>{t.por_revisar} día{Number(t.por_revisar) === 1 ? "" : "s"} por revisar: no cuentan todavía (comisión {dinero(t.revisar_comision)}, descuadre {conSigno(t.revisar_descuadre)}).</div>}
           <div style={{ fontSize: 12.5, color: C.mut, lineHeight: 1.45, marginBottom: 8 }}>
             {caja === 1
               ? "BBVA ingresa la tarjeta de cada día con fecha valor del día siguiente (lo del fin de semana llega junto el lunes). "
               : "La Caixa abona la tarjeta de cada día con un movimiento «ON …» cuyo número final es el día y mes de la venta (se lee del extracto en PDF que subes en Finanzas → Bancos); el pequeño cargo «C. …» del mismo día se suma a la comisión. "}
             Comisión = datáfono − {banco}: va como gasto en Servicios («Comisiones del datáfono · caja {caja}»). Descuadre = datáfono − Epos: si es negativo falta dinero, si es positivo sobra; se suma a «Descuadres de caja». Sale «Revisar» cuando la comisión es negativa o pasa del 3 %, o cuando a los 3 días hábiles no ha llegado la remesa.
+            {revisar ? ` Los ${t.por_revisar} día${Number(t.por_revisar) === 1 ? "" : "s"} en «Revisar» no cuentan todavía (comisión ${dinero(t.comision_revisar)}, descuadre ${conSigno(t.descuadre_revisar)}) hasta que los des por buenos o los corrijas.` : ""}
             {Number(t.pendientes) > 0 ? ` Hay ${t.pendientes} día${Number(t.pendientes) === 1 ? "" : "s"} esperando la remesa: su comisión no cuenta todavía.` : ""}
           </div>
           {caja === 2 && (

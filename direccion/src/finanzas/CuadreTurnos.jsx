@@ -208,6 +208,8 @@ export function CuadreTurnos({ mes }) {
   const t1 = (tarjeta && tarjeta.caja1 && tarjeta.caja1.totales) || (tarjeta && tarjeta.totales) || {};
   const t2 = (tarjeta && tarjeta.caja2 && tarjeta.caja2.totales) || {};
   const porRevisar = n(t1.por_revisar) + n(t2.por_revisar);
+  const comRev = n(t1.comision_revisar) + n(t2.comision_revisar), desRev = n(t1.descuadre_revisar) + n(t2.descuadre_revisar);
+  const revisarTxt = porRevisar > 0 ? `${porRevisar} día${porRevisar === 1 ? "" : "s"} por revisar: no cuentan todavía (comisión ${e2(comRev)}, descuadre ${signo(desRev)})` : null; // #97
   const visibles = pendientes ? lineas.filter((l) => l.pendiente) : lineas;
   const tot = (titulo, valor, sub, mal) => (
     <div style={S.totc}>
@@ -220,12 +222,11 @@ export function CuadreTurnos({ mes }) {
     <>
       <div style={S.tot}>
         {tot("Descuadre de efectivo", signo(sobres.diferencia || 0), "Suma de los sobres incorrectos", sobres.descuadre)}
-        {tot("Descuadre de tarjeta", tarjeta ? signo(n(t1.descuadre) + n(t2.descuadre)) : "…", "Datáfono − Epos, las dos cajas", false)}
-        {tot("Comisión del datáfono", tarjeta ? e2(n(t1.comision) + n(t2.comision)) : "…", `Caja 1 ${e2(t1.comision)}${tarjeta && tarjeta.caja2 ? ` · caja 2 ${e2(t2.comision)}` : ""}`, false)}
+        {tot("Descuadre de tarjeta", tarjeta ? signo(n(t1.descuadre) + n(t2.descuadre)) : "…", revisarTxt || "Datáfono − Epos, las dos cajas", false)}
+        {tot("Comisión del datáfono", tarjeta ? e2(n(t1.comision) + n(t2.comision)) : "…", revisarTxt || `Caja 1 ${e2(t1.comision)}${tarjeta && tarjeta.caja2 ? ` · caja 2 ${e2(t2.comision)}` : ""}`, false)}
         {tot("Turnos por revisar", `${n(sobres.sin_revisar)} de ${n(sobres.cierres)}`, "Efectivo sin confirmar (cuentan como correctos)", n(sobres.sin_revisar) > 0)}
         {tot("Días de tarjeta por revisar", String(porRevisar), n(t1.pendientes) + n(t2.pendientes) ? `${n(t1.pendientes) + n(t2.pendientes)} esperando la remesa` : null, porRevisar > 0)}
       </div>
-      {porRevisar > 0 && <p className="sub aviso-txt">{porRevisar} día{porRevisar === 1 ? "" : "s"} de tarjeta por revisar: no cuentan todavía (comisión {e2(n(t1.revisar_comision) + n(t2.revisar_comision))}, descuadre {signo(n(t1.revisar_descuadre) + n(t2.revisar_descuadre))}).</p>}
       {tarjeta && tarjeta.caja2 && tarjeta.caja2.extracto && Number(tarjeta.caja2.extracto.movimientos) === 0 && <p className="sub">Todavía no se ha subido el extracto de La Caixa: <a href="#/finanzas/banco/bancos">súbelo en Finanzas → Bancos</a>.</p>}
       {(sobres.facturas_sin_sobre || []).length > 0 && <p className="sub aviso-txt">Facturas en efectivo de caja sin ningún cierre de Epos en su turno (no se restan de ningún sobre): {sobres.facturas_sin_sobre.map((f) => `${dia(f.fecha)} · ${f.proveedor} ${e2(f.importe)}`).join("; ")}.</p>}
       <label className="chk" style={{ marginTop: 0 }}><input type="checkbox" checked={pendientes} onChange={(e) => setPendientes(e.target.checked)} /> Solo pendientes ({lineas.filter((l) => l.pendiente).length})</label>
