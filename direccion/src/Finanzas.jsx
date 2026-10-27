@@ -789,13 +789,66 @@ function RecorridoEfectivo({ meses }) {
   );
 }
 
+// #95: proveedores por periodo y con tendencia (compras_proveedores_meses)
+const PERIODOS = [["3", "Últimos 3 meses"], ["anio", "Año en curso"], ["12", "Últimos 12 meses"]];
+function sumaMes(ym, k) { const [y, m] = ym.split("-").map(Number); const d = new Date(y, m - 1 + k, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
+function ProveedoresTabla({ mesActual }) {
+  const [datos, setDatos] = useState(null);
+  const [fallo, setFallo] = useState(false);
+  const [per, setPer] = useState("3");
+  useEffect(() => { supabase.rpc("compras_proveedores_meses").then(({ data, error }) => { if (error) setFallo(true); else setDatos(Array.isArray(data) ? data : []); }, () => setFallo(true)); }, []);
+  const cur = String(mesActual).slice(0, 7);
+  const cols = useMemo(() => {
+    const nM = per === "3" ? 3 : per === "12" ? 12 : Number(cur.slice(5)) ;
+    return Array.from({ length: nM }, (_, i) => sumaMes(cur, i - nM + 1));
+  }, [per, cur]);
+  const filas = useMemo(() => (datos || []).map((p) => {
+    const t = (ym) => n0(p.meses?.[ym]?.t);
+    const total = cols.reduce((s, ym) => s + t(ym), 0);
+    const n = cols.reduce((s, ym) => s + n0(p.meses?.[ym]?.n), 0);
+    const ult = [1, 2, 3].map((k) => sumaMes(cur, -k)), ant = [4, 5, 6].map((k) => sumaMes(cur, -k));
+    const completo = [...ult, ...ant].every((ym) => p.meses?.[ym]);
+    const mu = ult.reduce((s, ym) => s + t(ym), 0) / 3, ma = ant.reduce((s, ym) => s + t(ym), 0) / 3;
+    const tend = completo && ma > 0 ? (mu - ma) / ma * 100 : null;
+    return { ...p, t, total, n, tend };
+  }).filter((p) => p.n > 0).sort((a, b) => b.total - a.total), [datos, cols, cur]);
+  return (
+    <div className="grid">
+      <div className="card c12">
+        <div className="head">
+          <div><h2>Proveedores</h2><p className="sub">Facturas registradas en la app. El detalle por proveedor existe desde julio de 2026.</p></div>
+          <select value={per} onChange={(e) => setPer(e.target.value)}>{PERIODOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+          <a className="enlace" href="#/finanzas/facturas">Ver facturas →</a>
+        </div>
+        {fallo ? <p className="sub">No se han podido cargar los proveedores.</p> : !datos ? <p className="sub">Cargando…</p> : (
+          <div className="tabla-scroll">
+            <table className="ranking">
+              <thead><tr><th>Proveedor</th>{cols.map((ym) => <th key={ym} className="r">{mesCorto(ym + "-01")}{ym === cur ? " (en curso)" : ""}</th>)}<th className="r">Total</th><th className="r">Facturas</th><th className="r" data-tip="Media mensual de los 3 últimos meses cerrados frente a la de los 3 anteriores. Sube = se compra más.">Tendencia</th></tr></thead>
+              <tbody>
+                {filas.map((p) => (
+                  <tr key={p.clave}>
+                    <td><span className="pn">{p.nombre}</span>{p.variantes.length > 1 && <span className="pf aviso-txt">Escrito de {p.variantes.length} formas: {p.variantes.join(" / ")}</span>}</td>
+                    {cols.map((ym) => <td key={ym} className="r">{p.t(ym) ? eur(sinDecimales(p.t(ym))) : "–"}</td>)}
+                    <td className="r b">{eur(sinDecimales(p.total))}</td>
+                    <td className="r">{p.n}</td>
+                    <td className="r b" style={p.tend == null || Math.abs(p.tend) < 0.5 ? undefined : { color: p.tend > 0 ? "var(--down)" : "var(--up)" }}>{p.tend == null ? "–" : `${p.tend > 0 ? "↑" : p.tend < 0 ? "↓" : ""} ${pct(Math.abs(p.tend), 0)}`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------- 4. Compras ----------
 export function FinanzasCompras() {
   const { d, fallo } = useFinanzas();
   if (!d) return <Estado fallo={fallo} />;
   const meses = d.meses.filter((m) => m.cerrado).slice(-6);
   const actual = d.meses[d.meses.length - 1];
-  const nombres = [mesCorto(d.meses[d.meses.length - 3].mes), mesCorto(d.meses[d.meses.length - 2].mes), mesCorto(actual.mes)];
   const total6 = meses.reduce((s, m) => s + (m.epos_coste ? n0(m.compras_mercancia ?? m.mercancia) - m.epos_coste : 0), 0);
   return (
     <>
@@ -824,30 +877,7 @@ export function FinanzasCompras() {
           </table>
         </div>
       </div>
-      <div className="grid">
-        <div className="card c12">
-          <div className="head">
-            <div><h2>Proveedores</h2><p className="sub">Facturas registradas en la app, últimos tres meses</p></div>
-            <a className="enlace" href="#/finanzas/facturas">Ver facturas →</a>
-          </div>
-          <div className="tabla-scroll">
-            <table className="ranking">
-              <thead><tr><th>Proveedor</th>{nombres.map((n, i) => <th key={i} className="r">{n}{i === 2 ? " (en curso)" : ""}</th>)}<th className="r">Facturas</th></tr></thead>
-              <tbody>
-                {d.proveedores.map((p) => (
-                  <tr key={p.clave}>
-                    <td><span className="pn">{p.nombre}</span>{p.variantes.length > 1 && <span className="pf aviso-txt">Escrito de {p.variantes.length} formas: {p.variantes.join(" / ")}</span>}</td>
-                    <td className="r">{p.m2 ? eur(sinDecimales(p.m2)) : "–"}</td>
-                    <td className="r">{p.m1 ? eur(sinDecimales(p.m1)) : "–"}</td>
-                    <td className="r">{p.m0 ? eur(sinDecimales(p.m0)) : "–"}</td>
-                    <td className="r">{p.n}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      <ProveedoresTabla mesActual={actual.mes} />
     </>
   );
 }
