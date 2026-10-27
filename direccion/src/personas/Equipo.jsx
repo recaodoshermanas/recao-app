@@ -9,6 +9,7 @@ import { telNormalizado, TEL_AYUDA } from "../../../src/views/owner/UsuariosView
 import { Novedades } from "./Novedades.jsx";
 import { PlusFestivo } from "./PlusFestivo.jsx";
 import { HorasPorConfirmar, usePorConfirmar } from "./HorasPorConfirmar.jsx"; // #39
+import { Formacion } from "./Formacion.jsx"; // #79
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const tipoDe = (u) => (u.rol === "admin" ? "Dirección" : u.eventual ? "Eventual" : (u.tipo_turno || u.jornada) === "principal" ? "Principal" : (u.tipo_turno || u.jornada) === "apoyo" ? "Apoyo" : "Equipo");
@@ -16,8 +17,10 @@ const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", 
 const ultimoDia = (a, m) => new Date(a, m, 0).getDate();
 const pctTxt = (v) => (v == null ? "–" : `${Math.round(n0(v) * 100)} %`);
 
-export function Equipo({ user }) {
-  const [vista, setVista] = useState("personas");
+// extra puede ser "formacion" o "formacion:<id de la persona>" (desde el aviso de 21 días)
+export function Equipo({ user, extra }) {
+  const [vista, setVista] = useState(String(extra || "").startsWith("formacion") ? "formacion" : "personas");
+  const personaFoco = String(extra || "").startsWith("formacion:") ? String(extra).slice("formacion:".length) : null;
   const { equipo, recargarEquipo } = useEquipo();
   const [ficha, setFicha] = useState(null);
   const [nueva, setNueva] = useState(false);
@@ -26,13 +29,14 @@ export function Equipo({ user }) {
   return (
     <>
       <div className="barra-sec">
-        <Pestanas valor={vista} onChange={setVista} etiqueta="Equipo" opciones={[{ id: "personas", label: "Personas" }, { id: "plus", label: "Plus del mes" }, { id: "horas", label: "Horas extra", n: (porConfirmar || []).length }, { id: "festivos", label: "Plus festivos" }, { id: "novedades", label: "Novedades" }]} />
-        {vista !== "novedades" && <div className="acciones"><button className="btn-p" onClick={() => setNueva(true)}>+ Nueva cuenta</button></div>}
+        <Pestanas valor={vista} onChange={setVista} etiqueta="Equipo" opciones={[{ id: "personas", label: "Personas" }, { id: "plus", label: "Plus del mes" }, { id: "horas", label: "Horas extra", n: (porConfirmar || []).length }, { id: "festivos", label: "Plus festivos" }, { id: "formacion", label: "Formación" }, { id: "novedades", label: "Novedades" }]} />
+        {vista !== "novedades" && vista !== "formacion" && <div className="acciones"><button className="btn-p" onClick={() => setNueva(true)}>+ Nueva cuenta</button></div>}
       </div>
       {vista === "personas" && <Directorio equipo={equipo} onFicha={setFicha} />}
       {vista === "plus" && <Plus equipo={equipo} />}
       {vista === "horas" && <><HorasPorConfirmar lista={porConfirmar} onCambio={recargarHoras} /><Horas equipo={equipo} refresco={porConfirmar} /></>}
       {vista === "festivos" && <PlusFestivo equipo={equipo} />}
+      {vista === "formacion" && <Formacion inicial={personaFoco} />}
       {vista === "novedades" && <Novedades />}
       {ficha && <Ficha persona={equipo.find((u) => u.id === ficha) || null} yo={user} onClose={() => setFicha(null)} onCambio={recargarEquipo} />}
       {nueva && <NuevaCuenta onClose={() => setNueva(false)} onCreada={async () => { await recargarEquipo(); setNueva(false); }} />}

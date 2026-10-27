@@ -86,7 +86,7 @@ export const DESTINOS = {
   disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
   candidatos: "personas/seleccion", plus: "personas/equipo", bolsa: "personas/bolsa",
   recepcion_admin: "producto/recepcion", fichajes_admin: "personas/fichajes", documentos_admin: "personas/documentos",
-  tareas_extra: "personas/seguimiento", solicitudes_tec: "tecnologia/solicitudes", caja_fuerte: "finanzas/efectivo/caja", bancos: "finanzas/banco/bancos", pagos: "finanzas/banco/pagos", productos_revisar: "producto/revisar",
+  tareas_extra: "personas/seguimiento", solicitudes_tec: "tecnologia/solicitudes", formacion_admin: "personas/equipo", caja_fuerte: "finanzas/efectivo/caja", bancos: "finanzas/banco/bancos", pagos: "finanzas/banco/pagos", productos_revisar: "producto/revisar",
 };
 
 // Enlaces antiguos de Personas → secciones nuevas

@@ -11,6 +11,7 @@ import {
 } from "../../lib/bolsa.js";
 import { MisTurnosMes } from "./MisTurnosMes.jsx"; // #37 resumen del mes
 import { HorasExtraView } from "../horasextra/HorasExtraView.jsx"; // #39
+import { TarjetaFormacion, FormacionView } from "./Formacion.jsx"; // #79 formación en vídeo
 import { card, seccion, btnNo, btnSi, btnTexto, ShiftChip, DateBlock, PlazoChip, Toast, Hoja, PreferenciaAvisos } from "../bolsa/BolsaUI.jsx";
 
 const FILTROS = [
@@ -33,11 +34,17 @@ export function EventualApp({ user }) {
   useEffect(() => { if (tab !== irInicial) irInicial = null; }, [tab]);
   // #48: al pulsar en la campana el recordatorio de turno se abre «Mis turnos»; los de la bolsa, «Turnos disponibles»
   useEffect(() => {
-    const h = (e) => { const d = e.detail && e.detail.destino; if (d === "mis") setTab("mis"); else if (d === "cubrir") setTab("bolsa"); };
+    const h = (e) => {
+      const d = e.detail && e.detail.destino;
+      if (d === "mis") setTab("mis"); else if (d === "cubrir") setTab("bolsa");
+      else if (d === "formacion") { setVideoAbrir(e.detail.ref || null); setTab("formacion"); } // #79
+    };
     window.addEventListener("recao-nav", h);
     return () => window.removeEventListener("recao-nav", h);
   }, []);
   const [filtro, setFiltro] = useState("todos");
+  const [videos, setVideos] = useState(null);       // #79 formacion_mis_videos()
+  const [videoAbrir, setVideoAbrir] = useState(null);
   const [ofertas, setOfertas] = useState([]);       // bolsa_disponibles()
   const [mios, setMios] = useState([]);             // horarios de trabajo futuros
   const [deBolsa, setDeBolsa] = useState({});       // fecha → oferta cogida (para poder soltar)
@@ -72,6 +79,14 @@ export function EventualApp({ user }) {
     } catch (e) { setError("No se han podido cargar los turnos. Comprueba la conexión."); }
     if (!silencioso) setLoading(false);
   }, [user.id]);
+
+  const cargarVideos = useCallback(() => { sb.rpc("formacion_mis_videos").then(setVideos).catch(() => {}); }, []);
+  useEffect(() => {
+    cargarVideos();
+    const v = () => { if (document.visibilityState === "visible") cargarVideos(); };
+    document.addEventListener("visibilitychange", v);
+    return () => document.removeEventListener("visibilitychange", v);
+  }, [cargarVideos, tab]);
 
   const alCambiarHoras = useCallback((lista) => {
     const m = {}; (lista || []).filter((p) => p.estado === "pendiente").forEach((p) => { m[p.fecha] = (m[p.fecha] || 0) + Number(p.horas); });
@@ -145,6 +160,10 @@ export function EventualApp({ user }) {
     );
   }
 
+  if (tab === "formacion") {
+    return <FormacionView videos={videos} abrirId={videoAbrir} onCambio={cargarVideos} onVolver={() => { setVideoAbrir(null); setTab("bolsa"); }} />;
+  }
+
   const tabBtn = (id, label, n) => {
     const on = tab === id;
     return (
@@ -164,6 +183,8 @@ export function EventualApp({ user }) {
       </div>
 
       <NovedadesEquipo estilo={{ marginTop: 16 }} />
+
+      <TarjetaFormacion videos={videos} onAbrir={() => { setVideoAbrir(null); setTab("formacion"); }} />
 
       <div role="group" aria-label="Secciones" style={{ display: "flex", gap: 4, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 15, padding: 4, marginTop: 16 }}>
         {tabBtn("bolsa", "Disponibles", pendientes.length)}

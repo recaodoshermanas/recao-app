@@ -207,7 +207,7 @@ export default function App() {
   else if (area.id === "personas" && sub.id === "documentos") contenido = <Documentos />;
   else if (area.id === "personas" && sub.id === "solicitudes") contenido = <Solicitudes />;
   else if (area.id === "personas" && sub.id === "seguimiento") contenido = <Seguimiento sub={extra} />;
-  else if (area.id === "personas" && sub.id === "equipo") contenido = <Equipo user={user} />;
+  else if (area.id === "personas" && sub.id === "equipo") contenido = <Equipo user={user} extra={extra} />;
   else if (area.id === "producto" && sub.id === "resumen") contenido = <ProductoResumen />;
   else if (area.id === "producto" && sub.id === "catalogo") contenido = <Catalogo extra={extra} />;
   else if (area.id === "producto" && sub.id === "recepcion") contenido = <Recepcion />;

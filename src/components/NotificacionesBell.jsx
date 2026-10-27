@@ -30,6 +30,8 @@ const DESTINO = {
   // Solicitudes de tecnología (panel de dirección)
   producto_revisar: "productos_revisar", incidencia_codigo: "productos_revisar",
   caja_fuerte_baja: "caja_fuerte", factura_sin_importe: "facturas", bancos_permiso: "bancos",
+  // Formación en vídeo (#79): la eventual abre el vídeo; dirección, la persona en Personas → Equipo → Formación
+  formacion_nueva: "formacion", formacion_recordatorio: "formacion", formacion_21d: "formacion_admin",
   tec_te_toca: "solicitudes_tec", tec_estado: "solicitudes_tec", tec_comentario: "solicitudes_tec", tec_nueva: "solicitudes_tec",
 };
 
@@ -107,6 +109,8 @@ export function NotificacionesBell({ user }) {
     // Las de tarea extra repetida (#56) abren el detalle de esa tarea (va entre comillas en el texto)
     const ref = destino === "solicitudes_tec" ? (/^#(\d+)/.exec(n.titulo || "") || [])[1]
       : destino === "tareas_extra" ? "tareas-extra" + ((/"(.+)"/.exec(n.cuerpo || "") || [])[1] ? ":" + encodeURIComponent(/"(.+)"/.exec(n.cuerpo)[1]) : "")
+      : destino === "formacion" ? n.ref || undefined
+      : destino === "formacion_admin" ? (n.ref ? "formacion:" + n.ref : "formacion")
       : undefined;
     if (destino) { setOpen(false); window.dispatchEvent(new CustomEvent("recao-nav", { detail: { destino, ref } })); }
     if (!n.leida) {
