@@ -101,6 +101,7 @@ export function Bancos() {
   const [manual, setManual] = useState(null);
   const [nota, setNota] = useState("");
   const [volviendo, setVolviendo] = useState(false);
+  const [prop, setProp] = useState({}); // #98: posibles facturas de los cargos domiciliados que no cuadran solos
 
   const cargar = useCallback(async () => {
     try {
@@ -109,7 +110,9 @@ export function Bancos() {
       setCuentas(c); setMovs(m); setFallo(false);
       // #87: lo que explica cada movimiento desde el 1/10/2026 (si falla, la lista sigue sin la columna)
       sb.rpc("banco_movimientos_etiquetados").then((r) => setEtq(Object.fromEntries((r || []).map((x) => [x.id, x])))).catch(() => setEtq({}));
-      sb.rpc("banco_conciliacion").then((r) => setConc(Object.fromEntries((r || []).map((x) => [x.movimiento_id, x])))).catch(() => setConc({}));
+      // #98: antes se enlazan solos los cargos domiciliados que cuadran con sus facturas
+      sb.rpc("banco_domiciliados").then((r) => setProp(Object.fromEntries((r?.propuestas || []).map((x) => [x.mov_id, x])))).catch(() => setProp({}))
+        .finally(() => sb.rpc("banco_conciliacion").then((r) => setConc(Object.fromEntries((r || []).map((x) => [x.movimiento_id, x])))).catch(() => setConc({})));
     } catch (e) { setFallo(true); }
   }, []);
 
@@ -160,6 +163,29 @@ export function Bancos() {
     catch (e) { avisar(msg(e), "mal"); }
     setBusy(null);
   };
+  // #98: confirmar o descartar la propuesta de facturas de un cargo domiciliado
+  const domic = async (m, confirmar) => {
+    const p = prop[m.id]; if (!p) return;
+    const ids = p.items.map((x) => x.id);
+    if (confirmar) {
+      const cambia = p.items.filter((x) => !["banco", "tarjeta"].includes(x.tipo_pago));
+      if (cambia.length && !window.confirm(`${cambia.length === 1 ? "Esta factura está" : "Estas facturas están"} como «${cambia.map((x) => x.tipo_pago || "sin forma de pago").join(", ")}». Al enlazarla${cambia.length === 1 ? "" : "s"} pasa${cambia.length === 1 ? "" : "n"} a «Banco» y queda registrado. ¿Seguir?`)) return;
+    }
+    setBusy(`d-${m.id}`);
+    try { await sb.rpc(confirmar ? "domic_confirmar" : "domic_descartar", { p_mov: m.id, p_ids: ids }); avisar(confirmar ? "Cargo enlazado con su factura" : "Propuesta descartada", "ok"); await cargar(); }
+    catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  const propDom = (m) => prop[m.id] && (
+    <div style={{ marginTop: 6, padding: "6px 8px", border: "1px dashed var(--line)", borderRadius: 8, fontSize: 13 }}>
+      <b>Posibles facturas</b>{prop[m.id].tipo === "mes" ? " (las del mes anterior)" : ""}: {prop[m.id].items.map((x) => `${x.proveedor} ${fecha(x.fecha)}${x.numero ? ` nº ${x.numero}` : ""} · ${eur(x.importe, 2)}`).join("; ")}
+      <span className="pf">Diferencia {eur(prop[m.id].dif, 2)}</span>
+      <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+        <button className="btn-p" disabled={!!busy} onClick={() => domic(m, true)}>{busy === `d-${m.id}` ? "Guardando…" : "Confirmar"}</button>
+        <button className="btn-txt" disabled={!!busy} onClick={() => domic(m, false)}>No es esta</button>
+      </div>
+    </div>
+  );
   const quitarMano = async (id) => {
     setBusy(`m-${id}`);
     try { await sb.rpc("banco_quitar_explicacion", { p_movimiento: id }); await cargar(); }
@@ -283,7 +309,7 @@ export function Bancos() {
                       ) : <span className="pf">—</span>}
                     </td>
                     <td>
-                      {!aplica(m) ? <span className="pf">—</span> : conc[m.id] ? (
+                      {!aplica(m) ? (prop[m.id] ? propDom(m) : <span className="pf">—</span>) : conc[m.id] ? (
                         <>
                           {conc[m.id].ir ? <a className="enlace" href={conc[m.id].ir}>{conc[m.id].texto}</a> : conc[m.id].texto}
                           {conc[m.id].tipo === "manual" && <span className="pf">{conc[m.id].nota} · {conc[m.id].quien}, {fechaHora(conc[m.id].cuando)} · <button className="btn-txt" disabled={!!busy} onClick={() => quitarMano(m.id)}>Quitar</button></span>}
@@ -295,7 +321,8 @@ export function Bancos() {
                           <button className="btn-txt" onClick={() => { setManual(null); setNota(""); }}>Cancelar</button>
                         </div>
                       ) : (
-                        <><b style={{ color: "#c2570c" }}>Sin explicar</b> <button className="btn-l" onClick={() => { setManual(m.id); setNota(""); }}>Explicar a mano</button></>
+                        <><b style={{ color: "#c2570c" }}>Sin explicar</b> <button className="btn-l" onClick={() => { setManual(m.id); setNota(""); }}>Explicar a mano</button>
+                          {propDom(m)}</>
                       )}
                     </td>
                   </tr>
