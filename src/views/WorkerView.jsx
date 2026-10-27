@@ -35,8 +35,6 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
   const [saved, setSaved] = useState(false);
   const [isNewProv, setIsNewProv] = useState(false);
   const { ask, Dialog } = useConfirm();
-  const [pasar, setPasar] = useState(null); // #40: factura que dirección pasa a Inversiones {f, forma}
-  const [pasando, setPasando] = useState(false);
 
   const isAdmin = user?.rol === "admin";
 
@@ -110,20 +108,6 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
     catch (e) { alert("Error: " + e.message); }
   };
 
-  // #40: crea la inversión con los datos de la factura y borra la factura (deja de contar como gasto)
-  const formaDe = (f) => (f.tipo_pago === "banco" || f.tipo_pago === "tarjeta" ? "banco_bbva" : f.tipo_pago === "efectivo_sobres" ? "efectivo_sobres" : "");
-  const confirmarPasar = async (f, forma) => {
-    setPasando(true);
-    let id = null;
-    try {
-      id = await sb.rpc("inversion_desde_factura", { p_id: f.id, p_forma: forma || null });
-      try { await sb.delete("facturas_proveedores", `id=eq.${f.id}`); }
-      catch (e) { await sb.rpc("inversion_borrar", { p_id: id }); throw new Error("No se ha podido quitar la factura; no se ha cambiado nada"); }
-      setPasar(null); await onReload();
-    } catch (e) { alert("Error: " + e.message); }
-    setPasando(false);
-  };
-
   const sorted = [...facturas].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
   const grouped = {};
   sorted.forEach(f => { const mk = f.fecha.substring(0, 7); if (!grouped[mk]) grouped[mk] = []; grouped[mk].push(f); });
@@ -131,28 +115,6 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
       <Dialog />
-      {pasar && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: "20px" }}>
-          <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", maxWidth: 360, width: "100%" }}>
-            <p style={{ fontFamily: F, fontSize: "15px", color: C.char, marginBottom: "16px", lineHeight: 1.5 }}>¿Pasar la factura de <b>{pasar.f.proveedor}</b> ({fmt2(pasar.f.importe)}) a Inversiones? Se borra de Facturas y deja de contar como gasto del mes.</p>
-            {formaDe(pasar.f) ? (
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button onClick={() => setPasar(null)} disabled={pasando} style={{ flex: 1, padding: "12px", border: `1.5px solid ${C.brd}`, borderRadius: "10px", background: "none", fontFamily: F, fontSize: "14px", color: C.mut, cursor: "pointer" }}>Cancelar</button>
-                <button onClick={() => confirmarPasar(pasar.f, formaDe(pasar.f))} disabled={pasando} style={{ flex: 1, padding: "12px", border: "none", borderRadius: "10px", background: C.char, color: C.gold, fontFamily: F, fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>{pasando ? "Pasando…" : "Pasar"}</button>
-              </div>
-            ) : (
-              <>
-                <div style={{ fontFamily: F, fontSize: "12.5px", color: C.mut, marginBottom: "10px" }}>¿Cómo se pagó?</div>
-                <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-                  <button onClick={() => confirmarPasar(pasar.f, "efectivo_sobres")} disabled={pasando} style={{ flex: 1, padding: "12px", border: `1.5px solid ${C.char}`, borderRadius: "10px", background: "#fff", fontFamily: F, fontSize: "14px", fontWeight: 600, color: C.char, cursor: "pointer" }}>Efectivo sobres</button>
-                  <button onClick={() => confirmarPasar(pasar.f, "banco_bbva")} disabled={pasando} style={{ flex: 1, padding: "12px", border: `1.5px solid ${C.char}`, borderRadius: "10px", background: "#fff", fontFamily: F, fontSize: "14px", fontWeight: 600, color: C.char, cursor: "pointer" }}>Banco (BBVA)</button>
-                </div>
-                <button onClick={() => setPasar(null)} disabled={pasando} style={{ width: "100%", padding: "10px", border: "none", background: "none", fontFamily: F, fontSize: "14px", color: C.mut, cursor: "pointer" }}>Cancelar</button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
       {modo === "lista" ? (
         <>
           <button onClick={() => { resetForm(); setModo("form"); }} style={{ width: "100%", padding: "18px", border: `2px dashed ${C.brd}`, borderRadius: "12px", background: "transparent", fontFamily: SF, fontSize: "16px", color: C.char, cursor: "pointer", marginBottom: "20px" }}>+ Nueva factura de proveedor</button>
@@ -189,7 +151,6 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
                         ? <span style={{ fontFamily: F, fontSize: "12px", fontWeight: 700, color: NARANJA[1], textAlign: "right", lineHeight: 1.2 }}>Pendiente<br />de importe</span>
                         : <span style={{ fontFamily: F, fontSize: "15px", fontWeight: 700, color: Number(f.importe) < 0 ? C.grn : C.char }}>{fmt2(f.importe)}</span>}
                       {canEdit && <>
-                        {isAdmin && !pendiente && Number(f.importe) > 0 && <button onClick={() => setPasar({ f })} title="Pasar a Inversiones" style={{ border: `1px solid ${C.brd}`, background: "none", cursor: "pointer", fontFamily: F, fontSize: "11px", fontWeight: 600, color: C.mut, padding: "3px 7px", borderRadius: "8px", whiteSpace: "nowrap" }}>Pasar a Inversiones</button>}
                         <button onClick={() => startEdit(f)} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "14px", color: C.mut, padding: "4px" }}>✎</button>
                         <button onClick={() => ask("¿Eliminar esta factura?", () => handleDelete(f.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "18px", color: "#ccc", padding: "4px" }}>×</button>
                       </>}
