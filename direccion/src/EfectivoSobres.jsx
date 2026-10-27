@@ -6,6 +6,7 @@ import { sb } from "../../src/lib/supabase.js";
 import { Panel, avisar, hoyStr, fechaCorta, Cargando } from "./ui.jsx";
 import { eur, mesAnio } from "./fmt.js";
 import { ExtrasSobres } from "../../src/views/owner/ExtrasSobres.jsx"; // #17
+import { useCambioEfectivo, avisarCambioEfectivo, EfectivoVivo } from "./finanzas/EfectivoVivo.jsx"; // #84
 
 const TIPOS = {
   reparto: { label: "Reparto", chip: "rep" }, extra: { label: "Extra", chip: "ext" }, compra: { label: "Compra", chip: "com" },
@@ -29,7 +30,8 @@ export function EfectivoSobres() {
     catch (e) { setFallo(/socios/i.test(e.message || "") ? "socios" : "error"); }
   }, [mes]);
   useEffect(() => { cargar(); }, [cargar]);
-  const refrescar = async () => { try { setD(await sb.rpc("efectivo_sobres_mes", { p_mes: mes })); } catch (e) { /* se ve al recargar */ } };
+  const refrescar = useCallback(async () => { try { setD(await sb.rpc("efectivo_sobres_mes", { p_mes: mes })); } catch (e) { /* se ve al recargar */ } }, [mes]);
+  useCambioEfectivo(refrescar); // #84: recargas de la caja fuerte y retiradas del banco cambian el saldo
 
   if (fallo === "socios") return <div className="card"><h2>Efectivo de sobres</h2><p className="empty">Esta sección es solo para los socios.</p></div>;
   if (fallo) return <div className="card"><h2>Efectivo de sobres</h2><p className="empty">No se ha podido cargar.</p></div>;
@@ -37,10 +39,12 @@ export function EfectivoSobres() {
 
   const saldo = Number(d.saldo);
   const pt = d.por_tipo || {};
-  const listo = (r) => { setD(r); setPanel(null); };
+  const listo = (r) => { setD(r); setPanel(null); avisarCambioEfectivo(); };
+  const otras = d.entradas_otras || [];
   const sp = d.saldo_partida; // solo en octubre de 2026
   return (
     <>
+      <EfectivoVivo />
       <div className="card es">
         <div className="head">
           <div><h2>Efectivo de sobres · {mesAnio(`${mes}-01`)}</h2><p className="sub">Lo que entra de los sobres y en qué se va. Solo lo veis los socios.</p></div>
@@ -61,6 +65,7 @@ export function EfectivoSobres() {
             <div><small>Saldo inicial</small><b>{eur(d.saldo_inicial, 2)}</b><span>Lo que quedó del mes anterior</span></div>
           )}
           <div><small>{sp ? "Sobres de septiembre" : "Entrada"}</small><b>{eur(d.entrada, 2)}</b><span>Sobres de {mesAnio(`${d.mes_sobres}-01`).toLowerCase()}, abiertos el día 1{sp ? " (se meten en Cierre de mes → Apertura de sobres)" : ""}</span></div>
+          {Number(d.otras_entradas) > 0 && <div><small>Otras entradas</small><b>{eur(d.otras_entradas, 2)}</b><span>Retiradas del banco que fueron a efectivo guardado (se asignan en Caja)</span></div>}
           <div><small>Salidas</small><b>{eur(d.total_salidas, 2)}</b><span>{d.salidas.length} movimiento{d.salidas.length === 1 ? "" : "s"}</span></div>
           <div className={`es-saldo${saldo < 0 ? " neg" : ""}`}><small>Queda guardado</small><b>{eur(saldo, 2)}</b></div>
         </div>
@@ -68,10 +73,20 @@ export function EfectivoSobres() {
           <button className="btn-p" onClick={() => setPanel({ tipo: "reparto" })}>{d.reparto_hecho ? "Registrar otro reparto" : "Registrar reparto"}</button>
           <button className="btn-l" onClick={() => setPanel({ tipo: "extra" })}>+ Extra a trabajadora</button>
           <button className="btn-l" onClick={() => setPanel({ tipo: "banco" })}>+ Ingreso al banco</button>
-          <button className="btn-l" onClick={() => setPanel({ tipo: "caja_fuerte" })}>+ Reposición caja fuerte</button>
           <button className="btn-txt" onClick={() => setPanel({ config: true })}>Importes del reparto</button>
         </div>
-        <p className="sub">Las compras sueltas y reparaciones se apuntan en Facturas → Nueva factura con el tipo de pago «Efectivo sobres» y salen aquí solas.</p>
+        <p className="sub">Las compras sueltas y reparaciones se apuntan en Facturas → Nueva factura con el tipo de pago «Efectivo sobres» y salen aquí solas. Lo que va a la caja fuerte se apunta en Caja → «Añadir dinero a caja» y sale aquí solo.</p>
+        {otras.length > 0 && (
+          <div className="tabla-scroll" style={{ marginBottom: 12 }}>
+            <table className="ranking es-tabla">
+              <thead><tr><th>Día</th><th>Otras entradas</th><th>Apuntado por</th><th className="r">Importe</th><th></th></tr></thead>
+              <tbody>{otras.map((o) => (
+                <tr key={o.id}><td>{fechaCorta(o.fecha)}</td><td><span className="es-chip ban">Retirada del banco</span> {o.concepto}{o.nota ? <span className="pf">{o.nota}</span> : null}</td><td>{o.quien || "—"}</td>
+                  <td className="r b">+{eur(o.importe, 2)}</td><td className="r"><span className="pf">Se cambia en Caja → «Retiradas del banco»</span></td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
         <div style={{ border: "1px solid var(--line, #EBE3D5)", borderRadius: 14, padding: "14px 16px", margin: "10px 0 14px" }}><ExtrasSobres mes={d.mes_sobres} onCambio={refrescar} /></div>
         {d.salidas.length === 0 ? <p className="empty">Sin salidas este mes.</p> : (
           <div className="tabla-scroll">
@@ -85,7 +100,7 @@ export function EfectivoSobres() {
                     <td>{s.tipo === "reparto" ? s.persona : s.tipo === "extra" ? <>{s.persona}{s.concepto ? <span className="pf">{s.concepto}</span> : null}</> : s.tipo === "banco" ? `${s.banco}${s.concepto ? ` · ${s.concepto}` : ""}` : (s.concepto || "—")}{s.cambios > 0 && <span className="pf">Corregido</span>}</td>
                     <td>{s.quien || "—"}</td>
                     <td className="r b">−{eur(s.importe, 2)}</td>
-                    <td className="r" style={{ whiteSpace: "nowrap" }}>{s.origen === "factura" ? <span className="pf">Se corrige en la factura</span> : s.origen === "extras" ? <span className="pf">Se cambia en «Extras de trabajadoras»</span> : s.origen === "inversion" ? <span className="pf">Se cambia en «Inversiones»</span> : s.origen === "mantenimiento" ? <span className="pf">Se cambia en «Mantenimiento»</span> : <button className="btn-l" onClick={() => setPanel({ editar: s })}>Corregir</button>}</td>
+                    <td className="r" style={{ whiteSpace: "nowrap" }}>{s.origen === "factura" ? <span className="pf">Se corrige en la factura</span> : s.origen === "extras" ? <span className="pf">Se cambia en «Extras de trabajadoras»</span> : s.origen === "inversion" ? <span className="pf">Se cambia en «Inversiones»</span> : s.origen === "mantenimiento" ? <span className="pf">Se cambia en «Mantenimiento»</span> : s.origen === "recarga" ? <span className="pf">Se cambia en Caja</span> : <button className="btn-l" onClick={() => setPanel({ editar: s })}>Corregir</button>}</td>
                   </tr>
                 ))}
               </tbody>
