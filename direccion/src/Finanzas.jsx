@@ -672,8 +672,6 @@ export function FinanzasCaja() {
   const completos = dias.filter((x) => x.cierres >= 2);
   const difEf = completos.reduce((s, x) => s + difEfectivo(x).v, 0);
   const difTj = completos.reduce((s, x) => s + n0(x.contado_tarjeta) - n0(x.epos_tarjeta), 0);
-  const actual = d.meses[d.meses.length - 1], anterior = d.meses[d.meses.length - 2];
-  const efSinDestino = (m) => n0(m.epos_efectivo) - n0(m.facturas_efectivo);
   return (
     <>
       <div className="grid"><div className="c12"><CajaFuerte /></div></div>
@@ -681,7 +679,6 @@ export function FinanzasCaja() {
         <Kpi titulo="Días con los dos cierres" valor={`${completos.length} de ${dias.length}`} sub={`Últimos ${dias.length} días cerrados`} tono={completos.length < dias.length ? "mal" : ""} />
         <Kpi titulo="Descuadre de efectivo" valor={eur(difEf, 0)} sub="Contado menos Epos en los días con los dos cierres, descontando las facturas pagadas de la caja" tono={Math.abs(difEf) > 50 ? "mal" : ""} />
         <Kpi titulo="Descuadre de tarjeta" valor={eur(difTj, 0)} sub="Datáfono contado menos Epos" tono={Math.abs(difTj) > 50 ? "mal" : ""} />
-        <Kpi titulo="Efectivo sin destino apuntado" valor={eur(sinDecimales(efSinDestino(anterior)))} sub={`${mesAnio(anterior.mes)}: entró ${eur(sinDecimales(anterior.epos_efectivo))} en efectivo y se pagaron ${eur(sinDecimales(anterior.facturas_efectivo))} en facturas`} tip="El resto del efectivo (ingresos al banco, sobres, pagos sin factura…) no queda registrado en ningún sitio." />
       </div>
       <div className="grid">
         <div className="card c12">
@@ -716,26 +713,46 @@ export function FinanzasCaja() {
           <p className="sub fuera">* Diferencia una vez descontadas las facturas pagadas en efectivo ese día (hasta el 8 de septiembre se contaba la caja después de pagarlas). Los cierres se registran en la app desde el 30 de julio de 2026; desde el 24 de octubre, el efectivo y la tarjeta contados salen de los cierres de Epos (cuentan las facturas pagadas desde el cajón como dinero) y el detalle por turno y caja está en Cierre de mes → «Epos frente a cierres».</p>
         </div>
       </div>
-      <div className="grid">
-        <div className="card c12">
-          <h2>Efectivo del mes</h2>
-          <dl className="kv">
-            {[anterior, actual].map((m) => (
-              <FilaEfectivo key={m.mes} m={m} />
-            ))}
-          </dl>
-        </div>
-      </div>
+      <RecorridoEfectivo meses={d.meses} />
     </>
   );
 }
-function FilaEfectivo({ m }) {
+// #82: recorrido del efectivo de la caja al sobre (mes anterior y mes en curso); las cifras vienen de caja_recorrido_efectivo()
+function RecorridoEfectivo({ meses }) {
+  const [r, setR] = useState(null);
+  useEffect(() => { supabase.rpc("caja_recorrido_efectivo").then(({ data }) => setR(Array.isArray(data) ? data : []), () => setR([])); }, []);
+  if (!r) return null;
+  const v = (x, signo) => (x == null ? "–" : `${signo && n0(x) ? signo : ""}${eur(n0(x), 2)}`);
+  const lineas = [
+    ["Venta en efectivo según Epos", (m) => v(m.venta_epos), "Suma del efectivo esperado de los cierres de Epos del mes."],
+    ["Descuadres de efectivo (contado − esperado)", (m) => v(m.descuadre), "Diferencia entre lo que contaron las trabajadoras y lo que dice Epos, turno a turno."],
+    ["= Efectivo contado en los cierres", (m) => v(m.contado_cierres), null, true],
+    ["− Pagado desde el cajón", (m) => v(m.pagado_cajon), "Facturas con «Efectivo (caja)» y mantenimientos con «Efectivo de caja»."],
+    ["= Debería haber en los sobres", (m) => v(m.deberia), "Lo mismo que da como esperado la Apertura de sobres.", true],
+    ["Contado al abrir los sobres", (m) => (m.contado_apertura != null ? v(m.contado_apertura) : m.mes >= "2026-10" ? "Pendiente de abrir" : "–"), "Se da por abierto cuando todos los sobres del mes están revisados."],
+    ["Diferencia entre lo contado y lo que debería haber", (m) => v(m.diferencia), null, true],
+  ];
+  const aviso = r.some((m) => m.cierres > 0 && m.sin_revisar > 0);
   return (
-    <>
-      <dt>{mesAnio(m.mes)}: entra en efectivo</dt><dd>{eur(sinDecimales(m.epos_efectivo))}</dd>
-      <dt>Facturas pagadas en efectivo</dt><dd>{eur(sinDecimales(m.facturas_efectivo))}</dd>
-      <dt>Sin destino apuntado</dt><dd>{eur(sinDecimales(n0(m.epos_efectivo) - n0(m.facturas_efectivo)))}</dd>
-    </>
+    <div className="grid">
+      <div className="card c12">
+        <h2>Recorrido del efectivo</h2>
+        <p className="sub">Del efectivo que entra en caja a lo que debería haber en los sobres, con las mismas cifras de los cierres de Epos y de la Apertura de sobres.</p>
+        <div className="tabla-scroll">
+          <table className="ranking">
+            <thead><tr><th></th>{r.map((m) => <th key={m.mes} className="r">{mesAnio(m.mes + "-01")}{m.en_curso ? " (en curso)" : ""}</th>)}</tr></thead>
+            <tbody>
+              {lineas.map(([t, f, tip, b]) => (
+                <tr key={t}><td className={b ? "b" : ""} data-tip={tip || undefined}>{t}</td>{r.map((m) => <td key={m.mes} className={`r${b ? " b" : ""}`}>{f(m)}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {aviso && <p className="sub fuera">Quedan sobres sin revisar: los descuadres de efectivo son provisionales hasta que se confirmen.</p>}
+        {meses[meses.length - 1] && r.find((m) => m.en_curso && m.cierres > 0 && Math.abs(n0(meses[meses.length - 1].epos_efectivo) - n0(m.venta_epos)) > 0.5) && <p className="sub fuera">Epos lleva {eur(n0(meses[meses.length - 1].epos_efectivo), 2)} en efectivo este mes; la primera línea solo suma los turnos con cierre, por eso puede ser menor.</p>}
+        <p className="sub fuera">Los cierres de Epos empiezan en octubre de 2026; en meses anteriores las líneas que no existen salen con «–». <a href="#/finanzas/efectivo/sobres">Lo que se hace con el efectivo de los sobres está en Efectivo de sobres →</a></p>
+      </div>
+    </div>
   );
 }
 
