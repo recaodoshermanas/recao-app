@@ -28,7 +28,7 @@ export function Legado({ area, sub, datos, user, mesFoco, onEditMonth }) {
     case "personas/seleccion": vista = <CVCandidatosView currentUser={user} />; break;
     case "finanzas/tesoreria": vista = <Tesoreria />; break;
     case "finanzas/cierre": vista = <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={reload} initialMonth={mesFoco} />; break;
-    case "finanzas/facturas": vista = <><PaqueteTrimestre facturas={facturas} /><WorkerView facturas={facturas} proveedores={proveedores} onReload={reload} user={user} /></>; break;
+    case "finanzas/facturas": vista = <><PaqueteTrimestre facturas={facturas} /><WorkerView facturas={facturas} proveedores={proveedores} onReload={reload} user={user} panel /></>; break;
     case "producto/analitica": vista = <AnalyticaView />; break;
     case "ajustes/general": vista = <AjustesView currentUser={user} />; break;
     default: vista = <div className="state">Esta sección aún no existe.</div>;
