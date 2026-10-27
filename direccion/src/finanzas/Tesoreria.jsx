@@ -2,7 +2,7 @@
 // «Próximos días» (solicitud #90) sale de tesoreria_prevision(): bancos de hoy + cobros previstos − pagos previstos, día a día.
 // «¿Cuánto podemos repartir?» (solicitud #91) sale de tesoreria_repartir(): hoy + cobros − pagos a 60 días − un mes de gastos fijos. Solo socios.
 // «Hoy» lee lo mismo que Bancos, Caja fuerte y Efectivo de sobres; «Evolución» sale de tesoreria_evolucion() (solo dirección; sobres, solo socios).
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { Cargando, hoyStr } from "../ui.jsx";
 import { eur } from "../fmt.js";
@@ -40,6 +40,9 @@ const ddmm = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}` : "");
 const nombreMes = (m) => { const t = new Date(`${m}-15T12:00:00`).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const celda = (v) => (v == null ? "–" : eur(v, 2));
 
+const TIPOS_OH = [["retiradas", "Retiradas de efectivo"], ["tarjeta", "Pagos con tarjeta"], ["transferencias", "Transferencias sueltas"], ["otros", "Otros cargos (comisiones, Bizum…)"]];
+const esOtros = (e) => String(e.concepto || "").startsWith("Otros pagos habituales");
+
 const DIAS_C = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 const fechaCorta = (f) => `${DIAS_C[new Date(`${f}T12:00:00`).getDay()]} ${ddmm(f)}`;
 
@@ -70,6 +73,7 @@ function Prevision() {
   const [dias, setDias] = useState(30);
   const [p, setP] = useState(null);
   const [fallo, setFallo] = useState(false);
+  const [verOtros, setVerOtros] = useState(false);
   useEffect(() => {
     let vivo = true;
     setP(null); setFallo(false);
@@ -88,6 +92,9 @@ function Prevision() {
 
   const eventos = p.eventos || [];
   const neg = n(p.saldo_final) < 0;
+  const oh = p.otros || null;
+  const mesesOh = oh ? [...new Set((oh.desglose || []).map((x) => x.mes))] : [];
+  const impOh = (t, m) => n(((oh?.desglose || []).find((x) => x.tipo === t && x.mes === m) || {}).importe);
   return (
     <div className="card" style={{ marginTop: 16 }}>
       {cab}
@@ -106,14 +113,29 @@ function Prevision() {
           <tbody>
             {eventos.map((e, i) => {
               const primera = i === 0 || eventos[i - 1].fecha !== e.fecha;
+              const otros = oh && esOtros(e) && eventos.findIndex(esOtros) === i;
               return (
-                <tr key={i} className={`${e.real ? "" : "te-est"} ${primera && i > 0 ? "te-fecha" : ""}`}>
+                <Fragment key={i}>
+                <tr className={`${e.real ? "" : "te-est"} ${primera && i > 0 ? "te-fecha" : ""}`}>
                   <td style={{ whiteSpace: "nowrap" }}>{primera ? fechaCorta(e.fecha) : ""}</td>
-                  <td>{e.concepto}</td>
+                  <td>{otros ? <button type="button" onClick={() => setVerOtros(!verOtros)} aria-expanded={verOtros} style={{ font: "inherit", fontStyle: "italic", background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer", textDecoration: "underline dotted", textAlign: "left" }}>{e.concepto} {verOtros ? "▾" : "▸"}</button> : e.concepto}</td>
                   <td className="r" style={{ color: n(e.importe) < 0 ? "var(--down)" : "var(--up)", fontWeight: 700 }}>{n(e.importe) > 0 ? "+" : ""}{eur(e.importe, 2)}</td>
                   <td><small style={{ color: "var(--muted)" }}>{e.real ? "Dato real · " : "Estimación · "}{e.origen}</small></td>
                   <td className={`r ${primera && n(e.saldo_dia) < 0 ? "te-neg" : ""}`}>{primera ? <b>{eur(e.saldo_dia, 2)}</b> : ""}</td>
                 </tr>
+                {otros && verOtros && (
+                  <tr><td colSpan="5">
+                    <p className="sub" style={{ margin: "4px 0" }}>Estimación: {eur(oh.mensual, 2)} al mes (media de {mesesOh.map((m) => nombreMes(m).split(" ")[0].toLowerCase()).join(", ")}), repartida por igual entre todos los días. Solo cuenta lo que sale del banco y no está ya en otra línea: no entran los traspasos entre BBVA y La Caixa, ni facturas, domiciliaciones, nóminas, pagos fijos o impuestos.</p>
+                    <table className="ranking te-t">
+                      <thead><tr><th>Tipo</th>{mesesOh.map((m) => <th key={m} className="r">{nombreMes(m).split(" ")[0]}</th>)}<th className="r">Media al mes</th></tr></thead>
+                      <tbody>
+                        {TIPOS_OH.map(([t, nom]) => <tr key={t}><td>{nom}</td>{mesesOh.map((m) => <td key={m} className="r">{celda(impOh(t, m))}</td>)}<td className="r"><b>{celda(mesesOh.reduce((a, m) => a + impOh(t, m), 0) / (mesesOh.length || 1))}</b></td></tr>)}
+                        <tr><td><b>Total</b></td>{mesesOh.map((m) => <td key={m} className="r"><b>{celda(TIPOS_OH.reduce((a, [t]) => a + impOh(t, m), 0))}</b></td>)}<td className="r"><b>{celda(oh.mensual)}</b></td></tr>
+                      </tbody>
+                    </table>
+                  </td></tr>
+                )}
+                </Fragment>
               );
             })}
             {!eventos.length && <tr><td colSpan="5" className="empty">No hay cobros ni pagos previstos.</td></tr>}
