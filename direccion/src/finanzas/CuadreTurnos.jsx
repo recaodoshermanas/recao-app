@@ -225,6 +225,7 @@ export function CuadreTurnos({ mes }) {
         {tot("Turnos por revisar", `${n(sobres.sin_revisar)} de ${n(sobres.cierres)}`, "Efectivo sin confirmar (cuentan como correctos)", n(sobres.sin_revisar) > 0)}
         {tot("Días de tarjeta por revisar", String(porRevisar), n(t1.pendientes) + n(t2.pendientes) ? `${n(t1.pendientes) + n(t2.pendientes)} esperando la remesa` : null, porRevisar > 0)}
       </div>
+      {porRevisar > 0 && <p className="sub aviso-txt">{porRevisar} día{porRevisar === 1 ? "" : "s"} de tarjeta por revisar: no cuentan todavía (comisión {e2(n(t1.revisar_comision) + n(t2.revisar_comision))}, descuadre {signo(n(t1.revisar_descuadre) + n(t2.revisar_descuadre))}).</p>}
       {tarjeta && tarjeta.caja2 && tarjeta.caja2.extracto && Number(tarjeta.caja2.extracto.movimientos) === 0 && <p className="sub">Todavía no se ha subido el extracto de La Caixa: <a href="#/finanzas/banco/bancos">súbelo en Finanzas → Bancos</a>.</p>}
       {(sobres.facturas_sin_sobre || []).length > 0 && <p className="sub aviso-txt">Facturas en efectivo de caja sin ningún cierre de Epos en su turno (no se restan de ningún sobre): {sobres.facturas_sin_sobre.map((f) => `${dia(f.fecha)} · ${f.proveedor} ${e2(f.importe)}`).join("; ")}.</p>}
       <label className="chk" style={{ marginTop: 0 }}><input type="checkbox" checked={pendientes} onChange={(e) => setPendientes(e.target.checked)} /> Solo pendientes ({lineas.filter((l) => l.pendiente).length})</label>

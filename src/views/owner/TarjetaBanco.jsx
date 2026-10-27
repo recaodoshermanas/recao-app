@@ -57,6 +57,7 @@ function TarjetaCaja({ caja, mes, datos, d, setDatos }) {
             {tot("Descuadre", conSigno(t.descuadre), color(t.descuadre))}
             {tot("Días por revisar", String(t.por_revisar || 0), revisar ? { color: AMBAR } : null)}
           </div>
+          {revisar && <div style={{ fontSize: 12.5, color: AMBAR, fontWeight: 700, lineHeight: 1.45, marginBottom: 8 }}>{t.por_revisar} día{Number(t.por_revisar) === 1 ? "" : "s"} por revisar: no cuentan todavía (comisión {dinero(t.revisar_comision)}, descuadre {conSigno(t.revisar_descuadre)}).</div>}
           <div style={{ fontSize: 12.5, color: C.mut, lineHeight: 1.45, marginBottom: 8 }}>
             {caja === 1
               ? "BBVA ingresa la tarjeta de cada día con fecha valor del día siguiente (lo del fin de semana llega junto el lunes). "
