@@ -106,6 +106,7 @@ export function PagosPendientes() {
   const [sinClas, setSinClas] = useState({ sin_clasificar: [], ignorados: [] }); // #46
   const [verIgn, setVerIgn] = useState(false);
   const [visor, setVisor] = useState(null); // #53
+  const [prov, setProv] = useState(null); // #88: proveedor elegido para filtrar la lista
   const [sel, setSel] = useState(() => new Set()); // #50: facturas marcadas para copiar sus números juntos
   const marcar = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const guardarNumero = async (p, numero) => accion("pagos_factura_numero", { p_id: p.id, p_numero: numero }, "Número guardado");
@@ -123,12 +124,22 @@ export function PagosPendientes() {
     finally { setBusy(false); }
   };
 
-  const grupos = useMemo(() => {
+  // #88: facturas de proveedor de la más antigua a la más reciente; los pagos fijos van aparte, como antes
+  const facturas = useMemo(() => (d?.pendientes || []).filter((p) => p.tipo === "f").sort((a, b) => b.dias - a.dias || String(a.id).localeCompare(String(b.id))), [d]);
+  const fijosPend = useMemo(() => (d?.pendientes || []).filter((p) => p.tipo !== "f"), [d]);
+  const porProv = useMemo(() => {
     const g = new Map();
-    (d?.pendientes || []).forEach((p) => { if (!g.has(p.grupo)) g.set(p.grupo, []); g.get(p.grupo).push(p); });
-    return [...g.entries()].map(([nombre, items]) => ({ nombre, items, total: items.reduce((s, x) => s + Number(x.importe), 0) }))
-      .sort((a, b) => (a.nombre === "Pagos fijos") - (b.nombre === "Pagos fijos") || b.total - a.total);
-  }, [d]);
+    facturas.forEach((p) => { const c = g.get(p.grupo) || { nombre: p.grupo, n: 0, total: 0, dias: 0 }; c.n += 1; c.total += Number(p.importe); c.dias = Math.max(c.dias, p.dias); g.set(p.grupo, c); });
+    return [...g.values()].sort((a, b) => b.total - a.total);
+  }, [facturas]);
+  const provActivo = prov && porProv.some((x) => x.nombre === prov) ? prov : null;
+  const grupos = useMemo(() => {
+    const lista = [];
+    const fs = provActivo ? facturas.filter((p) => p.grupo === provActivo) : facturas;
+    if (fs.length) lista.push({ nombre: provActivo || "Facturas de proveedores", items: fs, total: fs.reduce((s, x) => s + Number(x.importe), 0), facturas: true });
+    if (fijosPend.length && !provActivo) lista.push({ nombre: "Pagos fijos", items: fijosPend, total: fijosPend.reduce((s, x) => s + Number(x.importe), 0) });
+    return lista;
+  }, [facturas, fijosPend, provActivo]);
 
   if (fallo) return <div className="card"><h2>Facturas pendientes de pago</h2><p className="empty">No se ha podido cargar. Recarga la página en un momento.</p></div>;
   if (!d) return <div className="card"><Cargando /></div>;
@@ -187,6 +198,22 @@ export function PagosPendientes() {
         </div>
       )}
 
+      {tab === "pendientes" && porProv.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+            <h3 className="fh3" style={{ marginTop: 0 }}>Por proveedor</h3>
+            {provActivo && <button className="btn-l" onClick={() => setProv(null)}>Quitar filtro</button>}
+          </div>
+          {porProv.map((x) => (
+            <button key={x.nombre} className="btn-txt" aria-pressed={provActivo === x.nombre} onClick={() => setProv(provActivo === x.nombre ? null : x.nombre)}
+              style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", textAlign: "left", padding: "8px 6px", borderBottom: "1px solid var(--line)", background: provActivo === x.nombre ? "var(--hover, rgba(0,0,0,.06))" : "transparent", borderRadius: 8 }}>
+              <span><strong>{x.nombre}</strong> <span className="pf" style={{ display: "inline", marginLeft: 6 }}>{x.n} {x.n === 1 ? "factura" : "facturas"} · la más antigua, {pideDias(x.dias)}</span></span>
+              <strong>{eur(x.total, 2)}</strong>
+            </button>
+          ))}
+        </div>
+      )}
+
       {tab === "pendientes" && (
         <div className="card" style={{ marginTop: 16 }}>
           {!grupos.length ? <p className="empty">No hay nada pendiente de pagar.</p> : grupos.map((g) => (
@@ -212,7 +239,7 @@ export function PagosPendientes() {
                     {g.items.map((p) => (
                       <tr key={`${p.tipo}-${p.id}`}>
                         <td style={{ width: 28 }}>{p.tipo === "f" && <input type="checkbox" aria-label="Marcar para copiar el número" checked={sel.has(`${p.tipo}-${p.id}`)} onChange={() => marcar(`${p.tipo}-${p.id}`)} />}</td>
-                        <td style={{ whiteSpace: "nowrap" }}>{fecha(p.fecha)}<span className="pf">{p.dias > 0 ? `lleva ${pideDias(p.dias)}` : "de hoy"}</span></td>
+                        <td style={{ whiteSpace: "nowrap" }}>{fecha(p.fecha)}{p.tipo === "f" && <span className="pf" style={p.dias > 30 ? { color: "var(--down)", fontWeight: 700 } : undefined}>{p.dias > 0 ? `Pendiente desde hace ${pideDias(p.dias)}` : "Pendiente desde hoy"}</span>}</td>
                         <td>{p.nombre}<Numero p={p} busy={busy} onGuardar={(n) => guardarNumero(p, n)} />{p.etiqueta && <span className="es-chip com" style={{ marginLeft: 8 }}>{p.etiqueta}</span>}
                           <VerFoto p={p} onVer={setVisor} />
                           {(p.quien || p.nota) && <span className="pf">{[p.quien && `Lo metió ${p.quien}`, p.nota].filter(Boolean).join(" · ")}</span>}</td>
