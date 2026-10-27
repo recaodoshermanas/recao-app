@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { F, SF, C, inp, lbl, crd } from "../../lib/styles.js";
 import { fmt, mkLabel, pn, calcMonth } from "../../lib/utils.js";
 import { sb } from "../../lib/supabase.js";
@@ -46,12 +46,15 @@ function SaldoSetup({ onReload }) {
 export function TesoreriaView({ facturas, monthlyData, config, onReload }) {
   const { ask, Dialog } = useConfirm();
   const months = Object.keys(monthlyData).sort();
+  // #75: el reparto a socios sale de Efectivo de sobres (solo lo ven los socios)
+  const [repartos, setRepartos] = useState({});
+  useEffect(() => { sb.rpc("reparto_socios_meses").then((r) => setRepartos(r || {})).catch(() => {}); }, []);
   const saldoInicial = config.saldo_inicial;
   if (!saldoInicial) return <SaldoSetup onReload={onReload} />;
 
   let saldo = parseFloat(saldoInicial.amount);
   const rows = months.map(mk => {
-    const c = calcMonth(facturas, monthlyData[mk], mk);
+    const c = { ...calcMonth(facturas, monthlyData[mk], mk), reparto: Number(repartos[mk] || 0) };
     const netoCaja = c.resultado - c.totalInversiones - c.reparto;
     saldo += netoCaja;
     return { mk, ...c, netoCaja, saldo };

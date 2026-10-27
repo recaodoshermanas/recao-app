@@ -29,7 +29,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
   const [otrosGastos, setOtrosGastos] = useState([]);
   const [inversiones, setInversiones] = useState([]);
   const [mantenimiento, setMantenimiento] = useState([]); // #42
-  const [repartoSocios, setRepartoSocios] = useState("");
+  const [repartoSobres, setRepartoSobres] = useState(null); // #75: solo lectura, sale de Efectivo de sobres (null = no es socio)
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const gfGuardar = useRef(null); // #28: apunta el origen (banco / a mano) de los gastos fijos al guardar
@@ -42,7 +42,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
     if (d.resumen_legacy) {
       setVentas(""); setPaqueteria({}); setGastosFijos({});
       setSalarios(config.salarios_template || []); setOtrosGastos([]);
-      setInversiones([]); setRepartoSocios("");
+      setInversiones([]);
       return;
     }
     setVentas(d.ventas_epos || "");
@@ -51,7 +51,6 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
     setSalarios(d.salarios || config.salarios_template || []);
     setOtrosGastos(d.otros_gastos || []);
     setInversiones(d.inversiones || []);
-    setRepartoSocios(d.reparto_socios || "");
   }, [selMonth, monthlyData, config]);
 
   // #43: paquetería desde el banco (BBVA) para los meses desde octubre de 2026
@@ -87,6 +86,14 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
     return () => { vivo = false; };
   }, [selMonth, monthlyData]);
 
+  // #75: el reparto a socios solo se registra en Efectivo de sobres; aquí se enseña (solo a los socios)
+  useEffect(() => {
+    let vivo = true;
+    setRepartoSobres(null);
+    sb.rpc("reparto_socios_meses").then((r) => { if (vivo) setRepartoSobres(r ? Number(r[selMonth] || 0) : null); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [selMonth, monthlyData]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -95,7 +102,6 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         ventas_epos: pn(ventas),
         paqueteria, gastos_fijos: gastosFijos, salarios: salNuevo ? salV2 : salarios,
         otros_gastos: otrosGastos,
-        reparto_socios: pn(repartoSocios),
         resumen_legacy: null,
       };
       if (paqBanco) payload.paqueteria = await sb.rpc("paqueteria_guardar", { p_mes: selMonth, p_valores: paqueteria }); // #43
@@ -218,8 +224,15 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
           ))}
           <a href="#/finanzas/inversiones" style={{ fontFamily: F, fontSize: "12.5px", fontWeight: 600, color: C.blu }}>Gestionar en Inversiones</a>
         </div>
-        <Sec title="Reparto a socios" />
-        <div style={crd}><input type="number" inputMode="decimal" value={repartoSocios} onChange={e => setRepartoSocios(e.target.value)} placeholder="0" style={{ ...inp, marginBottom: 0 }} /></div>
+        {repartoSobres !== null && <>
+          <Sec title="Reparto a socios" sub="Solo lectura: se registra en Efectivo de sobres" />
+          <div style={crd}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "8px", fontFamily: F, fontSize: "13px", color: C.char }}>
+              <span>Reparto a socios</span><span style={{ fontWeight: 700 }}>{fmt2(repartoSobres)}</span>
+            </div>
+            <a href="#/finanzas/efectivo/sobres" style={{ fontFamily: F, fontSize: "12.5px", fontWeight: 600, color: C.blu }}>Se registra en Efectivo de sobres</a>
+          </div>
+        </>}
       </div>
 
       <button onClick={handleSave} disabled={saving || salNuevo === null} style={{ width: "100%", padding: "16px", border: "none", borderRadius: "12px", background: saving ? "#D8D0C4" : C.char, color: saving ? "#A09888" : C.gold, fontFamily: SF, fontSize: "16px", cursor: saving ? "default" : "pointer", marginTop: "8px", marginBottom: "40px", boxShadow: "0 4px 16px rgba(0,0,0,0.15)" }}>
