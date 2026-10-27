@@ -595,7 +595,7 @@ function DetalleMes({ mes, disponibles, onCambio, onEditMonth }) {
         <div className="head">
           <div><h2>{mesAnio(mes.mes)}</h2><p className="sub">Resultado {eur(sinDecimales(mes.resultado))} · {pct(mes.ingresos ? mes.resultado / mes.ingresos * 100 : 0)} de los ingresos</p>
             {!mes.cerrado && <p className="sub" style={{ color: "#9A4A00", fontWeight: 700 }}>{avisoProvisional(mes)}</p>}
-            {n0(mes.descuadres_caja) !== 0 && <p className="sub">Incluye {eur(mes.descuadres_caja, 2)} de descuadres de caja{mes.descuadre_tarjeta != null ? `: efectivo de los sobres ${eur(n0(mes.descuadre_efectivo), 2)} · tarjeta de la caja 1 ${eur(n0(mes.descuadre_tarjeta), 2)}` : " (sobres)"}</p>}
+            {n0(mes.descuadres_caja) !== 0 && <p className="sub">Incluye {eur(mes.descuadres_caja, 2)} de descuadres de caja{mes.descuadre_tarjeta != null ? `: efectivo de los sobres ${eur(n0(mes.descuadre_efectivo), 2)} · tarjeta (cajas 1 y 2) ${eur(n0(mes.descuadre_tarjeta), 2)}` : " (sobres)"}</p>}
             {n0(mes.sobres_sin_revisar) > 0 && <p className="sub" style={{ color: "#9A4A00", fontWeight: 700 }}>{mes.sobres_sin_revisar} sobre{mes.sobres_sin_revisar === 1 ? "" : "s"} sin revisar en la Apertura de sobres: cuentan como correctos.</p>}
           </div>
           {onEditMonth && <button className="btn-l" onClick={() => onEditMonth(mes.mes.slice(0, 7))}>Editar mes</button>}

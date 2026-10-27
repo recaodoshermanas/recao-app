@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { Cargando, avisar } from "../ui.jsx";
 import { eur } from "../fmt.js";
+import { leerPdf, parsearTexto } from "../../../src/lib/caixaExtracto.js";
 
 const fn = (accion, datos = {}) => sb.fn("bancos", { accion, ...datos });
 const BANCOS = ["BBVA", "CaixaBank"];
@@ -16,6 +17,69 @@ const ultimos4 = (iban) => (iban ? `···${String(iban).replace(/\s/g, "").slic
 const mesDe = (f) => String(f || "").slice(0, 7);
 const nombreMes = (m) => { const d = new Date(`${m}-15T12:00:00`); const t = d.toLocaleDateString("es-ES", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const msg = (e) => { const t = String(e?.message || e || ""); const m = /"error"\s*:\s*"([^"]+)"/.exec(t); return m ? m[1] : t || "No se ha podido"; };
+
+// La cuenta manual va con activa=false para que la sincronización con el banco (que solo recorre las activas) no la toque
+const esManual = (c) => c.aspsp_nombre === "Extracto manual";
+
+// Extracto de La Caixa (#74): la cuenta de la caja 2 no está conectada; se sube el PDF de CaixaBankNow y solo se añade lo nuevo
+function SubirCaixa({ onListo }) {
+  const [lectura, setLectura] = useState(null);
+  const [texto, setTexto] = useState("");
+  const [pegar, setPegar] = useState(false);
+  const [busy, setBusy] = useState(null);
+  const [res, setRes] = useState(null);
+  const [fallo, setFallo] = useState("");
+  const leer = (r) => { setLectura(r); setRes(null); setFallo(r.movs.length ? "" : "No he encontrado movimientos. Prueba con el PDF de CaixaBankNow (Concepto · Fecha · Importe · Saldo) o pega el texto."); };
+  const elegirPdf = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f) return;
+    setBusy("leer"); setFallo(""); setRes(null);
+    try { leer(parsearTexto(await leerPdf(f))); }
+    catch (err) { setLectura(null); setFallo("No he podido leer el PDF. Puedes pegar el texto del extracto aquí debajo."); setPegar(true); }
+    setBusy(null);
+  };
+  const cargar = async () => {
+    setBusy("cargar"); setFallo("");
+    try {
+      const r = await sb.rpc("caixa_importar", { p_movs: lectura.movs, p_saldo: lectura.saldoFinal });
+      setRes(r); setLectura(null); setTexto("");
+      avisar(r.nuevos ? `La Caixa: ${r.nuevos} movimiento${r.nuevos === 1 ? "" : "s"} nuevo${r.nuevos === 1 ? "" : "s"}` : "La Caixa: no había nada nuevo", "ok");
+      onListo();
+    } catch (err) { setFallo(msg(err)); }
+    setBusy(null);
+  };
+  const ok = lectura && lectura.encadenan === lectura.pares;
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="head"><div><h2>Extracto de La Caixa</h2>
+        <p className="sub">La cuenta de la caja 2 no está conectada. Sube el PDF que descargas de CaixaBankNow (lo puedes hacer cuando quieras): solo se añaden los movimientos que no estaban, y con ellos se cuadra la tarjeta de la caja 2 en el Cierre de mes.</p></div></div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
+        <label className="btn-p" style={{ cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
+          {busy === "leer" ? "Leyendo…" : "Elegir PDF del extracto"}
+          <input type="file" accept="application/pdf,.pdf" disabled={!!busy} onChange={elegirPdf} style={{ display: "none" }} />
+        </label>
+        <button className="btn-txt" disabled={!!busy} onClick={() => setPegar(!pegar)}>{pegar ? "Ocultar texto" : "Pegar el texto en su lugar"}</button>
+      </div>
+      {pegar && (
+        <div style={{ marginTop: 10 }}>
+          <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={6} placeholder="Una línea por movimiento: Concepto  Fecha  Importe  Saldo (o fecha;concepto;importe;saldo)" style={{ width: "100%", boxSizing: "border-box", fontFamily: "inherit", fontSize: 13, padding: 8 }} />
+          <button className="btn-l" style={{ marginTop: 6 }} disabled={!texto.trim() || !!busy} onClick={() => leer(parsearTexto(texto))}>Leer el texto</button>
+        </div>
+      )}
+      {fallo && <p role="alert" style={{ color: "var(--down)", fontWeight: 700, marginTop: 10 }}>{fallo}</p>}
+      {lectura && lectura.movs.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <p style={{ margin: "0 0 4px" }}><b>{lectura.movs.length} movimientos</b> del {fecha(lectura.desde)} al {fecha(lectura.hasta)} · saldo final {eur(lectura.saldoFinal, 2)}</p>
+          <p className="sub" style={{ margin: "0 0 8px", color: ok ? "var(--up)" : "var(--down)", fontWeight: 700 }}>
+            {ok ? "Los saldos encadenan al céntimo: el archivo está completo." : `Ojo: ${lectura.pares - lectura.encadenan} de ${lectura.pares} saldos no encadenan${lectura.ignoradas ? ` y he saltado ${lectura.ignoradas} línea${lectura.ignoradas === 1 ? "" : "s"} que no he entendido` : ""}. Puede faltar algún movimiento.`}
+          </p>
+          <button className="btn-p" disabled={!!busy} onClick={cargar}>{busy === "cargar" ? "Cargando…" : "Cargar en Bancos"}</button>
+        </div>
+      )}
+      {res && <p className="sub" style={{ marginTop: 10 }}>Listo: {res.leidos} leídos · <b>{res.nuevos} nuevos</b> · {res.repetidos} ya estaban (del {fecha(res.desde)} al {fecha(res.hasta)}).</p>}
+    </div>
+  );
+}
 
 export function Bancos() {
   const [cuentas, setCuentas] = useState(null);
@@ -29,7 +93,7 @@ export function Bancos() {
 
   const cargar = useCallback(async () => {
     try {
-      const c = await sb.select("cuentas_bancarias", "select=*&activa=eq.true&order=banco");
+      const c = await sb.select("cuentas_bancarias", "select=*&or=(activa.eq.true,aspsp_nombre.eq.Extracto%20manual)&order=banco");
       const m = c.length ? await sb.select("movimientos_banco", "select=id,cuenta_id,fecha_operacion,importe,concepto,contraparte&order=fecha_operacion.desc,id.desc&limit=5000") : [];
       setCuentas(c); setMovs(m); setFallo(false);
     } catch (e) { setFallo(true); }
@@ -114,7 +178,7 @@ export function Bancos() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, marginTop: 16 }}>
           {cuentas.map((c) => {
             const dias = diasHasta(c.permiso_hasta);
-            const caducado = (dias != null && dias <= 0) || /caducad/i.test(c.ultimo_error || "");
+            const caducado = !esManual(c) && (dias != null && dias <= 0) || /caducad/i.test(c.ultimo_error || "");
             const pronto = !caducado && dias != null && dias <= 7;
             return (
               <div key={c.id} style={{ border: `1.5px solid ${caducado ? "var(--down)" : "var(--line)"}`, borderRadius: 14, padding: "14px 16px", background: caducado ? "color-mix(in srgb, var(--down) 7%, var(--card))" : "var(--card)" }}>
@@ -123,10 +187,12 @@ export function Bancos() {
                   <span className="pf">{c.nombre || ""}</span>
                 </div>
                 <div style={{ fontSize: 26, fontWeight: 800, margin: "6px 0 4px", letterSpacing: "-0.01em" }}>{c.saldo != null ? eur(c.saldo, 2) : "—"}</div>
-                <span className="pf">Actualizado {fechaHora(c.ultima_sync)}</span>
-                <span className="pf" style={{ color: caducado || pronto ? "var(--down)" : undefined, fontWeight: caducado || pronto ? 700 : 500 }}>
-                  {caducado ? "Permiso caducado – renovar" : `Permiso hasta el ${fecha(c.permiso_hasta)}${pronto ? ` (quedan ${dias} día${dias === 1 ? "" : "s"})` : ""}`}
-                </span>
+                <span className="pf">{esManual(c) ? `Extracto subido ${c.ultima_sync ? fechaHora(c.ultima_sync) : "— (aún no)"}` : `Actualizado ${fechaHora(c.ultima_sync)}`}</span>
+                {esManual(c) ? <span className="pf">Se actualiza subiendo el PDF (más abajo)</span> : (
+                  <span className="pf" style={{ color: caducado || pronto ? "var(--down)" : undefined, fontWeight: caducado || pronto ? 700 : 500 }}>
+                    {caducado ? "Permiso caducado – renovar" : `Permiso hasta el ${fecha(c.permiso_hasta)}${pronto ? ` (quedan ${dias} día${dias === 1 ? "" : "s"})` : ""}`}
+                  </span>
+                )}
                 {c.ultimo_error && !caducado && <span className="pf" style={{ color: "var(--down)" }}>Último error: {c.ultimo_error}</span>}
                 {(caducado || pronto) && <button className="btn-p" style={{ marginTop: 10 }} disabled={!!busy} onClick={() => conectar(c.banco)}>{busy === `c-${c.banco}` ? "Abriendo…" : "Renovar permiso"}</button>}
               </div>
@@ -134,6 +200,8 @@ export function Bancos() {
           })}
         </div>
       </div>
+
+      <SubirCaixa onListo={cargar} />
 
       <div className="card mt" style={{ marginTop: 16 }}>
         <div className="head" style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
