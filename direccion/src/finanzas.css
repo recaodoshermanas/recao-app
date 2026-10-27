@@ -138,3 +138,19 @@
 /* #71: botones de exportación */
 .fpl-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
 .fpl-acciones .btn-l:disabled { opacity: .6; cursor: default; }
+
+/* #70: pulsar una cifra de la Cuenta de resultados */
+.fpl td button.cifra { border: 0; background: none; font: inherit; color: inherit; cursor: pointer; padding: 2px 4px; margin: -2px -4px; border-radius: 6px; }
+.fpl td button.cifra:hover, .fpl td button.cifra:focus-visible { background: rgba(241,190,73,.35); text-decoration: underline dotted; outline: none; }
+.vc-total, .vc-suma { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; font-variant-numeric: tabular-nums; }
+.vc-total { font-size: 18px; border-bottom: 2px solid var(--grid); }
+.vc-suma { border-top: 2px solid var(--grid); font-weight: 700; }
+.vc-suma.mal b { color: #B42318; }
+.vc-lista { list-style: none; margin: 0; padding: 0; }
+.vc-lista li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+.vc-lista li.nota { color: var(--muted); font-style: italic; }
+.vc-l { display: flex; flex-direction: column; min-width: 0; }
+.vc-l small { color: var(--muted); font-size: 12px; }
+.vc-l .vc-sub { font-size: 11.5px; }
+.vc-c .btn-txt { margin-left: 6px; border: 0; background: none; cursor: pointer; padding: 0 2px; }
+.vc-i { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }

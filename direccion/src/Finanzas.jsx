@@ -1,6 +1,7 @@
 // Finanzas: todo sale de dash_finanzas() (datos del mes, facturas, Epos y cierres de caja).
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { supabase } from "../../src/lib/supabase.js";
+import { supabase, sb } from "../../src/lib/supabase.js";
+import { Panel } from "./ui.jsx"; // #70
 import { initTips } from "./charts.js";
 import { eur, eurK, pct, num, mesCorto, mesAnio, parseDate } from "./fmt.js";
 import { CajaFuerte } from "./CajaFuerte.jsx"; // CAJA FUERTE (#11)
@@ -346,6 +347,7 @@ export function FinanzasResultados({ onEditMonth }) {
   const [modo, setModo] = useState("eur");
   const [sel, setSel] = useState(null);
   const [exportando, setExportando] = useState(null);
+  const [cifra, setCifra] = useState(null); // #70: {f, m} de la cifra pulsada
   const scroll = useRef(null);
   const cerrados = useMemo(() => (d ? d.meses.filter((m) => m.cerrado) : []), [d]);
   // #68: el mes en curso (sin cerrar) sale como una columna más, provisional, a la derecha del último mes cerrado
@@ -419,7 +421,7 @@ export function FinanzasResultados({ onEditMonth }) {
               {filas.map((f) => f.sep ? <tr key={f.k} className="sep"><th colSpan={meses.length + 1}>{f.l}</th></tr> : (
                 <tr key={f.k} className={`${f.b || f.b2 ? "b" : ""}${f.r ? " r" : ""}${f.r2 ? " r tras" : ""}`}>
                   <th>{f.l}</th>
-                  {meses.map((m) => <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}${f.r ? (n0(f.get ? f.get(m) : m[f.k]) >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}`}>{f.get ? (f.get(m) == null ? "–" : val(m, n0(f.get(m)))) : f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k]))}</td>)}
+                  {meses.map((m) => { const txt = f.get ? (f.get(m) == null ? "–" : val(m, n0(f.get(m)))) : f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k])); return <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}${f.r ? (n0(f.get ? f.get(m) : m[f.k]) >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}`}>{txt === "–" ? txt : <button className="cifra" title="Ver de dónde sale" onClick={() => setCifra({ f, m })}>{txt}</button>}</td>; })}
                 </tr>
               ))}
               <tr className="sep"><th colSpan={meses.length + 1}>Margen real según Epos (sin IVA)</th></tr>
@@ -434,7 +436,102 @@ export function FinanzasResultados({ onEditMonth }) {
         </div>
       </div>
       {mes && <DetalleMes mes={mes} disponibles={disponibles} onCambio={recargar} onEditMonth={onEditMonth} />}
+      {cifra && <VentanaCifra f={cifra.f} m={cifra.m} filas={filas} socio={!!d.socio} onClose={() => setCifra(null)} onEditMonth={onEditMonth} />}
     </>
+  );
+}
+
+// ---------- #70: pulsar una cifra de la Cuenta de resultados y ver de qué partidas sale ----------
+// Solo consulta. Las partidas salen de fin_cuenta_partidas(), que usa exactamente las mismas fuentes que dash_finanzas().
+const partidasCache = {};
+const PAGO = { tarjeta: "Tarjeta", banco: "Banco", efectivo: "Efectivo", caja_fuerte: "Caja fuerte", efectivo_sobres: "Efectivo de sobres", efectivo_caja: "Efectivo de caja", sin_indicar: "Sin indicar" };
+const fechaP = (f) => (f ? parseDate(String(f).slice(0, 10)).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" }) : "");
+const valorFila = (f, m) => (f.get ? f.get(m) : m[f.k]);
+// pantalla donde se cambia cada cifra
+const ENLACE = {
+  ventas: "cierre", paqueteria: "cierre", personal: "cierre", local: "cierre", servicios: "cierre", impuestos: "cierre", otros: "cierre",
+  descuadres_caja: "cierre", variacion_existencias: "cierre",
+  mercancia: "facturas", compras_mercancia: "facturas", mantenimiento: "mantenimiento", reparto_sobres: "sobres",
+};
+const PANTALLA = {
+  cierre: { l: "Cierre de mes", ruta: "#/finanzas/resultados/cierre" },
+  facturas: { l: "Facturas", ruta: "#/finanzas/gastos/facturas" },
+  mantenimiento: { l: "Mantenimiento", ruta: "#/finanzas/gastos/mantenimiento" },
+  sobres: { l: "Efectivo de sobres", ruta: "#/finanzas/efectivo/sobres" },
+};
+
+// filas que son suma de otras filas: las partidas son esas filas, con su signo
+function partidasCompuestas(k, m, filas) {
+  const gastoFilas = filas.filter((f) => !f.sep && f.neg && !["gastos", "reparto_sobres", "compras_mercancia", "variacion_existencias"].includes(f.k));
+  const gastos = gastoFilas.map((f) => ({ c: f.l, i: n0(valorFila(f, m)) }));
+  if (k === "gastos") return gastos;
+  if (k === "resultado_tienda") return [{ c: "Ventas (con IVA)", i: n0(m.ventas) }, { c: "Gastos (se restan)", i: -n0(m.gastos) }];
+  if (k === "resultado_paqueteria") return [{ c: "Ingresos de paquetería", i: n0(m.paqueteria) }];
+  if (k === "ingresos") return [{ c: "Ventas (con IVA)", i: n0(m.ventas) }, { c: "Ingresos de paquetería", i: n0(m.paqueteria) }];
+  if (k === "resultado") return [{ c: "Ventas (con IVA)", i: n0(m.ventas) }, { c: "Ingresos de paquetería", i: n0(m.paqueteria) }, { c: "Gastos (se restan)", i: -n0(m.gastos) },
+    ...(n0(m.descuadres_caja) ? [{ c: "Descuadres de caja", i: n0(m.descuadres_caja) }] : [])];
+  if (k === "resultado_tras_reparto") return [{ c: "Beneficio del negocio", i: n0(m.resultado) }, { c: "Reparto a socios (se resta)", i: -n0(m.reparto_sobres) }];
+  return null;
+}
+
+function VentanaCifra({ f, m, filas, socio, onClose, onEditMonth }) {
+  const compuesta = partidasCompuestas(f.k, m, filas);
+  const [datos, setDatos] = useState(compuesta ? null : partidasCache[m.mes] || null);
+  const [fallo, setFallo] = useState(false);
+  useEffect(() => {
+    if (compuesta || datos) return;
+    let vivo = true;
+    sb.rpc("fin_cuenta_partidas", { p_mes: m.mes })
+      .then((r) => { partidasCache[m.mes] = r; if (vivo) setDatos(r); })
+      .catch(() => { if (vivo) setFallo(true); });
+    return () => { vivo = false; };
+  }, [m.mes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const total = n0(valorFila(f, m));
+  const lista = compuesta || (datos ? datos.filas?.[f.k] || [] : null);
+  const suma = lista ? lista.filter((p) => !p.nota).reduce((s, p) => s + n0(p.i), 0) : 0;
+  const cuadra = Math.abs(suma - total) < 0.01;
+  const verDoc = async (doc) => {
+    const w = window.open("", "_blank");
+    try {
+      let url;
+      if (doc.t === "recepcion") { const r = await sb.fn("recepcion", { accion: "abrir", id: doc.id }); url = r?.recepcion?.doc_url || r?.recepcion?.foto_url; }
+      else { const r = await sb.fn("mantenimiento-foto", { accion: "ver", id: doc.id }); url = r?.url; }
+      if (!url) throw new Error("sin documento");
+      if (w) w.location = url; else window.location.href = url;
+    } catch (e) { if (w) w.close(); window.alert("No se ha podido abrir el documento."); }
+  };
+  const pant = PANTALLA[ENLACE[f.k]];
+  const ir = () => {
+    onClose();
+    if (ENLACE[f.k] === "cierre" && onEditMonth) onEditMonth(m.mes.slice(0, 7));
+    else window.location.hash = pant.ruta;
+  };
+  const signo = f.k === "reparto_sobres" && total ? "−" : "";
+  return (
+    <Panel titulo={`${f.l} · ${mesAnio(m.mes)}`} sub={!m.cerrado ? "Mes en curso: cifras provisionales hasta hoy" : undefined} onClose={onClose} ancho="520px"
+      pie={pant ? <button className="btn-l" onClick={ir}>Cambiar en {pant.l} →</button> : null}>
+      <div className="vc-total"><span>Total</span><b>{signo}{eur(total, 2)}</b></div>
+      {fallo ? <p className="empty">No se han podido cargar las partidas. Inténtalo de nuevo.</p>
+        : !lista ? <p className="empty">Cargando…</p>
+        : Math.abs(total) < 0.005 && !lista.some((p) => n0(p.i)) ? <p className="empty">Sin partidas este mes</p>
+        : <>
+          <ul className="vc-lista">
+            {lista.map((p, i) => (
+              <li key={i} className={p.nota ? "nota" : ""}>
+                <div className="vc-l">
+                  <span className="vc-c">{p.c}{p.doc && <button className="btn-txt" title="Ver el documento" aria-label="Ver el documento" onClick={() => verDoc(p.doc)}>📄</button>}</span>
+                  <small>{[fechaP(p.f), PAGO[p.d] || p.d, p.nota ? "no suma" : ""].filter(Boolean).join(" · ")}</small>
+                  {(p.sub || []).length > 0 && <small className="vc-sub">{p.sub.map((x) => `${fechaP(x.f)}: ${eur(n0(x.i), 2)}`).join(" · ")}</small>}
+                </div>
+                <span className="vc-i">{p.i == null ? "–" : eur(n0(p.i), 2)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className={`vc-suma${cuadra ? "" : " mal"}`}><span>Suma de las partidas</span><b>{eur(suma, 2)}</b></div>
+          {!cuadra && <p className="sub" style={{ color: "#B42318", fontWeight: 700 }}>No cuadra con la tabla ({eur(suma - total, 2)} de diferencia). Avisa a Tecnología.</p>}
+          {f.k === "personal" && !socio && lista.some((p) => /Extras/.test(p.c)) && <p className="sub">El detalle de los extras solo lo ven los socios.</p>}
+        </>}
+    </Panel>
   );
 }
 
