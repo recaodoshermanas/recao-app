@@ -39,7 +39,7 @@ export function DineroHoy() {
     const ok = (p) => p.then((v) => ({ v }), (e) => ({ e }));
     (async () => {
       const [cu, ca, pa, so] = await Promise.all([
-        ok(sb.select("cuentas_bancarias", "select=banco,saldo,ultima_sync,ultimo_error&activa=eq.true&order=banco")),
+        ok(sb.select("cuentas_bancarias", "select=banco,aspsp_nombre,saldo,saldo_fecha,ultima_sync,ultimo_error&or=(activa.eq.true,aspsp_nombre.eq.Extracto%20manual)&order=banco")),
         ok(sb.rpc("caja_fuerte_estado")),
         ok(sb.rpc("pagos_datos")),
         ok(sb.rpc("efectivo_sobres_mes", { p_mes: hoyStr().slice(0, 7) })),
@@ -54,13 +54,19 @@ export function DineroHoy() {
   if (fallo) return null;
   if (!d) return <section className="card dh"><h2>El dinero que tenemos hoy</h2><p className="sub">Cargando…</p></section>;
 
-  const bbva = (d.cu.v || []).find((c) => c.banco === "BBVA");
+  const bbva = (d.cu.v || []).find((c) => c.banco === "BBVA" && c.aspsp_nombre !== "Extracto manual");
+  const caixa = (d.cu.v || []).find((c) => c.aspsp_nombre === "Extracto manual" && c.saldo != null);
+  const caixaFecha = caixa?.saldo_fecha ? new Date(caixa.saldo_fecha).toLocaleDateString("sv-SE") : "";
+  const caixaViejo = caixaFecha && Date.now() - new Date(caixaFecha + "T12:00:00").getTime() > 7 * 864e5;
+  const ddmm = (f) => f.slice(8, 10) + "/" + f.slice(5, 7);
   const viejo = bbva && (bbva.ultimo_error || !bbva.ultima_sync || Date.now() - new Date(bbva.ultima_sync).getTime() > HORAS_AVISO * 36e5);
   const verSobres = !d.so.e;
   const filas = [
     { k: "bbva", t: "BBVA", ruta: "finanzas/banco/bancos", ok: !!bbva && bbva.saldo != null, v: bbva ? n(bbva.saldo) : null,
       s: !bbva ? "Sin conexión" : viejo ? `Sin actualizar desde ${bbva.ultima_sync ? cuando(bbva.ultima_sync) : "—"}` : `actualizado ${cuando(bbva.ultima_sync)}`, aviso: viejo },
-    { k: "caixa", t: "La Caixa", ruta: "finanzas/banco/bancos", ok: false, s: "Sin dato", gris: true },
+    { k: "caixa", t: "La Caixa", ruta: "finanzas/banco/bancos", ...(caixa
+      ? { ok: true, v: n(caixa.saldo), s: caixaFecha ? `según extracto del ${ddmm(caixaFecha)}` : "según extracto", aviso: caixaViejo }
+      : { ok: false, s: "Sin dato", gris: true }) },
     verSobres && { k: "sobres", t: "Efectivo de sobres guardado", ruta: "finanzas/efectivo/sobres", ok: true, v: n(d.so.v?.saldo) },
     { k: "caja", t: "Caja fuerte", ruta: "finanzas/efectivo/caja", ok: !d.ca.e, v: n(d.ca.v?.saldo), s: d.ca.e ? "No se ha podido cargar" : "" },
   ].filter(Boolean);
