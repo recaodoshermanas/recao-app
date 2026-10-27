@@ -16,6 +16,7 @@ const mesTxt = (m) => new Date(`${m}-15T12:00:00`).toLocaleDateString("es-ES", {
 const btnL = { border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, padding: "7px 12px", fontFamily: F, fontSize: 13, fontWeight: 600, color: C.char, cursor: "pointer" };
 const btnTxt = { border: "none", background: "none", padding: "6px 4px", fontFamily: F, fontSize: 12.5, fontWeight: 600, textDecoration: "underline", cursor: "pointer" };
 const APARTADOS = [
+  ["sueldo_horas", "Sueldo por horas", "Laura López y Marina Z: cada turno terminado (horas reales × 8 €) y 6 h × 8 € por día de vacaciones. Se modifica en Cierre de mes → Salarios."],
   ["eventuales", "Eventuales", "Turnos ya terminados de las eventuales: horas reales × precio."],
   ["horas_extras", "Horas extras", "Horas extras apuntadas, cuando termina el turno de ese día."],
   ["festivos", "Plus de festivos", "37,50 € por un turno de 8 h; si es más corto, la parte proporcional redondeada al euro."],
