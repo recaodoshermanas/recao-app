@@ -1,4 +1,5 @@
 // Finanzas → Banco → Tesorería (solicitud #89): el dinero real de hoy y a fin de cada mes. Sustituye al «Saldo estimado».
+// «Próximos días» (solicitud #90) sale de tesoreria_prevision(): bancos de hoy + cobros previstos − pagos previstos, día a día.
 // «Hoy» lee lo mismo que Bancos, Caja fuerte y Efectivo de sobres; «Evolución» sale de tesoreria_evolucion() (solo dirección; sobres, solo socios).
 import { useEffect, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
@@ -15,12 +16,108 @@ a.te-f:hover { background: var(--grid); }
 .te-f.tot b { font-size: 24px; }
 .te-t td, .te-t th { font-variant-numeric: tabular-nums; }
 .te-t tr.curso td { background: var(--grid); }
+.te-sel { display: inline-flex; gap: 4px; margin: 6px 0 4px; }
+.te-sel button { padding: 6px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: transparent; color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+.te-sel button.on { background: var(--text); color: var(--bg, #fff); border-color: var(--text); }
+.te-pv { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0 6px; }
+.te-pv > div { padding: 10px 12px; border-radius: var(--r-s); background: var(--grid); }
+.te-pv small { display: block; color: var(--muted); font-size: 12.5px; }
+.te-pv b { font-size: 19px; font-variant-numeric: tabular-nums; }
+.te-pv .fin b { font-size: 22px; }
+.te-neg { color: var(--down); }
+.te-est td:nth-child(2) { font-style: italic; }
+.te-fecha td { border-top: 1.5px solid var(--line); }
 `;
 const n = (v) => Number(v) || 0;
 const cuando = (ts) => (ts ? new Date(ts).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
 const ddmm = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}` : "");
 const nombreMes = (m) => { const t = new Date(`${m}-15T12:00:00`).toLocaleDateString("es-ES", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 const celda = (v) => (v == null ? "–" : eur(v, 2));
+
+const DIAS_C = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const fechaCorta = (f) => `${DIAS_C[new Date(`${f}T12:00:00`).getDay()]} ${ddmm(f)}`;
+
+function Grafico({ serie, minimo }) {
+  const W = 640, H = 190, L = 54, R = 10, T = 12, B = 24;
+  const vals = serie.map((p) => n(p.s));
+  const lo = Math.min(0, ...vals), hi = Math.max(...vals);
+  const span = hi - lo || 1;
+  const x = (i) => L + (i / Math.max(serie.length - 1, 1)) * (W - L - R);
+  const y = (v) => T + (1 - (v - lo) / span) * (H - T - B);
+  const pts = serie.map((p, i) => `${x(i).toFixed(1)},${y(n(p.s)).toFixed(1)}`).join(" ");
+  const im = serie.findIndex((p) => p.f === minimo?.fecha);
+  const marcas = [0, Math.floor((serie.length - 1) / 2), serie.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", margin: "8px 0" }} role="img" aria-label="Saldo previsto en el banco día a día">
+      {[lo, (lo + hi) / 2, hi].map((v, k) => (
+        <g key={k}><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="var(--line)" strokeDasharray="3 4" /><text x={L - 6} y={y(v) + 4} textAnchor="end" fontSize="11" fill="var(--muted)">{eur(v / 1000, 1).replace(" €", "")}k</text></g>
+      ))}
+      {lo < 0 && <line x1={L} x2={W - R} y1={y(0)} y2={y(0)} stroke="var(--down)" />}
+      <polyline points={pts} fill="none" stroke="var(--text)" strokeWidth="2.2" strokeLinejoin="round" />
+      {marcas.map((i) => <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === serie.length - 1 ? "end" : "middle"} fontSize="11" fill="var(--muted)">{ddmm(serie[i].f)}</text>)}
+      {im >= 0 && <><circle cx={x(im)} cy={y(n(serie[im].s))} r="5" fill="#C26A00" stroke="#fff" strokeWidth="1.5" /><text x={Math.min(Math.max(x(im), L + 40), W - R - 40)} y={y(n(serie[im].s)) - 10} textAnchor="middle" fontSize="11.5" fontWeight="700" fill="#C26A00">{ddmm(serie[im].f)}</text></>}
+    </svg>
+  );
+}
+
+function Prevision() {
+  const [dias, setDias] = useState(30);
+  const [p, setP] = useState(null);
+  const [fallo, setFallo] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    setP(null); setFallo(false);
+    sb.rpc("tesoreria_prevision", { p_dias: dias }).then((v) => { if (vivo) setP(v); }, () => { if (vivo) setFallo(true); });
+    return () => { vivo = false; };
+  }, [dias]);
+
+  const sel = (
+    <div className="te-sel" role="group" aria-label="Plazo de la previsión">
+      {[30, 60].map((d) => <button key={d} type="button" className={dias === d ? "on" : ""} onClick={() => setDias(d)}>{d} días</button>)}
+    </div>
+  );
+  const cab = (<><h2>Próximos días</h2><p className="sub">Dinero previsto en el banco (BBVA + La Caixa). El efectivo no entra en esta previsión.</p>{sel}</>);
+  if (fallo) return <div className="card" style={{ marginTop: 16 }}>{cab}<p className="empty">No se ha podido cargar la previsión.</p></div>;
+  if (!p) return <div className="card" style={{ marginTop: 16 }}>{cab}<Cargando /></div>;
+
+  const eventos = p.eventos || [];
+  const neg = n(p.saldo_final) < 0;
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      {cab}
+      <div className="te-pv">
+        <div><small>En el banco hoy</small><b>{eur(p.saldo_hoy, 2)}</b></div>
+        <div><small>+ Cobros previstos</small><b>{eur(p.cobros, 2)}</b></div>
+        <div><small>− Pagos previstos</small><b>{eur(p.pagos, 2)}</b></div>
+        <div className="fin"><small>Previsto el {ddmm(p.fin)}</small><b className={neg ? "te-neg" : ""}>{eur(p.saldo_final, 2)}</b></div>
+      </div>
+      {p.minimo && <p className="sub" style={{ marginTop: 4 }}><b className={n(p.minimo.saldo) < 0 ? "te-neg" : ""}>El día más justo: {fechaCorta(p.minimo.fecha)}, {eur(p.minimo.saldo, 2)}</b></p>}
+      <Grafico serie={p.serie || []} minimo={p.minimo} />
+      {p.sin_nombre?.n > 0 && <p className="sub">Desde el 21/10 el banco manda {p.sin_nombre.n} cargos domiciliados sin el nombre del proveedor ({eur(p.sin_nombre.importe, 2)}). Ya están descontados del saldo de hoy, pero no se pueden asignar a un proveedor y cada proveedor se prevé con sus cargos con nombre.</p>}
+      <div className="tabla-scroll">
+        <table className="ranking te-t">
+          <thead><tr><th>Fecha</th><th>Concepto</th><th className="r">Importe</th><th>De dónde sale</th><th className="r">Saldo previsto</th></tr></thead>
+          <tbody>
+            {eventos.map((e, i) => {
+              const primera = i === 0 || eventos[i - 1].fecha !== e.fecha;
+              return (
+                <tr key={i} className={`${e.real ? "" : "te-est"} ${primera && i > 0 ? "te-fecha" : ""}`}>
+                  <td style={{ whiteSpace: "nowrap" }}>{primera ? fechaCorta(e.fecha) : ""}</td>
+                  <td>{e.concepto}</td>
+                  <td className="r" style={{ color: n(e.importe) < 0 ? "var(--down)" : "var(--up)", fontWeight: 700 }}>{n(e.importe) > 0 ? "+" : ""}{eur(e.importe, 2)}</td>
+                  <td><small style={{ color: "var(--muted)" }}>{e.real ? "Dato real · " : "Estimación · "}{e.origen}</small></td>
+                  <td className={`r ${primera && n(e.saldo_dia) < 0 ? "te-neg" : ""}`}>{primera ? <b>{eur(e.saldo_dia, 2)}</b> : ""}</td>
+                </tr>
+              );
+            })}
+            {!eventos.length && <tr><td colSpan="5" className="empty">No hay cobros ni pagos previstos.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="sub">Las líneas en cursiva son estimaciones (medias de lo ocurrido en las últimas semanas); el resto son datos reales (facturas pendientes, pagos fijos, impuestos con fecha). Cuando un pago o un cobro aparece en el banco, deja de salir.</p>
+    </div>
+  );
+}
 
 export function Tesoreria() {
   const [d, setD] = useState(null);
@@ -76,6 +173,8 @@ export function Tesoreria() {
         </div>
         {!verSobres && <p className="sub">El efectivo de sobres solo lo ven los socios, y no se suma.</p>}
       </div>
+
+      <Prevision />
 
       <div className="card" style={{ marginTop: 16 }}>
         <h2>Evolución</h2>
