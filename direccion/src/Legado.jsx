@@ -1,7 +1,7 @@
 // Pantallas que vienen tal cual de la app (src/views/owner). Es el mismo código:
 // lo que se arregle allí se arregla aquí, y al revés.
 import { DatosMesView } from "../../src/views/owner/DatosMesView.jsx";
-import { TesoreriaView } from "../../src/views/owner/TesoreriaView.jsx";
+import { Tesoreria } from "./finanzas/Tesoreria.jsx"; // #89: sustituye a TesoreriaView (saldo estimado)
 import { AjustesView } from "../../src/views/owner/AjustesView.jsx";
 import { AnalyticaView } from "../../src/views/owner/AnalyticaView.jsx";
 import { CVCandidatosView } from "../../src/views/owner/CVCandidatosView.jsx";
@@ -25,7 +25,7 @@ export function Legado({ area, sub, datos, user, mesFoco, onEditMonth }) {
   let vista = null;
   switch (v) {
     case "personas/seleccion": vista = <CVCandidatosView currentUser={user} />; break;
-    case "finanzas/tesoreria": vista = <TesoreriaView facturas={facturas} monthlyData={monthlyData} config={config} onReload={reload} />; break;
+    case "finanzas/tesoreria": vista = <Tesoreria />; break;
     case "finanzas/cierre": vista = <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={reload} initialMonth={mesFoco} />; break;
     case "finanzas/facturas": vista = <WorkerView facturas={facturas} proveedores={proveedores} onReload={reload} user={user} />; break;
     case "producto/analitica": vista = <AnalyticaView />; break;
