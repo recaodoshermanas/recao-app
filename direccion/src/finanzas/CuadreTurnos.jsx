@@ -116,6 +116,7 @@ function Banco({ caja, r, setTarjeta }) {
       <div style={S.fila}><span>Ingresado por {banco}</span><span>{r.pendiente ? "Esperando la remesa" : e2(r.bbva)}</span></div>
       <div style={S.fila}><span>Comisión</span><span style={{ fontWeight: 700 }}>{e2(r.comision)}</span></div>
       {(r.remesas || []).length > 0 && <div style={S.mut}>{r.remesas.map((x) => `${e2(x.i)} el ${String(x.f).slice(8, 10)}/${String(x.f).slice(5, 7)}`).join(" + ")}</div>}
+      {(r.remesas || []).filter((x) => x.por_importe).map((x) => <div key={x.num} style={S.mut}>Encontrado por importe (abono del {String(x.f).slice(8, 10)}/{String(x.f).slice(5, 7)}, número {x.num})</div>)}
       {r.motivo && <div style={{ fontWeight: 700 }}>{r.motivo}</div>}
       {r.estado === "corregida" && <div style={S.mut}>Corregido: {r.datafono !== r.datafono_orig ? `datáfono ${e2(r.datafono_orig)} → ${e2(r.datafono)}` : ""}{r.datafono !== r.datafono_orig && r.bbva !== r.bbva_orig ? " · " : ""}{r.bbva !== r.bbva_orig ? `${banco} ${e2(r.bbva_orig)} → ${e2(r.bbva)}` : ""}</div>}
       {r.estado && <div style={S.mut}>{r.estado === "buena" ? "Dada por buena" : "Corregida"} · {r.por_nombre || "dirección"}, {cuando(r.en)}{r.nota ? ` · «${r.nota}»` : ""}</div>}
