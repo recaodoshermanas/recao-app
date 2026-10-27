@@ -1,6 +1,7 @@
 // Personas · Seguimiento: cierres de turno, tareas extra (#56), tareas sin hacer (incidencias) y disciplina.
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
+import { TareasEquipo } from "./TareasEquipo.jsx";
 import { DisciplinaAdminView } from "../../../src/views/owner/DisciplinaAdminView.jsx";
 import { Pestanas, useEquipo, hoyStr, masDias, fechaCorta, Cargando, Avatar, hace, n0, Panel } from "../ui.jsx";
 import { eur } from "../fmt.js";
@@ -26,13 +27,14 @@ export function Seguimiento({ sub }) {
     <>
       <div className="barra-sec">
         <Pestanas valor={vista} onChange={(v) => { setVista(v); setCierreFoco(null); }} etiqueta="Seguimiento" opciones={[
-          { id: "cierres", label: "Cierres de turno" }, { id: "tareas-extra", label: "Tareas extra", n: repiten }, { id: "incidencias", label: "Tareas sin hacer" }, { id: "disciplina", label: "Disciplina" },
+          { id: "cierres", label: "Cierres de turno" }, { id: "tareas-extra", label: "Tareas extra", n: repiten }, { id: "incidencias", label: "Tareas sin hacer" }, { id: "disciplina", label: "Disciplina" }, { id: "tareas-equipo", label: "Tareas por equipo" },
         ]} />
       </div>
       {vista === "cierres" && <Cierres foco={cierreFoco} quitarFoco={() => setCierreFoco(null)} />}
       {vista === "tareas-extra" && <TareasExtra inicial={tareaFoco} onCambio={contar} onAbrirCierre={abrirCierre} />}
       {vista === "incidencias" && <Incidencias />}
       {vista === "disciplina" && <div className="card legado-dentro ancho"><DisciplinaAdminView /></div>}
+      {vista === "tareas-equipo" && <TareasEquipo />}
     </>
   );
 }
