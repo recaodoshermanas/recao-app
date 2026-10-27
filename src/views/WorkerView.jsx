@@ -18,7 +18,7 @@ const claveProv = (t) => String(t ?? "").normalize("NFD").replace(/\p{M}/gu, "")
 const importeNum = (v) => { let t = String(v ?? "").trim().replace(/\s/g, "").replace(/[−–]/g, "-"); if (t.includes(",")) t = t.replace(/\./g, "").replace(",", "."); const n = Number(t); return t !== "" && Number.isFinite(n) ? n : NaN; };
 const sumaImportes = (fs) => fs.reduce((s, f) => s + (Number(f.importe) || 0), 0);
 
-export function WorkerView({ facturas, proveedores, onReload, user }) {
+export function WorkerView({ facturas, proveedores, onReload, user, panel = false }) {
   const [modo, setModo] = useState("lista");
   const [editId, setEditId] = useState(null);
   const [proveedor, setProveedor] = useState("");
@@ -35,8 +35,18 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
   const [saved, setSaved] = useState(false);
   const [isNewProv, setIsNewProv] = useState(false);
   const { ask, Dialog } = useConfirm();
+  const [pasar, setPasar] = useState(null); // #40: factura que dirección pasa a Inversiones {f, forma}
+  const [pasando, setPasando] = useState(false);
 
   const isAdmin = user?.rol === "admin";
+
+  // #92: filtros y buscador, solo en el panel de dirección (la app de las trabajadoras no los lleva)
+  const [fq, setFq] = useState(""); const [fMes, setFMes] = useState(""); const [fProv, setFProv] = useState(""); const [fPago, setFPago] = useState(""); const [fEstado, setFEstado] = useState("");
+  const [idsPend, setIdsPend] = useState(null); // facturas que salen en Banco → Facturas pendientes de pago
+  useEffect(() => {
+    if (!panel) return;
+    sb.rpc("facturas_pendientes_pago_ids").then((r) => setIdsPend(new Set(Array.isArray(r) ? r : []))).catch(() => setIdsPend(new Set()));
+  }, [panel, facturas]);
 
   useEffect(() => {
     sb.rpc("facturas_proveedores_lista").then((r) => setLista(Array.isArray(r) ? r : null)).catch(() => setLista(null));
@@ -108,18 +118,103 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
     catch (e) { alert("Error: " + e.message); }
   };
 
-  const sorted = [...facturas].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  // #40: crea la inversión con los datos de la factura y borra la factura (deja de contar como gasto)
+  const formaDe = (f) => (f.tipo_pago === "banco" || f.tipo_pago === "tarjeta" ? "banco_bbva" : f.tipo_pago === "efectivo_sobres" ? "efectivo_sobres" : "");
+  const confirmarPasar = async (f, forma) => {
+    setPasando(true);
+    let id = null;
+    try {
+      id = await sb.rpc("inversion_desde_factura", { p_id: f.id, p_forma: forma || null });
+      try { await sb.delete("facturas_proveedores", `id=eq.${f.id}`); }
+      catch (e) { await sb.rpc("inversion_borrar", { p_id: id }); throw new Error("No se ha podido quitar la factura; no se ha cambiado nada"); }
+      setPasar(null); await onReload();
+    } catch (e) { alert("Error: " + e.message); }
+    setPasando(false);
+  };
+
+  const norm = (t) => String(t ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const estadoDe = (f) => (f.importe == null ? "sin_importe" : idsPend?.has(String(f.id)) ? "pend_pago" : "pagada");
+  const hayFiltros = !!(fq.trim() || fMes || fProv || fPago || fEstado);
+  const visibles = useMemo(() => {
+    if (!panel) return facturas;
+    const q = norm(fq).trim(); const qn = importeNum(fq);
+    return facturas.filter((f) => {
+      if (fMes && f.fecha.substring(0, 7) !== fMes) return false;
+      if (fProv && claveProv(f.proveedor) !== fProv) return false;
+      if (fPago && pagoNorm(f.tipo_pago) !== fPago) return false;
+      if (fEstado && estadoDe(f) !== fEstado) return false;
+      if (q) {
+        const txt = norm(`${f.proveedor} ${f.doc_numero || ""} ${f.nota || ""}`);
+        const imp = f.importe == null ? "" : Number(f.importe).toFixed(2);
+        const porImporte = Number.isFinite(qn) ? imp !== "" && (Math.abs(Number(f.importe) - qn) < 0.005 || imp.replace(".", ",").includes(q) || imp.includes(q)) : imp.replace(".", ",").includes(q);
+        if (!txt.includes(q) && !porImporte) return false;
+      }
+      return true;
+    });
+  }, [panel, facturas, fq, fMes, fProv, fPago, fEstado, idsPend]);
+  const meses = useMemo(() => [...new Set(facturas.map((f) => f.fecha.substring(0, 7)))].sort().reverse(), [facturas]);
+  const provsFiltro = useMemo(() => { const m = new Map(); facturas.forEach((f) => { const k = claveProv(f.proveedor); if (k && !m.has(k)) m.set(k, f.proveedor); }); return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], "es", { sensitivity: "base" })); }, [facturas]);
+  const sorted = [...visibles].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
   const grouped = {};
   sorted.forEach(f => { const mk = f.fecha.substring(0, 7); if (!grouped[mk]) grouped[mk] = []; grouped[mk].push(f); });
 
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
       <Dialog />
+      {pasar && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: "20px" }}>
+          <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", maxWidth: 360, width: "100%" }}>
+            <p style={{ fontFamily: F, fontSize: "15px", color: C.char, marginBottom: "16px", lineHeight: 1.5 }}>¿Pasar la factura de <b>{pasar.f.proveedor}</b> ({fmt2(pasar.f.importe)}) a Inversiones? Se borra de Facturas y deja de contar como gasto del mes.</p>
+            {formaDe(pasar.f) ? (
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button onClick={() => setPasar(null)} disabled={pasando} style={{ flex: 1, padding: "12px", border: `1.5px solid ${C.brd}`, borderRadius: "10px", background: "none", fontFamily: F, fontSize: "14px", color: C.mut, cursor: "pointer" }}>Cancelar</button>
+                <button onClick={() => confirmarPasar(pasar.f, formaDe(pasar.f))} disabled={pasando} style={{ flex: 1, padding: "12px", border: "none", borderRadius: "10px", background: C.char, color: C.gold, fontFamily: F, fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>{pasando ? "Pasando…" : "Pasar"}</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontFamily: F, fontSize: "12.5px", color: C.mut, marginBottom: "10px" }}>¿Cómo se pagó?</div>
+                <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
+                  <button onClick={() => confirmarPasar(pasar.f, "efectivo_sobres")} disabled={pasando} style={{ flex: 1, padding: "12px", border: `1.5px solid ${C.char}`, borderRadius: "10px", background: "#fff", fontFamily: F, fontSize: "14px", fontWeight: 600, color: C.char, cursor: "pointer" }}>Efectivo sobres</button>
+                  <button onClick={() => confirmarPasar(pasar.f, "banco_bbva")} disabled={pasando} style={{ flex: 1, padding: "12px", border: `1.5px solid ${C.char}`, borderRadius: "10px", background: "#fff", fontFamily: F, fontSize: "14px", fontWeight: 600, color: C.char, cursor: "pointer" }}>Banco (BBVA)</button>
+                </div>
+                <button onClick={() => setPasar(null)} disabled={pasando} style={{ width: "100%", padding: "10px", border: "none", background: "none", fontFamily: F, fontSize: "14px", color: C.mut, cursor: "pointer" }}>Cancelar</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {modo === "lista" ? (
         <>
           <button onClick={() => { resetForm(); setModo("form"); }} style={{ width: "100%", padding: "18px", border: `2px dashed ${C.brd}`, borderRadius: "12px", background: "transparent", fontFamily: SF, fontSize: "16px", color: C.char, cursor: "pointer", marginBottom: "20px" }}>+ Nueva factura de proveedor</button>
+          {panel && (
+            <div style={{ marginBottom: "16px" }}>
+              <input value={fq} onChange={e => setFq(e.target.value)} placeholder="Buscar: proveedor, número, nota o importe" aria-label="Buscar facturas" style={{ ...inp, marginBottom: "8px" }} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+                <select value={fMes} onChange={e => setFMes(e.target.value)} aria-label="Mes" style={{ ...inp, marginBottom: 0, appearance: "auto" }}>
+                  <option value="">Mes: todos</option>
+                  {meses.map(m => <option key={m} value={m}>{mkLabel(m)}</option>)}
+                </select>
+                <select value={fProv} onChange={e => setFProv(e.target.value)} aria-label="Proveedor" style={{ ...inp, marginBottom: 0, appearance: "auto" }}>
+                  <option value="">Proveedor: todos</option>
+                  {provsFiltro.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+                </select>
+                <select value={fPago} onChange={e => setFPago(e.target.value)} aria-label="Forma de pago" style={{ ...inp, marginBottom: 0, appearance: "auto" }}>
+                  <option value="">Forma de pago: todas</option>
+                  <option value="banco">Banco</option><option value="efectivo">Efectivo (caja)</option><option value="caja_fuerte">Caja fuerte</option><option value="efectivo_sobres">Efectivo sobres</option>
+                </select>
+                <select value={fEstado} onChange={e => setFEstado(e.target.value)} aria-label="Estado" style={{ ...inp, marginBottom: 0, appearance: "auto" }}>
+                  <option value="">Estado: todos</option>
+                  <option value="sin_importe">Pendiente de importe</option><option value="pend_pago">Pendiente de pago</option><option value="pagada">Pagada</option>
+                </select>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: F, fontSize: "13px", color: C.mut }}>
+                <span><b style={{ color: C.char }}>{visibles.length}</b> {visibles.length === 1 ? "factura" : "facturas"} · <b style={{ color: C.char }}>{fmt2(sumaImportes(visibles))}</b>{visibles.some(f => f.importe == null) ? " + pendientes" : ""}</span>
+                {hayFiltros && <button onClick={() => { setFq(""); setFMes(""); setFProv(""); setFPago(""); setFEstado(""); }} style={{ border: "none", background: "none", cursor: "pointer", fontFamily: F, fontSize: "13px", fontWeight: 600, color: C.char, textDecoration: "underline" }}>Quitar filtros</button>}
+              </div>
+            </div>
+          )}
           {sorted.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "60px 20px", color: C.mut, fontFamily: F, fontSize: "14px" }}>No hay facturas registradas</div>
+            <div style={{ textAlign: "center", padding: "60px 20px", color: C.mut, fontFamily: F, fontSize: "14px" }}>{hayFiltros ? "Ninguna factura coincide con los filtros" : "No hay facturas registradas"}</div>
           ) : (
             Object.entries(grouped).map(([mk, items]) => (
               <div key={mk}>
@@ -151,6 +246,7 @@ export function WorkerView({ facturas, proveedores, onReload, user }) {
                         ? <span style={{ fontFamily: F, fontSize: "12px", fontWeight: 700, color: NARANJA[1], textAlign: "right", lineHeight: 1.2 }}>Pendiente<br />de importe</span>
                         : <span style={{ fontFamily: F, fontSize: "15px", fontWeight: 700, color: Number(f.importe) < 0 ? C.grn : C.char }}>{fmt2(f.importe)}</span>}
                       {canEdit && <>
+                        {isAdmin && !pendiente && Number(f.importe) > 0 && <button onClick={() => setPasar({ f })} title="Pasar a Inversiones" style={{ border: `1px solid ${C.brd}`, background: "none", cursor: "pointer", fontFamily: F, fontSize: "11px", fontWeight: 600, color: C.mut, padding: "3px 7px", borderRadius: "8px", whiteSpace: "nowrap" }}>Pasar a Inversiones</button>}
                         <button onClick={() => startEdit(f)} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "14px", color: C.mut, padding: "4px" }}>✎</button>
                         <button onClick={() => ask("¿Eliminar esta factura?", () => handleDelete(f.id))} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "18px", color: "#ccc", padding: "4px" }}>×</button>
                       </>}
