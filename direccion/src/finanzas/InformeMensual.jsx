@@ -419,6 +419,15 @@ export function InformeMensual() {
   const [abierto, setAbierto] = useState(null);
   const [generando, setGenerando] = useState(false);
   const [error, setError] = useState("");
+  const [cierre, setCierre] = useState(null); // #106: el informe solo se genera con el mes cerrado
+
+  useEffect(() => {
+    let vivo = true;
+    setCierre(null);
+    supabase.rpc("cierre_mes_estado", { p_mes: mes }).then((r) => { if (vivo) setCierre(r); }).catch(() => { if (vivo) setCierre(false); });
+    return () => { vivo = false; };
+  }, [mes]);
+  const cerrado = cierre ? !!cierre.cerrado : null;
 
   const cargarLista = useCallback(async () => {
     try { setLista((await supabase.rpc("fin_informe_lista")) || []); } catch (e) { /* la lista es opcional */ }
@@ -448,9 +457,13 @@ export function InformeMensual() {
         </div>
         <div className="inf-ctrl">
           <label>Mes <input type="month" value={mes} max={mesActual()} min="2026-01" onChange={(e) => e.target.value && setMes(e.target.value)} /></label>
-          <button className="btn-p" type="button" onClick={generar} disabled={generando}>{generando ? "Generando… (puede tardar un minuto)" : "Generar informe"}</button>
+          <button className="btn-p" type="button" onClick={generar} disabled={generando || cerrado !== true}>{generando ? "Generando… (puede tardar un minuto)" : "Generar informe"}</button>
           {abierto && <button className="btn-l" type="button" onClick={() => window.print()}>Descargar PDF</button>}
         </div>
+        {cerrado === false && (
+          <p className="inf-error" role="status">Cierra el mes para poder generar el informe.{cierre.faltan > 0 ? ` Faltan ${cierre.faltan} punto${cierre.faltan > 1 ? "s" : ""} de la lista de cierre.` : ""} <a href="#/finanzas/resultados/cierre">Ir a la lista de cierre</a></p>
+        )}
+        {cierre === false && <p className="inf-error" role="status">No se ha podido comprobar si el mes está cerrado.</p>}
         {error && <p className="inf-error" role="alert">{error}</p>}
         {lista.length > 0 && (
           <div className="inf-lista">

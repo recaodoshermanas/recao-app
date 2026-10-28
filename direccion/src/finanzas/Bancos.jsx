@@ -91,8 +91,9 @@ export function Bancos() {
   const [busy, setBusy] = useState(null);
   const [elegir, setElegir] = useState(false);
   const [fBanco, setFBanco] = useState("");
-  const [fMes, setFMes] = useState("");
-  const [fExp, setFExp] = useState("");
+  const deRuta = (k) => new URLSearchParams((window.location.hash.split("?")[1] || "")).get(k) || ""; // #105: «?exp=sin&mes=2026-10» abre Bancos ya filtrado
+  const [fMes, setFMes] = useState(() => (/^\d{4}-\d{2}$/.test(deRuta("mes")) ? deRuta("mes") : ""));
+  const [fExp, setFExp] = useState(() => (deRuta("exp") === "sin" ? "sin" : ""));
   const [conc, setConc] = useState({});
   const [etq, setEtq] = useState({}); // #86: etiqueta de cada movimiento (automática o puesta a mano)
   const [fTexto, setFTexto] = useState("");
