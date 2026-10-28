@@ -38,7 +38,7 @@ export function filasDetalle(mes) {
   add("Paquetería", "Total paquetería", mes.paqueteria);
   (mes.salarios_det || []).filter((s) => n0(s.amount)).forEach((s) => add("Salarios", s.nombre || "Sin nombre", s.amount));
   if (n0(mes.extras) > 0) add("Salarios", "Extras a trabajadoras (efectivo de sobres)", mes.extras);
-  const FIJ = { ss: "Seguridad Social", alquiler: "Alquiler", iva_alquiler: "IVA del alquiler", luz: "Luz", agua: "Agua", ayuntamiento: "Ayuntamiento", asesoria: "Asesoría", securitas: "Securitas", epos: "Epos" };
+  const FIJ = { ss: "Seguridad Social", alquiler: "Alquiler", iva_alquiler: "IVA del alquiler", luz: "Luz", agua: "Agua", ayuntamiento: "Ayuntamiento", asesoria: "Asesoría", securitas: "Securitas", epos: "Epos", anthropic: "Anthropic-Claude" };
   Object.entries(mes.fijos_det || {}).filter(([, v]) => n0(v)).forEach(([k, v]) => add("Gastos fijos", FIJ[k] || k, v));
   (mes.lineas || []).forEach((l) => add("Otros gastos", l.concepto, l.importe));
   (mes.mantenimiento_det || []).forEach((l) => add("Mantenimiento", l.concepto, l.importe));

@@ -10,6 +10,7 @@ export const GASTOS_FIJOS_TPL = [
   { key: "asesoria", label: "Asesoría / Gestoría" },
   { key: "securitas", label: "Securitas" },
   { key: "epos", label: "EPOS Now" },
+  { key: "anthropic", label: "Anthropic-Claude" }, // #103
   { key: "ayuntamiento", label: "Gasto Ayuntamiento" },
 ];
 export const OWNER_PASSWORD = "Recao2019_";
