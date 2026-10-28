@@ -22,6 +22,8 @@ import { HorasExtraView } from "../horasextra/HorasExtraView.jsx"; // #39
 import { WorkerView } from "../WorkerView.jsx";
 import { IR_CORREO } from "../../lib/enlaceAviso.js";
 import { NovedadesEquipo } from "../../components/Novedades.jsx"; // NOVEDADES
+import { TarjetaFormacion, FormacionView } from "../eventual/Formacion.jsx"; // #101 formación en vídeo
+import { resumenFormacion } from "../../lib/formacion.js"; // #101
 
 // Inicio de la plantilla (solicitud #10): «Mi turno», «Pendiente», novedades, «En la tienda» (diario) y «Lo tuyo» (de vez en cuando).
 // Iconos en un solo tono tostado; el rojo solo para los números de «Pendiente» y la etiqueta «Nuevo».
@@ -34,6 +36,8 @@ const IcoEscaner = (p) => <Ico {...p}><path d="M4 7V5a1 1 0 0 1 1-1h2" /><path d
 const IcoSinCodigo = (p) => <Ico {...p}><path d="M5 6v12" /><path d="M8 6v7" /><path d="M11 6v4" /><path d="M14 6v2" /><path d="M19 6v5" /><path d="M14 15l5 5" /><path d="M19 15l-5 5" /></Ico>;
 const IcoEtiqueta = (p) => <Ico {...p}><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9" /><circle cx="7.5" cy="7.5" r="1.5" /></Ico>;
 const IcoDoc = (p) => <Ico {...p}><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2" /><path d="M9 13h6" /><path d="M9 17h6" /></Ico>;
+
+const IcoFormacion = (p) => <Ico {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9.5v5l4.5-2.5-4.5-2.5" /></Ico>;
 
 // #35: bloque «Producto» con su circulito de pendientes (como el de las notificaciones de una app)
 const PRODUCTO = [
@@ -54,13 +58,14 @@ const LO_TUYO = [
   ...(BOLSA_ACTIVA ? [{ id: "cubrir", label: "Turnos para cubrir", Ico: (p) => <IcoUsers size={20} color={TOSTADO} sw={1.9} {...p} /> }] : []), // BOLSA
   { id: "documentos", label: "Mis documentos", Ico: IcoDoc },
   { id: "seguimiento", label: "Mi seguimiento", sub: "Avisos, plus y faltas", Ico: (p) => <IcoBars size={20} color={TOSTADO} sw={1.9} {...p} /> },
+  { id: "formacion", label: "Formación", Ico: IcoFormacion }, // #101 (el subtítulo depende de los vídeos que le faltan)
 ];
-const TITULOS = { caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", marcado: "Comprobar precio marcado", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", cambio: "Cambiar turno", horasextra: "Horas extra", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", marcado: "Comprobar precio marcado", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", formacion: "Formación", cambio: "Cambiar turno", horasextra: "Horas extra", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 // A dónde lleva cada destino de la campana o del correo (?ir=…) en la organización nueva: [pantalla, pestaña]
 const DESTINOS = {
   avisos: ["seguimiento", "avisos"], seguimiento: ["seguimiento", null], fichajes: ["horarios", "fichajes"], horario: ["horarios", "horarios"],
-  vacaciones: ["vacaciones"], cambio: ["cambio"], horasextra: ["horasextra"], recepcion: ["recepcion"], documentos: ["documentos"], cuenta: ["cuenta"],
+  vacaciones: ["vacaciones"], cambio: ["cambio"], horasextra: ["horasextra"], recepcion: ["recepcion"], documentos: ["documentos"], cuenta: ["cuenta"], formacion: ["formacion"],
   ...(BOLSA_ACTIVA ? { cubrir: ["cubrir"] } : {}),
 };
 // Enlace de un correo de aviso (?ir=vacaciones): abre esa pantalla. Se guarda hasta que la trabajadora sale de ella,
@@ -73,7 +78,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [screen, setScreen] = useState(() => (irInicial ? DESTINOS[irInicial][0] : "home"));
   const [pestana, setPestana] = useState(() => (irInicial ? DESTINOS[irInicial][1] : null)); // pestaña de «Horarios y fichajes» o «Mi seguimiento»
   useEffect(() => { if (irInicial && screen !== DESTINOS[irInicial][0]) irInicial = null; }, [screen]);
-  const ir = (destino) => { const d = DESTINOS[destino]; if (!d) return; setPestana(d[1] || null); setScreen(d[0]); };
+  const ir = (destino, ref) => { const d = DESTINOS[destino]; if (!d) return; setPestana(d[1] || null); setVideoAbrir(destino === "formacion" ? ref || null : null); setScreen(d[0]); };
   const abrir = (id) => { setPestana(null); setScreen(id); };
 
   const [porCubrir, setPorCubrir] = useState(0); // BOLSA
@@ -84,11 +89,14 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [avisos, setAvisos] = useState([]); // avisos de incidencia por responder (sin alegación y con plazo abierto)
   const [dudosos, setDudosos] = useState([]); // FICHAJES: fichajes dudosos de los últimos 14 días
   const [turnoHoy, setTurnoHoy] = useState(null);
+  const [videos, setVideos] = useState(null); // #101 formacion_mis_videos()
+  const [videoAbrir, setVideoAbrir] = useState(null);
+  const cargarVideos = () => { sb.rpc("formacion_mis_videos").then(setVideos).catch(() => {}); };
   const [mesFichajes, setMesFichajes] = useState(null); // FICHAJES: mes que abre «Fichajes» desde «Pendiente»
   useEffect(() => { if (screen === "home") setMesFichajes(null); }, [screen]);
 
   useEffect(() => {
-    const h = (e) => ir(e.detail && e.detail.destino);
+    const h = (e) => ir(e.detail && e.detail.destino, e.detail && e.detail.ref);
     window.addEventListener("recao-nav", h);
     return () => window.removeEventListener("recao-nav", h);
   }, []);
@@ -101,6 +109,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
     sb.fn("recepcion", { accion: "sin_codigo" }).then(r => setSinCodigoN((r.productos || []).length)).catch(() => {}); // #35
     sb.fn("producto-tienda", { accion: "marcado_lista" }).then(r => setMarcadoN((r.productos || []).length)).catch(() => {}); // #72
     sb.fn("disciplina", { action: "mis_avisos" }).then(r => setAvisos((r.avisos || []).filter(a => a.estado === "emitido" && !a.alegacion_en && a.plazo_alegacion && new Date(a.plazo_alegacion) > new Date()))).catch(() => {});
+    cargarVideos(); // #101
     sb.rpc("mis_fichajes_dudosos").then(r => setDudosos(Array.isArray(r) ? r : [])).catch(() => {}); // FICHAJES
     sb.select("horarios", `select=turno&usuario_id=eq.${user.id}&fecha=eq.${ymd(new Date())}`).then(r => setTurnoHoy((r && r[0] && r[0].turno) || null)).catch(() => {});
   }, [screen, user.id]);
@@ -156,6 +165,9 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
 
         <NovedadesEquipo compacta estilo={{ marginTop: 12 }} />
 
+        {/* #101: tarjeta negra solo si le faltan vídeos por ver; si está al día, Formación queda solo en «Lo tuyo» */}
+        {videos && resumenFormacion(videos).pendientes > 0 && <TarjetaFormacion videos={videos} onAbrir={() => abrir("formacion")} />}
+
         <div style={seccion}>Producto</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           {PRODUCTO.map(t => {
@@ -187,7 +199,12 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
           {LO_TUYO.map((t, i) => (
             <button key={t.id} type="button" onClick={() => abrir(t.id)} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", gap: 12, minHeight: 50, padding: "11px 16px", border: "none", borderTop: i ? `1px solid ${C.brdL}` : "none", background: "#fff", cursor: "pointer", textAlign: "left" }}>
               <t.Ico />
-              <span style={{ flex: 1, fontFamily: F, fontSize: 14.5, color: C.char }}>{t.label}{t.sub && <span style={{ display: "block", fontSize: 11.5, color: C.mutL, marginTop: 1 }}>{t.sub}</span>}</span>
+              <span style={{ flex: 1, fontFamily: F, fontSize: 14.5, color: C.char }}>{t.label}{t.sub && <span style={{ display: "block", fontSize: 11.5, color: C.mutL, marginTop: 1 }}>{t.sub}</span>}
+                {t.id === "formacion" && videos && (() => { const r = resumenFormacion(videos); return r.pendientes > 0
+                  ? <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: C.red, marginTop: 1 }}>{r.pendientes === 1 ? "1 vídeo nuevo" : `${r.pendientes} vídeos nuevos`}</span>
+                  : <span style={{ display: "block", fontSize: 11.5, color: C.mutL, marginTop: 1 }}>{r.total ? `Al día · ${r.completos} de ${r.total}` : "Todavía no hay vídeos"}</span>; })()}
+              </span>
+              {t.id === "formacion" && videos && resumenFormacion(videos).pendientes > 0 && <span style={{ minWidth: 22, height: 22, padding: "0 6px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{resumenFormacion(videos).pendientes}</span>}
               <IcoRight size={17} color={C.mutL} sw={2.4} />
             </button>
           ))}
@@ -219,6 +236,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       {screen === "vacaciones" && <MisVacacionesView user={user} />}
       {screen === "facturas" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={onReload} user={user} />}
       {screen === "cuenta" && <MiCuentaView />}
+      {screen === "formacion" && <FormacionView videos={videos} abrirId={videoAbrir} onCambio={cargarVideos} onVolver={() => { setVideoAbrir(null); setScreen("home"); }} />}
     </div>
   );
 }

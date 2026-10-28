@@ -1,8 +1,12 @@
-// Personas · Equipo → Formación (#79): vídeos de formación para las eventuales y seguimiento de quién los ha visto.
+// Personas · Equipo → Formación (#79, #101): vídeos de formación para eventuales, plantilla o las dos, y seguimiento de quién los ha visto.
 import { useCallback, useEffect, useState } from "react";
 import { sb, supabase } from "../../../src/lib/supabase.js";
 import { duracionTxt } from "../../../src/lib/formacion.js";
 import { Panel, avisar, fechaCorta, fechaDia, Cargando } from "../ui.jsx";
+
+const DESTINOS = [["eventuales", "Eventuales"], ["plantilla", "Plantilla"], ["ambas", "Las dos"]];
+const destinoTxt = (d) => (DESTINOS.find((x) => x[0] === d) || DESTINOS[0])[1];
+const GRUPOS = [["plantilla", "Plantilla"], ["eventuales", "Eventuales"]];
 
 const lineaEstado = (p) => {
   if (p.rojo) return { txt: "Lleva más de 21 días con un vídeo pendiente", rojo: true };
@@ -29,10 +33,12 @@ export function Formacion({ inicial }) {
 
   const videos = d.videos || [];
   const personas = d.personas || [];
-  const alDia = personas.filter((p) => p.total > 0 && p.completos === p.total).length;
+  const alDiaDe = (g) => personas.filter((p) => p.grupo === g && p.total > 0 && p.completos === p.total).length;
+  const deGrupo = (g) => personas.filter((p) => p.grupo === g);
+  const resumenGrupos = GRUPOS.map(([g, n]) => `${n}: ${alDiaDe(g)} de ${deGrupo(g).length}`).join(" · ");
   const rojas = personas.filter((p) => p.rojo);
   const retirar = async (v) => {
-    if (!window.confirm(`¿Retirar «${v.titulo}»? Dejará de verse y de contar para todas.`)) return;
+    if (!window.confirm(`¿Retirar «${v.titulo}»? Dejará de verse y de contar para todas las personas.`)) return;
     try { await sb.rpc("formacion_admin_retirar", { p_id: v.id }); avisar("Vídeo retirado"); cargar(); }
     catch (e) { avisar("No se ha podido retirar", "mal"); }
   };
@@ -43,7 +49,7 @@ export function Formacion({ inicial }) {
         <div className="head">
           <div>
             <h2>Formación en vídeo</h2>
-            <p className="sub">{videos.length} {videos.length === 1 ? "vídeo publicado" : "vídeos publicados"}{videos.length ? ` · ${alDia} de ${personas.length} ${personas.length === 1 ? "persona al día" : "personas al día"}` : ""}. Solo para eventuales con cuenta; cada una ve únicamente el suyo.</p>
+            <p className="sub">{videos.length} {videos.length === 1 ? "vídeo publicado" : "vídeos publicados"}{videos.length ? ` · Al día — ${resumenGrupos}` : ""}. Cada vídeo es para eventuales, plantilla o las dos (con cuenta); cada persona ve únicamente el suyo.</p>
           </div>
           <button className="btn-p" onClick={() => setNuevo(true)}>+ Vídeo</button>
         </div>
@@ -55,7 +61,7 @@ export function Formacion({ inicial }) {
         {!videos.length ? <p className="empty">Todavía no hay vídeos. Pulsa «+ Vídeo» para publicar el primero.</p> : (
           <div className="tabla-scroll">
             <table className="ranking">
-              <thead><tr><th>#</th><th>Vídeo</th><th>Duración</th><th>Publicado</th><th>Completos</th><th></th></tr></thead>
+              <thead><tr><th>#</th><th>Vídeo</th><th>Para</th><th>Duración</th><th>Publicado</th><th>Completos</th><th></th></tr></thead>
               <tbody>
                 {videos.map((v, i) => (
                   <tr key={v.id}>
@@ -66,11 +72,12 @@ export function Formacion({ inicial }) {
                         <span className="pn">{v.titulo}</span>
                       </span>
                     </td>
+                    <td>{destinoTxt(v.destino)}</td>
                     <td>{duracionTxt(v.duracion_seg)}</td>
                     <td>{fechaDia(v.publicado_en)}</td>
                     <td>{v.completos} de {v.personas}</td>
                     <td className="r" style={{ whiteSpace: "nowrap" }}>
-                      <button className="btn-l" onClick={() => setEditar({ ...v, posicion: i + 1 })}>Editar</button>{" "}
+                      <button className="btn-l" onClick={() => setEditar({ ...v, posicion: i + 1, destino: v.destino || "eventuales" })}>Editar</button>{" "}
                       <button className="btn-txt peligro" onClick={() => retirar(v)}>Retirar</button>
                     </td>
                   </tr>
@@ -81,33 +88,38 @@ export function Formacion({ inicial }) {
         )}
       </div>
 
-      <div className="card mt">
-        <div className="head"><div><h2>Eventuales</h2><p className="sub">Pulsa en una persona para ver el detalle de cada vídeo.</p></div></div>
-        {!personas.length ? <p className="empty">No hay eventuales con cuenta.</p> : (
-          <div className="tabla-scroll">
-            <table className="ranking">
-              <thead><tr><th>Persona</th><th>Progreso</th><th>Estado</th></tr></thead>
-              <tbody>
-                {personas.map((p) => {
-                  const e = lineaEstado(p);
-                  return (
-                    <tr key={p.id} onClick={() => setPersona(p.id)} style={{ cursor: "pointer" }}>
-                      <td><span className="pn">{p.nombre}</span></td>
-                      <td>
-                        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <span className="barra-p" style={{ width: 120 }}><i style={{ width: `${p.total ? Math.round((p.completos / p.total) * 100) : 0}%`, background: p.rojo ? "var(--rojo)" : undefined }} /></span>
-                          <span>{p.completos} de {p.total}</span>
-                        </span>
-                      </td>
-                      <td style={e.rojo ? { color: "var(--rojo)", fontWeight: 700 } : undefined}>{e.txt}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {GRUPOS.map(([g, nombre]) => {
+        const lista = deGrupo(g);
+        return (
+          <div className="card mt" key={g}>
+            <div className="head"><div><h2>{nombre}</h2><p className="sub">Pulsa en una persona para ver el detalle de cada vídeo.</p></div></div>
+            {!lista.length ? <p className="empty">No hay {nombre.toLowerCase()} con cuenta.</p> : (
+              <div className="tabla-scroll">
+                <table className="ranking">
+                  <thead><tr><th>Persona</th><th>Progreso</th><th>Estado</th></tr></thead>
+                  <tbody>
+                    {lista.map((p) => {
+                      const e = lineaEstado(p);
+                      return (
+                        <tr key={p.id} onClick={() => setPersona(p.id)} style={{ cursor: "pointer" }}>
+                          <td><span className="pn">{p.nombre}</span></td>
+                          <td>
+                            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span className="barra-p" style={{ width: 120 }}><i style={{ width: `${p.total ? Math.round((p.completos / p.total) * 100) : 0}%`, background: p.rojo ? "var(--rojo)" : undefined }} /></span>
+                              <span>{p.completos} de {p.total}</span>
+                            </span>
+                          </td>
+                          <td style={e.rojo ? { color: "var(--rojo)", fontWeight: 700 } : undefined}>{e.txt}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        );
+      })}
 
       {nuevo && <FormVideo total={videos.length} onClose={() => setNuevo(false)} onHecho={() => { setNuevo(false); cargar(); }} />}
       {editar && <FormEditar video={editar} total={videos.length} onClose={() => setEditar(null)} onHecho={() => { setEditar(null); cargar(); }} />}
@@ -177,6 +189,7 @@ function FormVideo({ total, onClose, onHecho }) {
   const [archivo, setArchivo] = useState(null);
   const [titulo, setTitulo] = useState("");
   const [pos, setPos] = useState(total + 1);
+  const [destino, setDestino] = useState("eventuales");
   const [paso, setPaso] = useState("");
   const [busy, setBusy] = useState(false);
   const ok = archivo && titulo.trim() && !busy;
@@ -197,17 +210,20 @@ function FormVideo({ total, onClose, onHecho }) {
         if (!sp.error) rutaPortada = s.ruta_portada;
       }
       setPaso("Publicando…");
-      await sb.rpc("formacion_admin_alta", { p_titulo: titulo.trim(), p_ruta_video: s.ruta_video, p_ruta_portada: rutaPortada, p_duracion: info.duracion, p_posicion: Number(pos) });
-      avisar("Vídeo publicado: las eventuales reciben el aviso en la campana");
+      await sb.rpc("formacion_admin_alta_destino", { p_titulo: titulo.trim(), p_ruta_video: s.ruta_video, p_ruta_portada: rutaPortada, p_duracion: info.duracion, p_posicion: Number(pos), p_destino: destino });
+      avisar("Vídeo publicado: les llega el aviso en la campana");
       onHecho();
     } catch (e) { avisar(e.message || "No se ha podido publicar", "mal"); setBusy(false); setPaso(""); }
   };
   return (
-    <Panel titulo="Nuevo vídeo" sub="Al publicarlo, cada eventual con cuenta recibe un aviso en la campana (no por email)" onClose={busy ? () => {} : onClose} ancho="520px"
+    <Panel titulo="Nuevo vídeo" sub="Al publicarlo, cada persona a la que va dirigido recibe un aviso en la campana (no por email)" onClose={busy ? () => {} : onClose} ancho="520px"
       pie={<button className="btn-p" onClick={publicar} disabled={!ok}>{busy ? paso || "Publicando…" : "Publicar"}</button>}>
       <label className="campo">Archivo de vídeo<input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" disabled={busy} onChange={(e) => setArchivo(e.target.files[0] || null)} /></label>
       <small style={{ display: "block", marginTop: -8, marginBottom: 14, color: "var(--muted)" }}>Mejor MP4 (H.264) y ligero: se verá desde el móvil con datos.</small>
       <label className="campo">Título<input value={titulo} maxLength={90} disabled={busy} onChange={(e) => setTitulo(e.target.value)} placeholder="Ej.: Cómo se abre la tienda" /></label>
+      <label className="campo">Para
+        <select value={destino} disabled={busy} onChange={(e) => setDestino(e.target.value)}>{DESTINOS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
+      </label>
       <label className="campo">Posición en la lista
         <select value={pos} disabled={busy} onChange={(e) => setPos(e.target.value)}>
           {opcionesPosicion(total, true).map((n) => <option key={n} value={n}>{n === total + 1 ? `${n} · al final` : n}</option>)}
@@ -220,17 +236,26 @@ function FormVideo({ total, onClose, onHecho }) {
 function FormEditar({ video, total, onClose, onHecho }) {
   const [titulo, setTitulo] = useState(video.titulo);
   const [pos, setPos] = useState(video.posicion);
+  const [destino, setDestino] = useState(video.destino);
   const [busy, setBusy] = useState(false);
   const guardar = async () => {
     if (!titulo.trim()) return;
     setBusy(true);
-    try { await sb.rpc("formacion_admin_editar", { p_id: video.id, p_titulo: titulo.trim(), p_posicion: Number(pos) }); avisar("Cambios guardados"); onHecho(); }
+    try {
+      await sb.rpc("formacion_admin_editar", { p_id: video.id, p_titulo: titulo.trim(), p_posicion: Number(pos) });
+      if (destino !== video.destino) await sb.rpc("formacion_admin_destino", { p_id: video.id, p_destino: destino });
+      avisar("Cambios guardados"); onHecho();
+    }
     catch (e) { avisar("No se ha podido guardar", "mal"); setBusy(false); }
   };
   return (
-    <Panel titulo="Editar vídeo" sub="El título nuevo se ve al volver a abrir la app. No se manda aviso." onClose={onClose} ancho="520px"
+    <Panel titulo="Editar vídeo" sub="El título nuevo se ve al volver a abrir la app. Solo se manda aviso a quien pasa a tener el vídeo por cambiar «Para»." onClose={onClose} ancho="520px"
       pie={<button className="btn-p" onClick={guardar} disabled={busy || !titulo.trim()}>{busy ? "Guardando…" : "Guardar"}</button>}>
       <label className="campo">Título<input value={titulo} maxLength={90} onChange={(e) => setTitulo(e.target.value)} autoFocus /></label>
+      <label className="campo">Para
+        <select value={destino} onChange={(e) => setDestino(e.target.value)}>{DESTINOS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
+      </label>
+      {destino !== video.destino && <small style={{ display: "block", marginTop: -8, marginBottom: 14, color: "var(--muted)" }}>A quien lo gana le aparece con su aviso y sus plazos (7, 14 y 21 días) cuentan desde hoy; quien lo pierde deja de verlo y de contarlo.</small>}
       <label className="campo">Posición en la lista
         <select value={pos} onChange={(e) => setPos(e.target.value)}>{opcionesPosicion(total, false).map((n) => <option key={n} value={n}>{n}</option>)}</select>
       </label>
