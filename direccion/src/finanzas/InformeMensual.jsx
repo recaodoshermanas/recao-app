@@ -36,7 +36,7 @@ function Apartado({ n, titulo, texto, children }) {
   );
 }
 
-function Informe({ inf }) {
+function InformeV1({ inf }) {
   const d = inf.datos, c = inf.comentarios || {}, m = d.mes_datos || {}, a = d.mes_anterior, y = d.mismo_mes_ano_anterior;
   const tk = n0(d.ventas?.tickets), tka = n0(d.ventas?.tickets_anterior);
   const medio = (mm, t) => (mm && t ? n0(mm.epos_venta) / t : null);
@@ -140,6 +140,277 @@ function Informe({ inf }) {
       </section>
     </article>
   );
+}
+
+
+// ---------- #104: informe v2 (todas las cifras, variaciones y medias vienen ya calculadas en los datos) ----------
+const fecha = (f) => (f ? `${String(f).slice(8, 10)}/${String(f).slice(5, 7)}/${String(f).slice(0, 4)}` : "–");
+const signo = (v, txt) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${txt}`);
+const pctVar = (v) => (v == null ? "–" : signo(v, `${num(Math.abs(v), 1)} %`));
+const eurDif = (v, dec = 0) => (v == null ? "–" : signo(v, `${num(Math.abs(v), dec)} €`));
+const ppDif = (v) => (v == null ? "–" : signo(v, `${num(Math.abs(v), 1)} pp`));
+const mesCortoDe = (m) => mesAnio(`${m}-01`);
+
+const MET = {
+  ventas: ["Venta de Epos (con IVA)", (v) => eur(v, 0)], tickets: ["Tickets", (v) => num(v)], ticket_medio: ["Ticket medio", (v) => eur(v, 2)],
+  venta_dia: ["Venta media por día", (v) => eur(v, 0)], margen_pct: ["Margen real de Epos", (v) => pct(v, 1)],
+  coste_vendido: ["Coste de lo vendido (Epos)", (v) => eur(v, 0)], compras: ["Compras de mercancía", (v) => eur(v, 0)], dif_compras_coste: ["Compras menos coste de lo vendido", (v) => eur(v, 0)],
+  res_tienda: ["Resultado de la tienda", (v) => eur(v, 0)], res_paqueteria: ["Resultado de la paquetería", (v) => eur(v, 0)], resultado: ["Beneficio del negocio", (v) => eur(v, 0)],
+  gastos: ["Gastos totales", (v) => eur(v, 0)], mercancia: ["Compras de mercancía (gasto)", (v) => eur(v, 0)], personal: ["Personal (total)", (v) => eur(v, 0)],
+  local: ["Local y suministros", (v) => eur(v, 0)], servicios: ["Servicios", (v) => eur(v, 0)], impuestos: ["Impuestos", (v) => eur(v, 0)],
+  mantenimiento: ["Mantenimiento y equipamiento", (v) => eur(v, 0)], otros: ["Otros", (v) => eur(v, 0)],
+  descuadres_caja: ["Descuadres de caja", (v) => eur(v, 2)], dinero_total: ["Dinero total a fin de mes (bancos + efectivo)", (v) => eur(v, 0)],
+};
+const CATS_V2 = [["mercancia", "Compras de mercancía"], ["personal", "Personal"], ["local", "Local y suministros"], ["servicios", "Servicios"], ["mantenimiento", "Mantenimiento y equipamiento"], ["impuestos", "Impuestos"], ["otros", "Otros"]];
+const CAT_NOMBRE = Object.fromEntries(CATS_V2);
+
+// tabla con los meses anteriores, la media, este mes y el mismo mes del año anterior
+function TablaComp({ d, ks, mes }) {
+  const comp = d.comparativa || {}, filas = comp.filas || [];
+  const meses = comp.meses || [];
+  const f0 = filas[0];
+  const cabMeses = meses.length ? meses : ((f0 && f0.serie) || []).map((x) => x.mes);
+  return (
+    <>
+      <div className="inf-scroll">
+        <table className="inf-tabla inf-comp">
+          <thead><tr>
+            <th />
+            {cabMeses.map((m) => <th key={m} className="d">{mesCortoDe(m)}</th>)}
+            <th className="d">Media {cabMeses.length ? `${cabMeses.length} m.` : ""}</th>
+            <th className="d inf-act">{nombreMes(mes)}</th>
+            <th className="d">{comp.hay_aa ? "Mismo mes año ant." : "Año ant."}</th>
+            <th className="d">Dif. con la media</th>
+            <th className="d">Dif. con año ant.</th>
+          </tr></thead>
+          <tbody>
+            {ks.map((k) => {
+              const f = filas.find((x) => x.k === k); if (!f) return null;
+              const [l, fm] = MET[k]; const esPct = k === "margen_pct";
+              const dm = esPct ? ppDif(f.dif_media) : f.pct_media != null ? `${pctVar(f.pct_media)}` : eurDif(f.dif_media);
+              const da = esPct ? ppDif(f.dif_aa) : f.pct_aa != null ? `${pctVar(f.pct_aa)}` : eurDif(f.dif_aa);
+              return (
+                <tr key={k}>
+                  <td>{l}</td>
+                  {cabMeses.map((m) => { const sv = (f.serie || []).find((x) => x.mes === m); return <td key={m} className="d">{sv && sv.v != null ? fm(sv.v) : "–"}</td>; })}
+                  <td className="d">{f.media6 != null ? fm(f.media6) : "–"}</td>
+                  <td className="d inf-act"><b>{f.actual != null ? fm(f.actual) : "–"}</b></td>
+                  <td className="d">{f.mismo_mes_aa != null ? fm(f.mismo_mes_aa) : "–"}</td>
+                  <td className="d">{dm}</td>
+                  <td className="d">{da}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="inf-nota">
+        {comp.n_meses < 6 ? `Solo hay ${comp.n_meses} mes${comp.n_meses === 1 ? "" : "es"} con datos antes de este. ` : ""}
+        {comp.hay_aa ? "" : "No hay datos del mismo mes del año anterior. "}
+        Las diferencias son en % (en puntos, «pp», para el margen) y salen ya calculadas.
+      </p>
+    </>
+  );
+}
+
+function InformeV2({ inf }) {
+  const d = inf.datos, c = inf.comentarios || {}, mes = inf.mes;
+  const k = d.kpis || {}, tp = d.tienda_paq || {}, gd = d.gastos_det || {}, cm = d.compras || {}, st = d.stock || {}, cj = d.caja || {}, ef = d.efectivo || {};
+  const cf = d.caja_fuerte || {}, bb = d.banco || {}, cx = d.banco_caixa || {}, se = d.sin_explicar || {}, pp = d.pendientes_pago || {}, ts = d.tesoreria || {}, sc = d.apertura_sobres || {};
+  const efs = d.efectivo_sobres, rep = d.repartir_socios, im = d.impuestos, vivo = ef.vivo, evo = ef.recorrido, pv = ts.previsiones || {}, fm = ts.fin_de_mes;
+  const c1 = cj.caja1, c2 = cj.caja2;
+  const hayStock = st.activo && (st.stock_inicial != null || st.stock_final != null);
+  const fila = (l, v) => [l, v];
+  return (
+    <article className="inf-doc">
+      <header className="inf-cab">
+        <h2>Informe de Finanzas · {nombreMes(mes)}</h2>
+        <p>Versión {inf.version} · generado el {fechaHora(inf.creado_en)} por {inf.quien || "—"}</p>
+      </header>
+      {d.provisional && (
+        <div className="inf-prov">
+          <b>Cifras provisionales:</b> el mes no está completo. Lo que falta según la lista de cierre:
+          <ul>{(d.falta || []).map((t, i) => <li key={i}>{t}</li>)}</ul>
+        </div>
+      )}
+
+      <Apartado n="1" titulo="El mes en una línea y cifras clave" texto={c.resumen}>
+        <dl className="inf-kpis inf-kpis5">
+          <div><dt>Venta de Epos</dt><dd>{eur(k.ventas, 0)}</dd></div>
+          <div><dt>Margen real</dt><dd>{k.margen_pct == null ? "–" : pct(k.margen_pct, 1)}</dd></div>
+          <div><dt>Resultado del mes</dt><dd>{eur(k.resultado, 0)}</dd></div>
+          <div><dt>Descuadres de caja</dt><dd>{eur(k.descuadres_caja, 2)}</dd></div>
+          <div><dt>Dinero total a fin de mes</dt><dd>{k.dinero_total == null ? "–" : eur(k.dinero_total, 0)}</dd></div>
+        </dl>
+      </Apartado>
+
+      <Apartado n="2" titulo="Ventas" texto={c.ventas}>
+        <TablaComp d={d} mes={mes} ks={["ventas", "tickets", "ticket_medio", "venta_dia"]} />
+      </Apartado>
+
+      <Apartado n="3" titulo="Margen" texto={c.margen}>
+        <TablaComp d={d} mes={mes} ks={["margen_pct", "coste_vendido", "compras", "dif_compras_coste"]} />
+      </Apartado>
+
+      <Apartado n="4" titulo="Tienda y paquetería" texto={c.tienda_paq}>
+        <Tabla cols={["", nombreMes(mes)]} filas={[
+          ["Tienda · ventas (con IVA)", eur(tp.tienda_ventas, 0)],
+          ["Tienda · gastos (todos los gastos van a la tienda)", eur(tp.tienda_gastos, 0)],
+          ["Resultado de la tienda", eur(tp.tienda_resultado, 0)],
+          ["Paquetería · ingresos (solo sus comisiones)", eur(tp.paq_ingresos, 0)],
+          ["Resultado de la paquetería", eur(tp.paq_resultado, 0)],
+          ["Descuadres de caja", eur(tp.descuadres_caja, 2)],
+          ["Beneficio del negocio (suma de todo)", eur(tp.total, 0)],
+        ]} />
+        <TablaComp d={d} mes={mes} ks={["res_tienda", "res_paqueteria", "resultado"]} />
+        {tp.paq_detalle && Object.keys(tp.paq_detalle).length > 0 && <p className="inf-nota">Paquetería por empresa: {Object.entries(tp.paq_detalle).map(([n, v]) => `${n} ${eur(v, 2)}`).join(" · ")}.</p>}
+      </Apartado>
+
+      <Apartado n="5" titulo="Gastos con detalle" texto={c.gastos}>
+        <TablaComp d={d} mes={mes} ks={["gastos", ...CATS_V2.map(([id]) => id)]} />
+        {(gd.mayores_cambios || []).length > 0 && (
+          <>
+            <h4 className="inf-sub">Las líneas que más cambian respecto al mes anterior</h4>
+            <Tabla cols={["Línea", "Categoría", nombreMes(mes), "Mes anterior", "Cambio"]} filas={gd.mayores_cambios.map((x) => [x.c, CAT_NOMBRE[x.cat] || x.cat, eur(x.importe, 0), x.anterior == null ? "–" : eur(x.anterior, 0), eurDif(x.dif, 0)])} />
+          </>
+        )}
+        {CATS_V2.filter(([id]) => id !== "personal").map(([id, l]) => {
+          const g = gd[id]; const lineas = g ? (g.lineas || []).filter((x) => x.importe != null) : []; if (!lineas.length) return null;
+          return (
+            <div key={id}>
+              <h4 className="inf-sub">{l}</h4>
+              <Tabla cols={["Línea", nombreMes(mes), "Mes anterior", "Cambio"]} filas={lineas.map((x) => [x.c, eur(x.importe, 0), x.anterior == null ? "–" : eur(x.anterior, 0), eurDif(x.dif, 0)])} />
+            </div>
+          );
+        })}
+        {gd.personal && <p className="inf-nota">Personal: solo como total, sin nombres. Total {eur(gd.personal.total, 0)}, de los cuales salarios {eur(gd.personal.salarios, 0)} (mes anterior: personal {gd.personal.anterior == null ? "–" : eur(gd.personal.anterior, 0)}, salarios {gd.personal.salarios_anterior == null ? "–" : eur(gd.personal.salarios_anterior, 0)}).</p>}
+        {gd.hay_detalle === false && <p className="inf-nota">No se ha podido leer el detalle por líneas de este mes.</p>}
+      </Apartado>
+
+      <Apartado n="6" titulo="Compras y proveedores" texto={c.compras}>
+        {(cm.principales || []).length ? (
+          <>
+            <p className="inf-nota">Compras del mes a proveedores: {eur(cm.total, 0)}.</p>
+            <Tabla cols={["Proveedor", nombreMes(mes), "Peso en el mes", "Mes anterior", "Cambio", "Cambio %"]} filas={cm.principales.map((x) => [x.proveedor, eur(x.importe, 0), x.peso_pct == null ? "–" : pct(x.peso_pct, 1), x.anterior == null ? "–" : eur(x.anterior, 0), eurDif(x.dif, 0), pctVar(x.pct)])} />
+            {(cm.subidas || []).length > 0 && (
+              <>
+                <h4 className="inf-sub">Los proveedores que más han subido</h4>
+                <Tabla cols={["Proveedor", nombreMes(mes), "Mes anterior", "Subida", "Subida %"]} filas={cm.subidas.map((x) => [x.proveedor, eur(x.importe, 0), eur(x.anterior, 0), eurDif(x.dif, 0), pctVar(x.pct)])} />
+              </>
+            )}
+          </>
+        ) : <p className="inf-nota">No hay compras por proveedor de este mes.</p>}
+      </Apartado>
+
+      <Apartado n="7" titulo="Stock" texto={c.stock}>
+        {hayStock ? (
+          <Tabla cols={["", "Importe"]} filas={[
+            ["Stock a principio de mes", st.stock_inicial != null ? eur(st.stock_inicial, 0) : "–"],
+            ["Stock a final de mes", st.stock_final != null ? eur(st.stock_final, 0) : "–"],
+            ["Variación de existencias", st.variacion != null ? eur(st.variacion, 0) : "–"],
+            ["Productos sin valorar (última foto)", st.sin_valorar_n != null ? `${num(st.sin_valorar_n)} productos · ${num(st.sin_valorar_unid)} unidades` : "–"],
+          ]} />
+        ) : <p className="inf-nota">Todavía no hay datos de stock.</p>}
+      </Apartado>
+
+      <Apartado n="8" titulo="Caja y descuadres" texto={c.caja}>
+        <Tabla cols={["Apertura de sobres", "Importe"]} filas={[
+          ["Contado", eur(sc.contado, 2)], ["Esperado", eur(sc.esperado, 2)], ["Descuadre", eur(sc.diferencia, 2)], ["Sobres sin revisar", num(sc.sin_revisar)],
+        ]} />
+        {cj.tarjeta_aplica ? (
+          <Tabla cols={["Tarjeta frente al banco", "Epos tarjeta", "Remesa del banco", "Descuadre", "Comisión datáfono", "Días en «Revisar»"]} filas={[
+            ["Caja 1 · BBVA", eur(c1?.epos, 2), eur(c1?.bbva, 2), eur(c1?.descuadre, 2), eur(c1?.comision, 2), num(c1?.por_revisar)],
+            ["Caja 2 · La Caixa", eur(c2?.epos, 2), eur(c2?.bbva, 2), eur(c2?.descuadre, 2), eur(c2?.comision, 2), num(c2?.por_revisar)],
+          ]} />
+        ) : <p className="inf-nota">La comparación de la tarjeta con el banco, día a día, empieza en octubre de 2026.</p>}
+        <Tabla cols={["", "Importe"]} filas={[
+          ["Comisión del datáfono del mes", cj.comision_datafono != null ? eur(cj.comision_datafono, 2) : "–"],
+          ["Comisión de Bizum del mes (cargos «Liquidación remesa Bizum»)", eur(cj.comision_bizum, 2)],
+          ["Descuadre de tarjeta", eur(cj.descuadre_tarjeta, 2)], ["Descuadre de efectivo", eur(cj.descuadre_efectivo, 2)], ["Descuadres de caja (total)", eur(cj.descuadre_caja, 2)],
+          ["Días que siguen en «Revisar» (no cuentan en el resultado)", num(cj.dias_revisar)],
+        ]} />
+        {cj.extracto_caixa && <p className="inf-nota">Último extracto de La Caixa: {fecha(cj.extracto_caixa.ultimo)}.</p>}
+      </Apartado>
+
+      <Apartado n="9" titulo="Efectivo" texto={c.efectivo}>
+        <Tabla cols={["", "Importe"]} filas={[
+          ...(vivo ? [["Efectivo vivo total (hoy)", eur(vivo.total, 2)], ["Retiradas del banco (importe) · sin asignar", `${eur(vivo.retiradas_importe, 2)} · ${num(vivo.retiradas_sin_asignar)}`]] : []),
+          ...(evo ? [["Recorrido del efectivo: saldo inicial", eur(evo.saldo_inicial, 2)], ["Entradas del mes", eur(n0(evo.entrada) + n0(evo.otras_entradas), 2)], ["Salidas del mes", eur(evo.total_salidas, 2)], ["Saldo", eur(evo.saldo, 2)]] : []),
+          ["Caja fuerte · recargas del mes", eur(cf.recargas, 2)], ["Caja fuerte · pagos del mes", eur(cf.pagos, 2)], ["Caja fuerte · saldo a fin de mes", eur(cf.saldo_fin_mes, 2)],
+          ...(efs ? [
+            ["Efectivo de sobres · saldo inicial", eur(efs.saldo_inicial, 2)], ["Efectivo de sobres · entrada del mes", eur(efs.entrada, 2)],
+            ["Efectivo de sobres · salidas", eur(efs.total_salidas, 2)], ["Efectivo de sobres · reparto a socios", eur(efs.reparto_total, 2)], ["Efectivo de sobres · lo que queda", eur(efs.saldo, 2)],
+          ] : []),
+        ]} />
+        {efs && efs.por_tipo && Object.keys(efs.por_tipo).length > 0 && <p className="inf-nota">Salidas de efectivo de sobres por tipo: {Object.entries(efs.por_tipo).map(([t, v]) => `${t.replace(/_/g, " ")} ${eur(v, 2)}`).join(" · ")}.</p>}
+      </Apartado>
+
+      <Apartado n="10" titulo="Bancos" texto={c.bancos}>
+        <Tabla cols={["", "BBVA", "La Caixa"]} filas={[
+          ["Saldo a principio de mes", bb.saldo_inicial != null ? eur(bb.saldo_inicial, 2) : "–", cx.saldo_inicial != null ? eur(cx.saldo_inicial, 2) : "–"],
+          ["Entradas del mes", eur(bb.entradas, 2), eur(cx.entradas, 2)],
+          ["Salidas del mes", eur(bb.salidas, 2), eur(cx.salidas, 2)],
+          ["Saldo a final de mes", bb.saldo_final != null ? eur(bb.saldo_final, 2) : "–", cx.saldo_final != null ? eur(cx.saldo_final, 2) : "–"],
+          ["Movimientos del mes", num(bb.movimientos), num(cx.movimientos)],
+          ["Último extracto subido", "automático", cx.ultimo_extracto ? fecha(cx.ultimo_extracto) : "sin extracto"],
+        ]} />
+        {se.aplica
+          ? <p className="inf-nota"><b>Movimientos sin explicar en la conciliación: {num(se.n)}</b> ({eur(se.entradas, 2)} de entradas · {eur(se.salidas, 2)} de salidas; BBVA {num(se.bbva)} · La Caixa {num(se.caixa)}).</p>
+          : <p className="inf-nota">La conciliación de movimientos con explicación empieza en octubre de 2026: en este mes no aplica.</p>}
+        <p className="inf-nota">El saldo de cada mes se calcula a partir del saldo actual de cada cuenta y los movimientos posteriores (igual que en Tesorería).</p>
+      </Apartado>
+
+      <Apartado n="11" titulo="Facturas pendientes de pago a fin de mes" texto={c.pendientes}>
+        <p className="inf-nota">{num(pp.n)} factura{pp.n === 1 ? "" : "s"} · {eur(pp.importe, 2)} en total.</p>
+        {(pp.antiguas || []).length > 0 && <Tabla cols={["Las más antiguas", "Fecha", "Importe", "Días pendientes a fin de mes"]} filas={pp.antiguas.map((x) => [x.proveedor, fecha(x.fecha), eur(x.importe, 2), num(x.dias)])} />}
+        {(pp.mayores || []).length > 0 && <p className="inf-nota">Las mayores: {pp.mayores.map((x) => `${x.proveedor} ${eur(x.importe, 2)}`).join(" · ")}.</p>}
+      </Apartado>
+
+      <Apartado n="12" titulo="Tesorería" texto={c.tesoreria}>
+        <Tabla cols={["", "Importe"]} filas={[
+          ["Dinero real a fin de mes (bancos + efectivo)", fm && fm.total != null ? eur(fm.total, 0) : "–"],
+          ["  · BBVA", fm && fm.bbva != null ? eur(fm.bbva, 0) : "–"], ["  · La Caixa", fm && fm.caixa != null ? eur(fm.caixa, 0) : "–"],
+          ["Dinero real hoy", ts.dinero_hoy != null ? eur(ts.dinero_hoy, 0) : "–"],
+        ]} />
+        <Tabla cols={["Previsión desde hoy", "Cobros", "Pagos", "Saldo al final", "Punto más bajo"]} filas={[["30 días", "d30"], ["60 días", "d60"]].map(([l, kk]) => { const p = pv[kk]; return p ? [`${l} (hasta el ${fecha(p.hasta)})`, eur(p.cobros, 0), eur(p.pagos, 0), eur(p.saldo_final, 0), p.minimo ? `${eur(p.minimo.saldo, 0)} (${fecha(p.minimo.fecha)})` : "–"] : [l, "–", "–", "–", "–"]; })} />
+        {rep ? (
+          <>
+            <h4 className="inf-sub">«¿Cuánto podemos repartir?» (solo socios · es un dato, no una recomendación)</h4>
+            <Tabla cols={["Cálculo (a 60 días)", "Importe"]} filas={[
+              ["Dinero real hoy", eur(rep.dinero_hoy, 0)], ["Cobros previstos", eur(rep.cobros, 0)], ["Pagos previstos", `−${eur(rep.pagos, 0)}`],
+              ["Colchón", `−${eur(rep.colchon, 0)}`], ["Reserva de impuestos" + (rep.reserva_impuestos_fechas ? ` (${rep.reserva_impuestos_fechas})` : ""), `−${eur(rep.reserva_impuestos, 0)}`],
+              ["Ya repartido", eur(rep.ya_repartido, 0)], ["Cifra de Tesorería", eur(rep.repartir, 0)],
+            ]} />
+          </>
+        ) : null}
+        {c.solo_socios && rep ? <p className="inf-com inf-socios"><b>Solo socios:</b> {c.solo_socios}</p> : null}
+      </Apartado>
+
+      <Apartado n="13" titulo="Impuestos" texto={c.impuestos}>
+        {im && (im.modelos || []).length ? (
+          <>
+            <p className="inf-nota">Próximo plazo: {im.trimestre}.º trimestre de {im.anio}{im.primera_fecha ? ` · hasta el ${fecha(im.primera_fecha)}` : ""}{im.dias != null ? ` (quedan ${num(im.dias)} días)` : ""} · estimado {eur(im.total_estimado, 2)}. Datos a fecha de generación.</p>
+            <Tabla cols={["Modelo", "Qué es", "Fecha límite", "Importe estimado", "Estado"]} filas={im.modelos.map((x) => [x.modelo, x.que, fecha(x.limite), x.estimado != null ? eur(x.estimado, 2) : "–", x.estado === "pagado" ? "Pagado" : "Pendiente"])} />
+          </>
+        ) : <p className="inf-nota">No hay plazos de impuestos próximos.</p>}
+      </Apartado>
+
+      <section className="inf-ap">
+        <h3><span>14</span> Puntos para la reunión</h3>
+        {(c.avisos || []).length ? <ul className="inf-avisos">{c.avisos.map((t, i) => <li key={i}>{t}</li>)}</ul> : <p className="inf-com">Sin puntos.</p>}
+        {(d.avisos_finanzas || []).length > 0 && (
+          <>
+            <h4 className="inf-sub">Avisos de Finanzas (Resumen) a fecha de generación</h4>
+            <ul className="inf-avisos">{d.avisos_finanzas.map((t, i) => <li key={i}>{t}</li>)}</ul>
+          </>
+        )}
+      </section>
+    </article>
+  );
+}
+
+function Informe({ inf }) {
+  return inf.datos && inf.datos.version === 2 ? <InformeV2 inf={inf} /> : <InformeV1 inf={inf} />;
 }
 
 export function InformeMensual() {
