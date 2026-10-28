@@ -11,6 +11,8 @@ export const GASTOS_FIJOS_TPL = [
   { key: "securitas", label: "Securitas" },
   { key: "epos", label: "EPOS Now" },
   { key: "anthropic", label: "Anthropic-Claude" }, // #103
+  { key: "whatsapp", label: "WhatsApp Business" }, // #107
+  { key: "whatsapp_varios", label: "WhatsApp Business - Servicios Varios" }, // #107
   { key: "ayuntamiento", label: "Gasto Ayuntamiento" },
 ];
 export const OWNER_PASSWORD = "Recao2019_";

@@ -8,7 +8,7 @@ import { sb } from "../../lib/supabase.js";
 
 const DESDE = "2026-10"; // los cierres anteriores ya guardados no se tocan solos
 const fecha = (f) => new Date(`${String(f).slice(0, 10)}T12:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
-const CLAVES = ["alquiler", "asesoria", "luz", "agua", "ss", "securitas", "epos", "anthropic"];
+const CLAVES = ["alquiler", "asesoria", "luz", "agua", "ss", "securitas", "epos", "anthropic", "whatsapp", "whatsapp_varios"];
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 
 export function GastosFijos({ mes, valores, onValores, guardarRef }) {
