@@ -24,6 +24,7 @@ const DESTINO = {
   cambio_por_responder: "cambio", cambio_resuelto: "cambio", cambio_pendiente_admin: "cambios",
   // Bolsa de turnos: las de la trabajadora llevan a «Turnos para cubrir»; las de dirección, a Personas → Bolsa del panel
   turno_recordatorio: "mis", // #48: recordatorio de turno a las eventuales → «Mis turnos»
+  horario_cambio: "horario", horario_nuevo: "horario", // #102: dirección cambia el horario → «Mi horario»
   bolsa_resumen: "cubrir", bolsa_urgente: "cubrir", bolsa_descanso_pendiente: "cubrir", bolsa_descanso_ok: "cubrir", bolsa_anulado: "cubrir",
   bolsa_cubierto: "bolsa", bolsa_soltado: "bolsa", bolsa_nadie_puede: "bolsa", bolsa_urgente_admin: "bolsa", bolsa_descanso_limite: "bolsa",
   horas_extra_pedida: "horas", horas_extra_resuelta: "horasextra", // #39
