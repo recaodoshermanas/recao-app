@@ -254,7 +254,7 @@ function AsignadosApp() {
       <div className="head"><div><h2>Asignados por la app</h2><p className="sub">Huecos que la app ha tratado sola (últimas 2 semanas y los que vienen)</p></div></div>
       <ul className="b-auto">
         {l.map((a) => (
-          <li key={a.id} className={a.estado === "deshecho" ? "deshecho" : a.accion === "bolsa_plantilla" ? "aviso" : ""}>
+          <li key={a.id} className={a.estado === "deshecho" ? "deshecho" : a.accion === "bolsa_plantilla" ? "sin-pasar" : ""}>
             <span className="b-auto-f">{fechaLarga(a.fecha)}</span>
             <span className="b-auto-t"><Turno t={a.turno} /></span>
             <span className="b-auto-d">
