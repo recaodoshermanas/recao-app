@@ -1,15 +1,15 @@
 // Producto · Inventario: la página de conteo del inventario (hecha el 30/10/2026 para el inventario de esa noche).
-// De momento la página vive en el servidor propio (VPS); aquí se abre dentro del panel. Pendiente: pasarla del todo al panel.
+// La página está en direccion/public/inventario/ (HTML suelto, se entra con la clave del inventario; habla con la función «inventario»).
 import { useState } from "react";
 import { avisar } from "../ui.jsx";
 
-const URL_CONTEO = "https://brand.elrecao.com/inventario/";
+const URL_CONTEO = "/inventario/";
 
 export function Inventario() {
   const [ver, setVer] = useState(true);
   const copiar = async () => {
-    try { await navigator.clipboard.writeText(URL_CONTEO); avisar("Enlace copiado"); }
-    catch (_) { avisar("No se ha podido copiar: " + URL_CONTEO, "mal"); }
+    try { await navigator.clipboard.writeText(location.origin + URL_CONTEO); avisar("Enlace copiado"); }
+    catch (_) { avisar("No se ha podido copiar: " + location.origin + URL_CONTEO, "mal"); }
   };
   return (
     <>
