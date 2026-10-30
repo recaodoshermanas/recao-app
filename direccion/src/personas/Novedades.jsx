@@ -1,7 +1,7 @@
 // Personas · Equipo → Novedades: el tablón que las trabajadoras ven al entrar en la app (las 3 últimas de su público).
 import { useCallback, useEffect, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
-import { Panel, avisar, hoyStr, fechaCorta, hace, Cargando } from "../ui.jsx";
+import { Panel, avisar, hoyStr, fechaCorta, hace, Cargando, confirmar } from "../ui.jsx";
 
 const PARA = [{ id: "todas", label: "Todas" }, { id: "plantilla", label: "Plantilla" }, { id: "eventuales", label: "Eventuales" }];
 const PARA_TXT = { todas: "Todas", plantilla: "Plantilla", eventuales: "Eventuales" };
@@ -27,6 +27,14 @@ export function Novedades() {
     try { await sb.update("novedades", `id=eq.${n.id}`, patch); avisar(ok); cargar(); }
     catch (e) { avisar("No se ha podido guardar", "mal"); }
   };
+  const enviarWa = async (n) => {
+    try {
+      const c = await sb.rpc("novedad_whatsapp_cuenta", { p_para: n.para });
+      if (!(await confirmar(`Se enviará un WhatsApp a ${c.reciben} personas. ¿Enviar?`))) return;
+      const r = await sb.rpc("novedad_enviar_whatsapp", { p_id: n.id });
+      avisar(`WhatsApp enviado a ${r.enviados} personas`); cargar();
+    } catch (e) { avisar("No se ha podido enviar por WhatsApp", "mal"); }
+  };
   const fila = (n) => (
     <tr key={n.id}>
       <td>
@@ -35,7 +43,11 @@ export function Novedades() {
       </td>
       <td>{PARA_TXT[n.para]}</td>
       <td>{n.tema || "—"}</td>
-      <td>Desde el {fechaCorta(n.desde)}<span className="pf">Publicada {hace(n.creado_en)}{n.avisar ? " · con aviso" : ""}</span></td>
+      <td>Desde el {fechaCorta(n.desde)}<span className="pf">Publicada {hace(n.creado_en)}{n.avisar ? " · con aviso" : ""}</span>
+        {n.whatsapp_enviado_en
+          ? <span className="pf">WhatsApp · enviado a {n.whatsapp_enviados}</span>
+          : n.activa && <button className="btn-txt" onClick={() => enviarWa(n)}>Enviar por WhatsApp</button>}
+      </td>
       <td>{n.activa ? (enApp.has(n.id) ? <span className="nov-est on">Se ve en la app</span> : <span className="nov-est">Activa, fuera de las 3 últimas</span>) : <span className="nov-est off">Retirada</span>}</td>
       <td className="r" style={{ whiteSpace: "nowrap" }}>
         <button className="btn-l" onClick={() => setEditar(n)}>Editar</button>{" "}
@@ -72,18 +84,34 @@ export function Novedades() {
 
 function FormNovedad({ inicial, onClose, onGuardada }) {
   const nueva = !inicial.id;
-  const [f, setF] = useState({ titulo: inicial.titulo || "", texto: inicial.texto || "", desde: inicial.desde || hoyStr(), tema: inicial.tema || "", para: inicial.para || "todas", avisar: false });
+  const [f, setF] = useState({ titulo: inicial.titulo || "", texto: inicial.texto || "", desde: inicial.desde || hoyStr(), tema: inicial.tema || "", para: inicial.para || "todas", avisar: false, wa: false });
+  const [cuenta, setCuenta] = useState(null);
+  useEffect(() => {
+    if (!nueva || !f.wa) { setCuenta(null); return; }
+    let vivo = true;
+    sb.rpc("novedad_whatsapp_cuenta", { p_para: f.para }).then((c) => vivo && setCuenta(c)).catch(() => vivo && setCuenta(null));
+    return () => { vivo = false; };
+  }, [nueva, f.wa, f.para]);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const ok = f.titulo.trim() && f.texto.trim() && f.titulo.length <= 60 && f.texto.length <= 200 && f.desde;
   const guardar = async () => {
     if (!ok) return;
+    if (nueva && f.wa) {
+      const c = cuenta || await sb.rpc("novedad_whatsapp_cuenta", { p_para: f.para }).catch(() => null);
+      if (!c) { avisar("No se ha podido calcular a cuántas personas llegaría", "mal"); return; }
+      if (!(await confirmar(`Se enviará un WhatsApp a ${c.reciben} personas. ¿Publicar y enviar?`))) return;
+    }
     setBusy(true);
     const datos = { titulo: f.titulo.trim(), texto: f.texto.trim(), desde: f.desde, tema: f.tema.trim() || null, para: f.para };
     try {
-      if (nueva) await sb.insert("novedades", { ...datos, avisar: f.avisar });
-      else await sb.update("novedades", `id=eq.${inicial.id}`, datos);
-      avisar(nueva ? (f.avisar ? "Publicada y avisadas por la campana y el correo" : "Publicada en la app") : "Cambios guardados");
+      let waOk = true;
+      if (nueva) {
+        const [creada] = await sb.insert("novedades", { ...datos, avisar: f.avisar });
+        if (f.wa) { try { await sb.rpc("novedad_enviar_whatsapp", { p_id: creada.id }); } catch (e) { waOk = false; } }
+      } else await sb.update("novedades", `id=eq.${inicial.id}`, datos);
+      if (!waOk) avisar("Publicada, pero el WhatsApp no se ha enviado: usa «Enviar por WhatsApp» en la lista", "mal");
+      else avisar(nueva ? (f.avisar ? "Publicada y avisadas por la campana y el correo" : f.wa ? "Publicada y enviada por WhatsApp" : "Publicada en la app") : "Cambios guardados");
       onGuardada();
     } catch (e) { avisar("No se ha podido guardar", "mal"); }
     setBusy(false);
@@ -102,6 +130,12 @@ function FormNovedad({ inicial, onClose, onGuardada }) {
       </div>
       {nueva && (
         <label className="chk"><input type="checkbox" checked={f.avisar} onChange={(e) => setF({ ...f, avisar: e.target.checked })} /> Avisar en la campana y por email</label>
+      )}
+      {nueva && (
+        <>
+          <label className="chk"><input type="checkbox" checked={f.wa} onChange={(e) => setF({ ...f, wa: e.target.checked })} /> Avisar también por WhatsApp (solo para novedades muy importantes)</label>
+          {f.wa && cuenta && <small className="nov-cuenta">Lo recibirán {cuenta.reciben} personas por WhatsApp{cuenta.no_reciben > 0 ? ` · ${cuenta.no_reciben} no (sin móvil o con WhatsApp desactivado)` : ""}</small>}
+        </>
       )}
       {(f.titulo || f.texto) && (
         <div className="nov-previa" aria-label="Así se verá">
