@@ -364,6 +364,11 @@ export function FinanzasResultados({ onEditMonth }) {
   const mes = meses.find((m) => m.mes === sel) || cerrados[cerrados.length - 1] || meses[meses.length - 1];
   const val = (m, v) => (modo === "pct" ? (m.ingresos ? pct(v / m.ingresos * 100, 1) : "–") : num(v));
   // #69: tienda y paquetería por separado (tributan distinto). Todos los gastos son de la tienda; la paquetería no tiene gastos propios.
+  // #116: la Seguridad Social va en su propia fila, justo debajo de Personal (que ya no la incluye)
+  const ssMes = (m) => n0(m.fijos_det?.ss);
+  const filaCat = (c) => (c.id === "personal"
+    ? [{ k: "personal", l: "Personal (salarios y extras)", neg: true, get: (m) => n0(m.personal) - ssMes(m) }, { k: "ss", l: "Seguridad Social", neg: true, get: ssMes }]
+    : [{ k: c.id, l: c.label, neg: true }]);
   const resTienda = (m) => n0(m.ventas) - n0(m.gastos);
   const filas = [
     { sep: true, k: "sep_tienda", l: "Tienda" },
@@ -373,8 +378,8 @@ export function FinanzasResultados({ onEditMonth }) {
       ? [{ k: "compras_mercancia", l: "Compras de mercancía", neg: true, get: (m) => (m.compras_mercancia != null ? m.compras_mercancia : m.mercancia) },
          { k: "variacion_existencias", l: "Variación de existencias", neg: true, get: (m) => m.variacion_existencias },
          { k: "mercancia", l: "Coste de la mercancía vendida", neg: true, b2: true, get: (m) => m.mercancia },
-         ...CATS.filter((c) => c.id !== "mercancia").map((c) => ({ k: c.id, l: c.label, neg: true }))]
-      : CATS.map((c) => ({ k: c.id, l: c.label, neg: true }))),
+         ...CATS.filter((c) => c.id !== "mercancia").flatMap(filaCat)]
+      : CATS.flatMap(filaCat)),
     { k: "gastos", l: "Gastos", b: true, neg: true },
     { k: "resultado_tienda", l: "Resultado de la tienda", b: true, r: true, get: resTienda },
     { sep: true, k: "sep_paq", l: "Paquetería" },
@@ -451,7 +456,7 @@ const fechaP = (f) => (f ? parseDate(String(f).slice(0, 10)).toLocaleDateString(
 const valorFila = (f, m) => (f.get ? f.get(m) : m[f.k]);
 // pantalla donde se cambia cada cifra
 const ENLACE = {
-  ventas: "cierre", paqueteria: "cierre", personal: "cierre", local: "cierre", servicios: "cierre", impuestos: "cierre", otros: "cierre",
+  ventas: "cierre", paqueteria: "cierre", personal: "cierre", ss: "cierre", local: "cierre", servicios: "cierre", impuestos: "cierre", otros: "cierre",
   descuadres_caja: "cierre", variacion_existencias: "cierre",
   mercancia: "facturas", compras_mercancia: "facturas", mantenimiento: "mantenimiento", reparto_sobres: "sobres",
 };
@@ -489,7 +494,9 @@ function VentanaCifra({ f, m, filas, socio, onClose, onEditMonth }) {
     return () => { vivo = false; };
   }, [m.mes]); // eslint-disable-line react-hooks/exhaustive-deps
   const total = n0(valorFila(f, m));
-  const lista = compuesta || (datos ? datos.filas?.[f.k] || [] : null);
+  const esSS = (p) => p.c === "Seguridad Social";
+  const base = datos ? (f.k === "ss" ? datos.filas?.personal : datos.filas?.[f.k]) || [] : null;
+  const lista = compuesta || (base && (f.k === "ss" ? base.filter(esSS) : f.k === "personal" ? base.filter((p) => !esSS(p)) : base));
   const suma = lista ? lista.filter((p) => !p.nota).reduce((s, p) => s + n0(p.i), 0) : 0;
   const cuadra = Math.abs(suma - total) < 0.01;
   const verDoc = async (doc) => {
