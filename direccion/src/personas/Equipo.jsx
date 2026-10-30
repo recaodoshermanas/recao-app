@@ -1,9 +1,9 @@
 // Personas · Equipo: directorio con ficha por persona, plus del mes, horas extra y cuentas.
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { TURNOS, horasTurno } from "../../../src/lib/turnos.js";
 import { resumenCalendario } from "../../../src/lib/vacaciones.js";
-import { Panel, Pestanas, useEquipo, avisar, hoyStr, masDias, fechaCorta, Cargando, Avatar, n0 } from "../ui.jsx";
+import { Panel, Pestanas, useEquipo, avisar, hoyStr, masDias, fechaCorta, Cargando, Avatar, n0, ir } from "../ui.jsx";
 import { eur } from "../fmt.js";
 import { telNormalizado, TEL_AYUDA } from "../../../src/views/owner/UsuariosView.jsx";
 import { Novedades } from "./Novedades.jsx";
@@ -44,9 +44,54 @@ export function Equipo({ user, extra }) {
   );
 }
 
+// #112: mini calendario del mes en cada tarjeta. Los turnos de cada mes se cargan una vez para todo el equipo.
+const finMes = (ym) => `${ym}-${String(ultimoDia(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)))).padStart(2, "0")}`;
+const sumaMes = (ym, d) => { const t = Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1 + d; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; };
+const esTrabajo = (t) => { const k = TURNOS[t]?.tipo; return k === "completo" || k === "apoyo"; };
+function MesPersona({ uid, hoy, turnos, pedir }) {
+  const [ym, setYm] = useState(hoy.slice(0, 7));
+  useEffect(() => { pedir(ym); }, [ym, pedir]);
+  const datos = turnos[ym];
+  const mapa = datos?.[uid] || {};
+  const n = Object.values(mapa).filter(esTrabajo).length;
+  const a = Number(ym.slice(0, 4)); const m = Number(ym.slice(5, 7));
+  const vacios = (new Date(a, m - 1, 1).getDay() + 6) % 7;
+  const parar = (e) => e.stopPropagation();
+  return (
+    <div className="te-mes" onClick={parar} onKeyDown={parar}>
+      <div className="te-mes-cab">
+        <button type="button" className="te-mes-fl" aria-label="Mes anterior" onClick={() => setYm(sumaMes(ym, -1))}>‹</button>
+        <span>{MESES[m - 1][0].toUpperCase() + MESES[m - 1].slice(1)} {a} · {datos ? `${n} ${n === 1 ? "día" : "días"} de trabajo` : "…"}</span>
+        <button type="button" className="te-mes-fl" aria-label="Mes siguiente" onClick={() => setYm(sumaMes(ym, 1))}>›</button>
+      </div>
+      <div className="te-mes-grid">
+        {["L", "M", "X", "J", "V", "S", "D"].map((d, i) => <i key={i} className="te-mes-dow">{d}</i>)}
+        {Array.from({ length: vacios }, (_, i) => <i key={"v" + i} />)}
+        {Array.from({ length: ultimoDia(a, m) }, (_, i) => {
+          const f = `${ym}-${String(i + 1).padStart(2, "0")}`; const t = mapa[f]; const inf = t && TURNOS[t];
+          const colorea = inf && (esTrabajo(t) || t === "Vacaciones");
+          return <button type="button" key={f} className={`te-mes-d ${f === hoy ? "hoy" : ""}`} style={colorea ? { background: inf.bg, color: inf.fg } : undefined}
+            title={`${fechaCorta(f)}: ${t || "sin turno"}`} onClick={() => ir(`personas/horarios/${f}:${uid}`)}>{i + 1}</button>;
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Directorio({ equipo, onFicha }) {
   const hoy = hoyStr();
   const [hor, setHor] = useState({});
+  const [turnos, setTurnos] = useState({}); // "AAAA-MM" → { usuario_id: { fecha: turno } }
+  const pedidos = useRef(new Set());
+  const pedirMes = useCallback((ym) => {
+    if (pedidos.current.has(ym)) return;
+    pedidos.current.add(ym);
+    const tramo = (d, h) => sb.select("horarios", `select=usuario_id,fecha,turno&fecha=gte.${ym}-${d}&fecha=lte.${h}&limit=5000`);
+    Promise.all([tramo("01", `${ym}-15`), tramo("16", finMes(ym))]).then((rs) => {
+      const m = {}; rs.flat().forEach((h) => { (m[h.usuario_id] ||= {})[h.fecha] = h.turno; });
+      setTurnos((t) => ({ ...t, [ym]: m }));
+    }).catch(() => { pedidos.current.delete(ym); setTurnos((t) => ({ ...t, [ym]: {} })); });
+  }, []);
   const [verInactivos, setVerInactivos] = useState(false);
   useEffect(() => {
     sb.select("horarios", `select=usuario_id,fecha,turno&fecha=gte.${hoy}&fecha=lte.${masDias(hoy, 6)}`)
@@ -69,7 +114,7 @@ function Directorio({ equipo, onFicha }) {
               {ps.map((u) => {
                 const t = hor[u.id]?.[hoy];
                 return (
-                  <button key={u.id} className={`card tarjeta-eq ${u.activo ? "" : "inactiva"}`} onClick={() => onFicha(u.id)}>
+                  <div key={u.id} role="button" tabIndex={0} className={`card tarjeta-eq ${u.activo ? "" : "inactiva"}`} onClick={() => onFicha(u.id)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onFicha(u.id); } }}>
                     <div className="te-cab"><Avatar nombre={u.nombre} size={40} /><div><b>{u.nombre}</b><span>{u.activo ? (u.rol === "admin" ? "Dirección" : u.eventual ? `Eventual · ${u.auth_id ? "con acceso a la app" : "sin acceso a la app"}` : tipoDe(u)) : "Desactivada"}</span></div></div>
                     {u.rol !== "admin" && (
                       <div className="te-sem" aria-label="Turnos de los próximos 7 días">
@@ -77,13 +122,18 @@ function Directorio({ equipo, onFicha }) {
                       </div>
                     )}
                     {u.rol !== "admin" && <p className="te-hoy">{t ? `Hoy: ${t}${TURNOS[t]?.horas ? " · " + horasTurno(t, hoy) : ""}` : "Hoy no trabaja"}</p>}
-                  </button>
+                    {u.rol !== "admin" && <MesPersona uid={u.id} hoy={hoy} turnos={turnos} pedir={pedirMes} />}
+                  </div>
                 );
               })}
             </div>
           </section>
         );
       })}
+      <div className="te-leyenda" aria-label="Leyenda de colores">
+        {["Mañana", "Tarde", "Apoyo 1", "Apoyo 2", "Apoyo 3", "Vacaciones"].map((t) => <span key={t}><i style={{ background: TURNOS[t].bg }} />{t}</span>)}
+        <span><i className="libre" />Libre</span>
+      </div>
       <label className="chk"><input type="checkbox" checked={verInactivos} onChange={(e) => setVerInactivos(e.target.checked)} /> Ver también las cuentas desactivadas</label>
     </>
   );

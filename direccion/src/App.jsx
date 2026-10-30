@@ -201,7 +201,7 @@ export default function App() {
   let contenido;
   if (area.id === "pulso") contenido = <Pulso />;
   else if (area.id === "personas" && sub.id === "resumen") contenido = <PersonasResumen />;
-  else if (area.id === "personas" && sub.id === "horarios") contenido = <Horarios />;
+  else if (area.id === "personas" && sub.id === "horarios") contenido = <Horarios extra={extra} />;
   else if (area.id === "personas" && sub.id === "bolsa") contenido = <Bolsa />;
   else if (area.id === "personas" && sub.id === "fichajes") contenido = <Fichajes />;
   else if (area.id === "personas" && sub.id === "documentos") contenido = <Documentos />;

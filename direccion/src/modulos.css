@@ -170,6 +170,16 @@ body.con-panel { overflow: hidden; }
 .te-sem.grande .ts { height: 46px; gap: 0; }
 .te-sem .ts small { font-size: 10px; font-weight: 600; opacity: .75; text-transform: capitalize; }
 .te-sem .ts.hoy { outline: 2px solid var(--tinta); outline-offset: 1px; }
+.te-mes { display: grid; gap: 6px; cursor: default; }
+.te-mes-cab { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--text-2); text-align: center; }
+.te-mes-fl { border: 0; background: var(--grid); border-radius: 8px; width: 32px; height: 32px; font-size: 18px; line-height: 1; cursor: pointer; color: inherit; flex: none; }
+.te-mes-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.te-mes-dow { font-style: normal; text-align: center; font-size: 10px; font-weight: 700; color: var(--muted); }
+.te-mes-d { border: 1px solid var(--grid); background: transparent; border-radius: 6px; min-height: 32px; padding: 0; font-size: 11px; font-weight: 700; color: var(--muted); cursor: pointer; }
+.te-mes-d.hoy { outline: 2px solid var(--tinta); outline-offset: 1px; }
+.te-leyenda { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); font-weight: 600; margin: 4px 0 14px; }
+.te-leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+.te-leyenda i { width: 12px; height: 12px; border-radius: 4px; border: 1px solid var(--grid); }
 .te-hoy { margin: 0; font-size: 13px; color: var(--text-2); font-weight: 600; }
 .ficha-sec { margin-bottom: 22px; }
 .ficha-sec h3 { margin: 0 0 8px; font-size: 13.5px; font-weight: 800; }

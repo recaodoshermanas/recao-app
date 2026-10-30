@@ -1,5 +1,5 @@
 // Personas · Horarios: cuadrante semanal con la cobertura integrada.
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { TURNOS, TURNO_OPCIONES, horasTurno, NOTA_FINDE } from "../../../src/lib/turnos.js";
 import { requeridosDe, TURNOS_TRABAJO, REGLA_COBERTURA } from "../../../src/lib/cobertura.js";
@@ -21,9 +21,12 @@ function huecosDe(filas) {
   return out;
 }
 
-export function Horarios() {
+export function Horarios({ extra }) {
   const hoy = hoyStr();
-  const [lunes, setLunes] = useState(lunesDe(hoy));
+  // #112: desde Equipo se llega con "AAAA-MM-DD:<id de la persona>": abre esa semana y el turno de ese día
+  const [fechaIn, uidIn] = String(extra || "").split(":");
+  const fechaOk = /^\d{4}-\d{2}-\d{2}$/.test(fechaIn || "") ? fechaIn : null;
+  const [lunes, setLunes] = useState(lunesDe(fechaOk || hoy));
   const { equipo } = useEquipo();
   const [mapa, setMapa] = useState(null);
   const [prox, setProx] = useState(null); // horarios 60 días para la cobertura
@@ -34,6 +37,13 @@ export function Horarios() {
   const [verFestivos, setVerFestivos] = useState(false);
 
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => masDias(lunes, i)), [lunes]);
+  const abierto = useRef(false);
+  useEffect(() => {
+    if (abierto.current || !fechaOk || !uidIn || !equipo || !mapa) return;
+    const p = equipo.find((u) => u.id === uidIn);
+    abierto.current = true;
+    if (p) setCelda({ persona: p, fecha: fechaOk });
+  }, [fechaOk, uidIn, equipo, mapa]);
 
   const cargarSemana = useCallback(async () => {
     const r = await sb.select("horarios", `select=usuario_id,fecha,turno&fecha=gte.${lunes}&fecha=lte.${masDias(lunes, 6)}`);
