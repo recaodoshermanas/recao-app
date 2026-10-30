@@ -17,8 +17,10 @@ const REGLAS = [
   { desde: "2026-10-24", dias: { 6: { "Apoyo 1": "11:00-17:00" }, 0: { "Apoyo 2": "16:00-22:00", "Apoyo 3": "17:00-23:00" } } },
   // #55: el Apoyo 1 del sábado vuelve a 10-16 y el Apoyo 2 del sábado es 16-23 (6 h de turno + 1 h extra automática)
   { desde: "2026-10-31", dias: { 6: { "Apoyo 2": "16:00-23:00" }, 0: { "Apoyo 2": "16:00-22:00", "Apoyo 3": "17:00-23:00" } } },
+  // #115: desde el 4 de noviembre el Apoyo 2 de lunes a jueves es 16-22 (viernes sigue 17-23)
+  { desde: "2026-11-04", dias: { 1: { "Apoyo 2": "16:00-22:00" }, 2: { "Apoyo 2": "16:00-22:00" }, 3: { "Apoyo 2": "16:00-22:00" }, 4: { "Apoyo 2": "16:00-22:00" }, 6: { "Apoyo 2": "16:00-23:00" }, 0: { "Apoyo 2": "16:00-22:00", "Apoyo 3": "17:00-23:00" } } },
 ];
-export const NOTA_FINDE = "Sábado: Apoyo 2 16:00-23:00 (1 h extra) · Domingo: Apoyo 2 16:00-22:00, Apoyo 3 17:00-23:00";
+export const NOTA_FINDE = "Lunes a jueves (desde el 4/11): Apoyo 2 16:00-22:00 · Sábado: Apoyo 2 16:00-23:00 (1 h extra) · Domingo: Apoyo 2 16:00-22:00, Apoyo 3 17:00-23:00";
 function reglaDe(fecha) { let r = null; for (const x of REGLAS) if (fecha >= x.desde) r = x; return r; }
 // Horas del turno un día concreto (fecha "AAAA-MM-DD"); sin fecha, las de siempre
 export function horasTurno(turno, fecha) {
