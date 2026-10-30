@@ -138,7 +138,7 @@ h2{font-size:1rem;margin:22px 0 4px;font-weight:800}
       <li>Lo caducado o roto <b>no se cuenta</b>: apártalo.</li>
       <li>Al llegar a tu zona pulsa <b>Empezar</b>; cuando acabes, <b>Terminar zona</b>.</li>
       <li>Si un producto ya se contó en tu zona te avisa: <b>corrígelo</b> si estaba mal, o súmalo si es otro hueco.</li>
-      <li>Si te equivocas, bórralo en «Mis apuntes» y vuelve a apuntarlo.</li>
+      <li>Si te equivocas, en «Mis apuntes» pulsa <b>✎</b> para cambiar la cantidad, o <b>✕</b> para borrarlo.</li>
     </ul>
   </div>
 </section>
@@ -486,7 +486,22 @@ function pintarMios() {
   ];
   $("tMios").textContent = filas.length ? `· ${filas.length}` : "";
   if (!filas.length) { c.innerHTML = `<div class="sub">Aún no has apuntado nada en este móvil.</div>`; return; }
-  c.innerHTML = filas.map((f) => `<div class="apunte ${f.cola ? "cola" : ""}"><div style="min-width:0"><div class="n">${esc(f.n)}</div><div class="m">${esc(f.zona || "")}${f.cola ? " · enviando…" : f.t ? " · " + new Date(f.t).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : ""}</div></div><div class="fila"><span class="num" style="font-weight:600">${fmt(f.unidad === "g" ? f.cantidad / 1000 : f.cantidad)}${f.unidad === "g" ? " kg" : ""}</span>${f.id ? `<button class="btn claro peq" data-b="${f.id}" aria-label="Borrar apunte">✕</button>` : ""}</div></div>`).join("");
+  c.innerHTML = filas.map((f) => `<div class="apunte ${f.cola ? "cola" : ""}"><div style="min-width:0"><div class="n">${esc(f.n)}</div><div class="m">${esc(f.zona || "")}${f.cola ? " · enviando…" : f.t ? " · " + new Date(f.t).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : ""}</div></div><div class="fila"><span class="num" style="font-weight:600">${fmt(f.unidad === "g" ? f.cantidad / 1000 : f.cantidad)}${f.unidad === "g" ? " kg" : ""}</span>${f.id ? `<button class="btn claro peq" data-e="${f.id}" data-q="${f.cantidad}" data-u="${f.unidad}" aria-label="Cambiar cantidad">✎</button><button class="btn claro peq" data-b="${f.id}" aria-label="Borrar apunte">✕</button>` : ""}</div></div>`).join("");
+  c.querySelectorAll("button[data-e]").forEach((b) => b.onclick = () => {
+    const kg = b.dataset.u === "g", q = Number(b.dataset.q), caja = b.parentElement;
+    caja.innerHTML = `<input class="num" inputmode="decimal" value="${String(kg ? q / 1000 : q).replace(".", ",")}" style="width:90px;padding:8px;font-size:1.1rem;text-align:center">${kg ? '<span class="sub">kg</span>' : ""}<button class="btn verde peq">✔</button><button class="btn claro peq">✕</button>`;
+    const inp = caja.querySelector("input"), [ok, no] = caja.querySelectorAll("button");
+    inp.focus(); inp.select();
+    no.onclick = () => pintarMios();
+    const guardar = async () => {
+      const raw = inp.value.trim(), v = Number(raw.replace(",", "."));
+      if (raw === "" || !Number.isFinite(v) || v < 0) { toast("Escribe la cantidad"); return; }
+      ok.disabled = true;
+      try { await api("editar", { id: Number(b.dataset.e), cantidad: kg ? Math.round(v * 1000) : v }); toast("Cantidad cambiada ✔"); await refrescar(); }
+      catch (_) { ok.disabled = false; toast("Sin conexión: no se ha podido cambiar"); }
+    };
+    ok.onclick = guardar; inp.onkeydown = (e) => { if (e.key === "Enter") guardar(); };
+  });
   c.querySelectorAll("button[data-b]").forEach((b) => b.onclick = async () => {
     if (b.dataset.conf !== "1") { b.dataset.conf = "1"; b.textContent = "¿Borrar?"; setTimeout(() => { b.dataset.conf = ""; b.textContent = "✕"; }, 3000); return; }
     try { await api("borrar", { id: Number(b.dataset.b), dispositivo: DISP }); toast("Apunte borrado"); refrescar(); } catch (_) { toast("Sin conexión: no se ha podido borrar"); }
