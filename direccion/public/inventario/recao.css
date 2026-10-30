@@ -1,0 +1,32 @@
+/* ==========================================================
+   Recao · tokens de marca v2.0
+   Úsalo en web, app y piezas: <link rel="stylesheet" href="recao.css">
+   ========================================================== */
+@font-face{font-family:'Basteleur';font-style:normal;font-weight:700;font-display:swap;src:url(fuentes/Basteleur-Bold.woff2) format('woff2')}
+@font-face{font-family:'Basteleur Moonlight';font-style:normal;font-weight:400;font-display:swap;src:url(fuentes/Basteleur-Moonlight.woff2) format('woff2')}
+@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-weight:300 800;font-stretch:75% 100%;font-display:swap;src:url(fuentes/BricolageGrotesque-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-weight:300 800;font-stretch:75% 100%;font-display:swap;src:url(fuentes/BricolageGrotesque-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'DM Mono';font-style:normal;font-weight:400;font-display:swap;src:url(fuentes/DMMono-normal-400-latin.woff2) format('woff2')}
+@font-face{font-family:'DM Mono';font-style:normal;font-weight:500;font-display:swap;src:url(fuentes/DMMono-normal-500-latin.woff2) format('woff2')}
+
+:root{
+  /* color */
+  --r-albero:#F1BE49; --r-tinta:#1E272E; --r-cal:#FBF8F1; --r-crema:#FFF1D4;
+  --r-patio:#317039; --r-almagra:#C8462A; --r-azulejo:#2B4A8B; --r-noche:#36414A; --r-piedra:#8A857A;
+  --r-papel:#FFFDF8; /* superficie de tarjetas */
+  --r-linea:rgba(30,39,46,.14);
+  /* tipografía */
+  --r-display:'Basteleur',Georgia,serif;          /* titulares: como el logo */
+  --r-cita:'Basteleur Moonlight',Georgia,serif;   /* citas y destacados, nunca < 24px */
+  --r-sans:'Bricolage Grotesque',system-ui,-apple-system,sans-serif;
+  --r-mono:'DM Mono',ui-monospace,monospace;
+  --r-soft:normal;
+  /* forma */
+  --r-radio-s:10px; --r-radio:18px; --r-radio-l:28px; --r-pildora:999px;
+  --r-sombra:0 1px 0 rgba(30,39,46,.06),0 10px 30px -12px rgba(30,39,46,.25);
+}
+.r-display{font-family:var(--r-display);font-weight:700;letter-spacing:-.01em;line-height:.95}
+.r-titulo{font-family:var(--r-display);font-weight:700;line-height:1.05}
+.r-cita{font-family:var(--r-cita);font-weight:400;line-height:1.1}
+.r-texto{font-family:var(--r-sans);font-weight:400;line-height:1.55}
+.r-etiqueta{font-family:var(--r-mono);font-weight:500;text-transform:uppercase;letter-spacing:.14em;font-size:.75rem}
