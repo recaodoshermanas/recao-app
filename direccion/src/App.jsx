@@ -25,6 +25,7 @@ import { ProductoResumen, Catalogo, Familias, Proveedores, Salud } from "./produ
 import { Recepcion } from "./producto/Recepcion.jsx";
 import { ProductosRevisar } from "./producto/Revisar.jsx";
 import { AppTienda } from "./producto/AppTienda.jsx";
+import { Inventario } from "./producto/Inventario.jsx";
 import { MarketingResumen, MarketingClientes, MarketingCaptacion, MarketingCampanas, MarketingReputacion } from "./marketing/Marketing.jsx";
 import { TecSolicitudes } from "./tecnologia/Solicitudes.jsx";
 import { TecGuia } from "./tecnologia/Guia.jsx";
@@ -212,6 +213,7 @@ export default function App() {
   else if (area.id === "producto" && sub.id === "catalogo") contenido = <Catalogo extra={extra} />;
   else if (area.id === "producto" && sub.id === "recepcion") contenido = <Recepcion />;
   else if (area.id === "producto" && sub.id === "revisar") contenido = <ProductosRevisar />;
+  else if (area.id === "producto" && sub.id === "inventario") contenido = <Inventario />;
   else if (area.id === "producto" && sub.id === "app") contenido = <AppTienda />;
   else if (area.id === "producto" && sub.id === "familias") contenido = <Familias />;
   else if (area.id === "producto" && sub.id === "proveedores") contenido = <Proveedores />;
