@@ -69,7 +69,7 @@ export function RetiradasBanco() {
   return (
     <div className="card cf" id="retiradas-banco">
       <div className="head">
-        <div><h2>Retiradas del banco por asignar</h2><p className="sub">Efectivo sacado de BBVA desde el 1 de octubre. Di a dónde fue cada retirada (se puede repartir). Las de La Caixa se apuntan a mano en la recarga hasta que llegue su extracto.</p></div>
+        <div><h2>Retiradas del banco por asignar</h2><p className="sub">Retiradas de BBVA de octubre anteriores al 30/10. Las retiradas nuevas (BBVA y La Caixa) entran solas en Efectivo de sobres y ya no pasan por aquí.</p></div>
         <button className="btn-txt" onClick={() => setVerTodas(!verTodas)}>{verTodas ? "Ver solo las pendientes" : `Ver todas (${d.retiradas.length})`}</button>
       </div>
       {lista.length === 0 ? <p className="empty">{verTodas ? "No hay retiradas de efectivo de BBVA desde el 1 de octubre." : "Todas las retiradas están asignadas."}</p> : (

@@ -1,6 +1,6 @@
 // Finanzas → Caja: cuadro «Caja fuerte» (solicitud #11). Dinero de dirección en la tienda para pagar a proveedores:
 // saldo = recargas apuntadas − facturas pagadas con «Caja fuerte». Solo dirección.
-// #84: cada recarga dice de dónde sale el dinero (Efectivo de sobres, una retirada de BBVA o La Caixa), y se puede repartir.
+// #84: antes cada recarga decía de dónde salía el dinero. #118: ahora sale siempre de Efectivo de sobres; las retiradas del banco entran solas en Efectivo y se enlazan con la recarga.
 import { useCallback, useEffect, useState } from "react";
 import { sb } from "../../src/lib/supabase.js";
 import { Panel, avisar, hoyStr, fechaCorta, Cargando } from "./ui.jsx";
@@ -34,6 +34,12 @@ export function CajaFuerte() {
   const saldo = Number(d.saldo), minimo = Number(d.minimo);
   const empezado = movs.some((m) => m.tipo === "recarga");
   const visibles = verTodo ? movs : movs.slice(0, 8);
+  const banco = d.banco || { pendientes: [], por_elegir: [] };
+  const accion = async (fn, args, ok) => {
+    try { setD(await sb.rpc(fn, args)); avisar(ok); avisarCambioEfectivo(); } catch (e) { avisar(e.message || "No se ha podido hacer", "mal"); }
+  };
+  const quitarPendiente = (x) => { if (window.confirm(`¿Quitar la entrada «Pendiente del banco» de ${eur(x.importe, 2)}? Efectivo de sobres bajará esa cantidad.`)) accion("efectivo_banco_pendiente_quitar", { p_id: Number(x.id) }, "Entrada pendiente quitada"); };
+  const avisos = banco.pendientes.filter((x) => x.aviso);
   return (
     <>
     <EfectivoVivo />
@@ -60,6 +66,23 @@ export function CajaFuerte() {
           </div>
         </>
       )}
+      {avisos.map((x) => (
+        <div key={x.id} className="cf-baja">
+          <b>Retirada pendiente del banco sin aparecer:</b> {fechaCorta(x.fecha)} · {x.banco} · {eur(x.importe, 2)}.
+          <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {x.retiradas.map((r) => <button key={r.movimiento_id} className="btn-l" onClick={() => accion("efectivo_banco_enlazar", { p_mov: Number(r.movimiento_id), p_recarga: Number(x.recarga_id) }, "Enlazada")}>Enlazar con la retirada del {fechaCorta(r.fecha)} ({eur(r.importe, 2)})</button>)}
+            <button className="btn-txt peligro" onClick={() => quitarPendiente(x)}>Quitar la entrada pendiente</button>
+          </div>
+        </div>
+      ))}
+      {banco.por_elegir.map((x) => (
+        <div key={x.recarga_id} className="cf-baja">
+          <b>Elegir retirada del banco</b> para la recarga del {fechaCorta(x.fecha)} de {eur(x.importe, 2)}: encajan varias.
+          <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {x.retiradas.map((r) => <button key={r.movimiento_id} className="btn-l" onClick={() => accion("efectivo_banco_enlazar", { p_mov: Number(r.movimiento_id), p_recarga: Number(x.recarga_id) }, "Enlazada")}>{r.banco} · {fechaCorta(r.fecha)} · {eur(r.importe, 2)}</button>)}
+          </div>
+        </div>
+      ))}
       {movs.length > 0 && (
         <div className="tabla-scroll">
           <table className="ranking cf-movs">
@@ -69,11 +92,15 @@ export function CajaFuerte() {
                 <tr key={`${m.tipo}-${m.id}`}>
                   <td>{fechaCorta(m.fecha)}</td>
                   <td>{m.tipo === "recarga" ? <span className="cf-chip in">Recarga</span> : <span className="cf-chip out">Pago</span>} {m.concepto}
-                    {m.tipo === "recarga" && <span className="pf">{m.origenes?.length ? `De: ${m.origenes.map((o) => `${ORIGENES[o.origen] || o.origen}${o.fecha_mov && o.origen === "bbva" ? ` (retirada del ${fechaCorta(o.fecha_mov)})` : ""} ${eur(o.importe, 2)}`).join(" · ")}` : "Sin origen apuntado"}</span>}</td>
+                    {m.tipo === "recarga" && <span className="pf">{[
+                      "De: Efectivo de sobres",
+                      m.pend && `Pendiente del banco (${m.pend}): la retirada aún no ha llegado`,
+                      m.enlace && `Retirada de ${m.enlace.banco} del ${fechaCorta(m.enlace.fecha)}${m.enlace.auto ? "" : " (enlazada a mano)"}`,
+                    ].filter(Boolean).join(" · ")}{(m.origenes || []).some((o) => o.origen !== "sobres") ? ` · Antes: ${m.origenes.map((o) => `${ORIGENES[o.origen] || o.origen} ${eur(o.importe, 2)}`).join(" + ")}` : ""}</span>}</td>
                   <td>{m.quien || "—"}</td>
                   <td className={`r b ${Number(m.importe) < 0 ? "down" : "up"}`}>{Number(m.importe) > 0 ? "+" : ""}{eur(m.importe, 2)}</td>
                   <td className={`r ${Number(m.saldo_tras) < 0 ? "down" : ""}`}>{eur(m.saldo_tras, 2)}</td>
-                  <td className="r">{m.tipo === "recarga" && <button className="btn-txt peligro" onClick={() => quitar(m)}>Quitar</button>}</td>
+                  <td className="r">{m.tipo === "recarga" && m.enlace && <button className="btn-txt" onClick={() => accion("efectivo_banco_enlace_quitar", { p_recarga: Number(m.id) }, "Enlace quitado")}>Desenlazar</button>}{m.tipo === "recarga" && <button className="btn-txt peligro" onClick={() => quitar(m)}>Quitar</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -92,68 +119,42 @@ function NuevaRecarga({ saldo, socio, onClose, onGuardada }) {
   const [importe, setImporte] = useState("");
   const [fecha, setFecha] = useState(hoyStr());
   const [nota, setNota] = useState("");
-  const [origenes, setOrigenes] = useState([{ origen: socio ? "sobres" : "bbva", importe: "", movimiento_id: "" }]);
-  const [retiradas, setRetiradas] = useState(null);
+  const [pend, setPend] = useState(false);
+  const [banco, setBanco] = useState("BBVA");
   const [busy, setBusy] = useState(false);
-  useEffect(() => { sb.rpc("banco_retiradas").then((r) => setRetiradas((r.retiradas || []).filter((x) => Number(x.pendiente) > 0.005))).catch(() => setRetiradas([])); }, []);
   const x = numeroEur(importe);
-  const set = (i, k, v) => setOrigenes(origenes.map((o, j) => (j === i ? { ...o, [k]: v, ...(k === "origen" ? { movimiento_id: "" } : {}) } : o)));
-  // con un solo origen, su importe es el total
-  const vals = origenes.map((o) => ({ ...o, x: origenes.length === 1 ? x : numeroEur(o.importe) }));
-  const suma = r2(vals.reduce((t, o) => t + (Number.isFinite(o.x) ? o.x : 0), 0));
   const errores = [];
   if (importe && !(x > 0)) errores.push("Pon un importe mayor que 0, con 2 decimales como mucho.");
-  if (x > 0 && vals.some((o) => !(o.x > 0))) errores.push("Cada origen tiene que tener un importe mayor que 0.");
-  if (x > 0 && suma !== r2(x)) errores.push(`Los orígenes suman ${eur(suma, 2)} y el total es ${eur(x, 2)}.`);
-  if (vals.some((o) => o.origen === "bbva" && !o.movimiento_id)) errores.push("Elige la retirada de BBVA.");
-  const porMov = {};
-  vals.forEach((o) => { if (o.origen === "bbva" && o.movimiento_id && Number.isFinite(o.x)) porMov[o.movimiento_id] = r2((porMov[o.movimiento_id] || 0) + o.x); });
-  Object.entries(porMov).forEach(([id, t]) => { const rt = (retiradas || []).find((r) => String(r.id) === id); if (rt && t > Number(rt.pendiente)) errores.push(`A la retirada del ${fechaCorta(rt.fecha)} solo le quedan ${eur(rt.pendiente, 2)} sin asignar.`); });
+  if (!socio) errores.push("Solo los socios pueden sacar dinero de Efectivo de sobres.");
   const ok = x > 0 && fecha && errores.length === 0;
   const guardar = async () => {
     if (!ok) return;
     setBusy(true);
     try {
-      const p = { importe: r2(x), fecha, nota: nota.trim() || null, origenes: vals.map((o) => ({ origen: o.origen, importe: r2(o.x), ...(o.origen === "bbva" ? { movimiento_id: Number(o.movimiento_id) } : {}) })) };
+      const p = { importe: r2(x), fecha, nota: nota.trim() || null, origenes: [{ origen: "sobres", importe: r2(x) }], ...(pend ? { pendiente_banco: banco } : {}) };
       onGuardada(await sb.rpc("caja_fuerte_recargar", { p }));
       avisar("Recarga apuntada");
     } catch (e) { avisar(e.message || "No se ha podido guardar", "mal"); }
     setBusy(false);
   };
-  const opciones = [...(socio ? ["sobres"] : []), "bbva", "caixa"];
   return (
-    <Panel titulo="Añadir dinero a caja" sub="Lo que metéis en la caja fuerte de la tienda y de dónde sale. Se apunta solo aquí: si sale de Efectivo de sobres, su salida se crea sola allí." onClose={onClose} ancho="520px"
+    <Panel titulo="Añadir dinero a caja" sub="Lo que metéis en la caja fuerte de la tienda. Sale siempre de Efectivo de sobres (su salida «Caja fuerte» se crea sola allí). Las retiradas del banco entran solas en Efectivo." onClose={onClose} ancho="520px"
       pie={<button className="btn-p" onClick={guardar} disabled={busy || !ok}>{busy ? "Guardando…" : "Guardar"}</button>}>
       <div className="fila-campos">
-        <label className="campo">Importe total (€)<input inputMode="decimal" value={importe} onChange={(e) => setImporte(e.target.value)} placeholder="1000" autoFocus /></label>
+        <label className="campo">Importe (€)<input inputMode="decimal" value={importe} onChange={(e) => setImporte(e.target.value)} placeholder="1000" autoFocus /></label>
         <label className="campo">Fecha<input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></label>
       </div>
       <label className="campo">Nota (opcional)<input value={nota} maxLength={200} onChange={(e) => setNota(e.target.value)} placeholder="Ej.: recarga de la semana" /></label>
-      <div className="campo-t"><span>¿De dónde sale?{origenes.length > 1 ? " (repartido)" : ""}</span></div>
-      {origenes.map((o, i) => (
-        <div key={i} style={{ border: "1px solid var(--line, #EBE3D5)", borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
-          <div className="seg" style={{ marginBottom: 8 }}>{opciones.map((k) => <button key={k} aria-pressed={o.origen === k} onClick={() => set(i, "origen", k)}>{ORIGENES[k]}</button>)}</div>
-          {o.origen === "bbva" && (
-            <label className="campo">Retirada de BBVA<select value={o.movimiento_id} onChange={(e) => set(i, "movimiento_id", e.target.value)}>
-              <option value="">{retiradas === null ? "Cargando…" : retiradas.length ? "Elegir…" : "No hay retiradas de BBVA sin asignar"}</option>
-              {(retiradas || []).map((r) => <option key={r.id} value={r.id}>{fechaCorta(r.fecha)} · {eur(r.importe, 2)} (sin asignar {eur(r.pendiente, 2)})</option>)}
-            </select></label>
-          )}
-          {o.origen === "caixa" && <p className="sub" style={{ marginTop: 0 }}>Importe a mano hasta que llegue el extracto de La Caixa.</p>}
-          {o.origen === "sobres" && <p className="sub" style={{ marginTop: 0 }}>Crea la salida «Caja fuerte» en Efectivo de sobres (no es gasto).</p>}
-          {origenes.length > 1 && (
-            <div className="fila-campos">
-              <label className="campo">Importe (€)<input inputMode="decimal" value={o.importe} onChange={(e) => set(i, "importe", e.target.value)} /></label>
-              <div style={{ alignSelf: "end", paddingBottom: 8 }}><button className="btn-txt peligro" onClick={() => setOrigenes(origenes.filter((_, j) => j !== i))}>Quitar</button></div>
-            </div>
-          )}
-        </div>
-      ))}
-      <button className="btn-l" onClick={() => {
-        const base = origenes.length === 1 ? [{ ...origenes[0], importe: Number.isFinite(x) ? String(x).replace(".", ",") : "" }] : origenes;
-        const resto = Number.isFinite(x) ? r2(x - base.reduce((t, o) => t + (Number.isFinite(numeroEur(o.importe)) ? numeroEur(o.importe) : 0), 0)) : 0;
-        setOrigenes([...base, { origen: opciones.find((k) => !base.some((b) => b.origen === k)) || "caixa", importe: resto > 0 ? String(resto).replace(".", ",") : "", movimiento_id: "" }]);
-      }}>+ Repartir entre varios orígenes</button>
+      <label className="campo" style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+        <input type="checkbox" checked={pend} onChange={(e) => setPend(e.target.checked)} style={{ width: "auto" }} />
+        Viene de una retirada del banco que aún no ha salido
+      </label>
+      {pend && (
+        <>
+          <div className="seg" style={{ marginBottom: 8 }}>{["BBVA", "La Caixa"].map((k) => <button key={k} aria-pressed={banco === k} onClick={() => setBanco(k)}>{k}</button>)}</div>
+          <p className="sub" style={{ marginTop: 0 }}>Entra en Efectivo de sobres una entrada «Pendiente del banco» por este importe, para que Efectivo no baje. Se confirma sola cuando llegue la retirada.</p>
+        </>
+      )}
       {errores.map((e) => <p key={e} className="cf-alerta" style={{ marginTop: 10 }}>{e}</p>)}
       <div className="cf-previa">
         <span>Ahora</span><b>{eur(saldo, 2)}</b>

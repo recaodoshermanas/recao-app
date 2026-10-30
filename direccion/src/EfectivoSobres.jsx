@@ -65,7 +65,7 @@ export function EfectivoSobres() {
             <div><small>Saldo inicial</small><b>{eur(d.saldo_inicial, 2)}</b><span>Lo que quedó del mes anterior</span></div>
           )}
           <div><small>{sp ? "Sobres de septiembre" : "Entrada"}</small><b>{eur(d.entrada, 2)}</b><span>Sobres de {mesAnio(`${d.mes_sobres}-01`).toLowerCase()}, abiertos el día 1{sp ? " (se meten en Cierre de mes → Apertura de sobres)" : ""}</span></div>
-          {Number(d.otras_entradas) > 0 && <div><small>Otras entradas</small><b>{eur(d.otras_entradas, 2)}</b><span>Retiradas del banco que fueron a efectivo guardado (se asignan en Caja)</span></div>}
+          {Number(d.otras_entradas) > 0 && <div><small>Otras entradas</small><b>{eur(d.otras_entradas, 2)}</b><span>Retiradas del banco (entran solas) y entradas «Pendiente del banco»</span></div>}
           <div><small>Salidas</small><b>{eur(d.total_salidas, 2)}</b><span>{d.salidas.length} movimiento{d.salidas.length === 1 ? "" : "s"}</span></div>
           <div className={`es-saldo${saldo < 0 ? " neg" : ""}`}><small>Queda guardado</small><b>{eur(saldo, 2)}</b></div>
         </div>
@@ -82,7 +82,7 @@ export function EfectivoSobres() {
               <thead><tr><th>Día</th><th>Otras entradas</th><th>Apuntado por</th><th className="r">Importe</th><th></th></tr></thead>
               <tbody>{otras.map((o) => (
                 <tr key={o.id}><td>{fechaCorta(o.fecha)}</td><td><span className="es-chip ban">Retirada del banco</span> {o.concepto}{o.nota ? <span className="pf">{o.nota}</span> : null}</td><td>{o.quien || "—"}</td>
-                  <td className="r b">+{eur(o.importe, 2)}</td><td className="r"><span className="pf">Se cambia en Caja → «Retiradas del banco»</span></td></tr>
+                  <td className="r b">+{eur(o.importe, 2)}</td><td className="r"><span className="pf">{String(o.id).startsWith("e") ? "Se enlaza o se quita en Caja" : "Se cambia en Caja → «Retiradas del banco»"}</span></td></tr>
               ))}</tbody>
             </table>
           </div>
