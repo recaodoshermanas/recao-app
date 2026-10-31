@@ -595,7 +595,7 @@ function DetalleMes({ mes, disponibles, onCambio, onEditMonth }) {
     setGuardando(null);
   };
   const fijos = mes.fijos_det || {};
-  const FIJ = { ss: "Seguridad Social", alquiler: "Alquiler", iva_alquiler: "IVA del alquiler", luz: "Luz", agua: "Agua", ayuntamiento: "Ayuntamiento", asesoria: "Asesoría", securitas: "Securitas", epos: "Epos", anthropic: "Anthropic-Claude", whatsapp: "WhatsApp Business", whatsapp_varios: "WhatsApp Business - Servicios Varios" };
+  const FIJ = { ss: "Seguridad Social", alquiler: "Alquiler", iva_alquiler: "IVA del alquiler", luz: "Luz", agua: "Agua", ayuntamiento: "Ayuntamiento", asesoria: "Asesoría", securitas: "Securitas", epos: "Epos", anthropic: "Anthropic-Claude", whatsapp: "WhatsApp Business", whatsapp_varios: "WhatsApp Business - Servicios Varios", hetzner: "Hetzner - Servidor" };
   return (
     <div className="grid">
       <Comparacion mes={mes} disponibles={disponibles} />
