@@ -13,8 +13,10 @@ const numTxt = (n, d = 0) => Number(n || 0).toLocaleString("es-ES", { maximumFra
 
 export function StockCierre({ mes, onActivo }) {
   const [d, setD] = useState(null);
+  const [cmp, setCmp] = useState(null); // #119: comparación con el coste de Epos
   useEffect(() => {
-    let vivo = true; setD(null);
+    let vivo = true; setD(null); setCmp(null);
+    sb.rpc("stock_comparacion_epos", { p_mes: mes }).then((r) => { if (vivo) setCmp(r || null); }).catch(() => { if (vivo) setCmp(null); });
     sb.rpc("stock_cierre_mes", { p_mes: mes }).then((r) => { if (vivo) { setD(r || false); onActivo?.(!!r?.activo); } }).catch(() => { if (vivo) { setD(false); onActivo?.(false); } });
     return () => { vivo = false; };
   }, [mes]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -32,6 +34,15 @@ export function StockCierre({ mes, onActivo }) {
         : <div style={{ fontFamily: F, fontSize: 12.5, color: d.falta_final ? ROJO : C.mut, marginTop: 6, lineHeight: 1.4 }}>{d.falta_final ? "Falta la foto del stock del último día del mes: la Cuenta de resultados de este mes sigue con las compras hasta que haya foto." : "Este mes no tiene foto de stock inicial y final desde el inventario: la Cuenta de resultados usa las compras, como siempre."}</div>}
       {d.aplica && fila("", `${numTxt(d.variacion_unidades, 0)} uds${Number(d.variacion_kg) ? ` · ${numTxt(d.variacion_kg, 2)} kg` : ""}`, { color: C.mut, fontSize: 12, padding: 0 })}
       {d.aplica && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 6, lineHeight: 1.4 }}>Coste de la mercancía vendida = stock inicial + compras del mes − stock final. Es la cifra que usa la Cuenta de resultados.</div>}
+      {d.aplica && cmp?.aplica && (
+        <div style={{ borderTop: `1px solid ${C.brdL}`, marginTop: 10, paddingTop: 8 }}>
+          <div style={{ fontFamily: F, fontSize: 13.5, fontWeight: 700, color: C.char, marginBottom: 2 }}>Comparación del coste de lo vendido</div>
+          {fila("Según stock (stock inicial + compras − stock final)", <b>{fmt2(Number(cmp.segun_stock))}</b>)}
+          {fila("Según Epos (coste de cada venta, con IVA y recargo)", <b>{fmt2(Number(cmp.segun_epos))}</b>)}
+          {fila("Diferencia (stock − Epos)", <b>{fmt2(Number(cmp.diferencia))}{cmp.diferencia_pct != null ? ` · ${Number(cmp.diferencia_pct).toLocaleString("es-ES", { maximumFractionDigits: 1 })} %` : ""}</b>, { borderTop: `1px solid ${C.brdL}`, marginTop: 4, paddingTop: 6 })}
+          <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 6, lineHeight: 1.4 }}>Las dos cifras van a coste completo (con IVA y recargo). Epos usa el coste que tenía cada producto al venderse; las devoluciones restan.{Number(cmp.lineas_sin_coste) > 0 ? ` ${numTxt(cmp.lineas_sin_coste)} líneas vendidas tienen coste 0 en Epos y no suman al coste según Epos.` : ""}</div>
+        </div>
+      )}
       {(d.sin_valorar || []).length > 0 && (
         <details style={{ marginTop: 10, fontFamily: F, fontSize: 13 }}>
           <summary style={{ cursor: "pointer", fontWeight: 700, color: C.char }}>Sin valorar (sin coste en Epos): {d.sin_valorar.length} productos</summary>
