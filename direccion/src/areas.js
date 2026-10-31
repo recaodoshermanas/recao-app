@@ -25,6 +25,7 @@ export const AREAS = [
       { id: "efectivo", label: "Efectivo" },
       { id: "banco", label: "Banco" },
       { id: "gastos", label: "Gastos" },
+      { id: "stock", label: "Stock" },
     ],
   },
   {
