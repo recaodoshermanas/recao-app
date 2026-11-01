@@ -154,3 +154,9 @@
 .vc-l .vc-sub { font-size: 11.5px; }
 .vc-c .btn-txt { margin-left: 6px; border: 0; background: none; cursor: pointer; padding: 0 2px; }
 .vc-i { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.favisos .aviso-det { align-items: flex-start; }
+.favisos .aviso-det details { margin-top: 6px; font-weight: 400; font-size: 13px; }
+.favisos .aviso-det summary { cursor: pointer; color: var(--text-2); }
+.favisos .aviso-det ul { margin: 6px 0 0 18px; padding: 0; }
+.favisos .aviso-det .aviso-rev { margin-left: auto; flex-shrink: 0; font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }

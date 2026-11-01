@@ -118,6 +118,8 @@ export function FinanzasResumen({ onEditMonth }) {
   useEffect(() => {
     supabase.rpc("finanzas_avisos_extra").then(({ data }) => { if (Array.isArray(data)) setExtra(data); }, () => {});
   }, [d]);
+  // #131: marcar un aviso de coste/margen anormal como revisado (queda guardado quién y cuándo)
+  const revisar = (clave) => { supabase.rpc("finanzas_aviso_revisar", { p_clave: clave }).then(({ error }) => { if (!error) setExtra((e) => e.filter((x) => x.clave !== clave)); }, () => {}); };
   if (!d) return <Estado fallo={fallo} />;
   const c = mesEnCurso(d);
   const cerrados = d.meses.filter((m) => m.cerrado).slice(-12);
@@ -170,7 +172,9 @@ export function FinanzasResumen({ onEditMonth }) {
         <section className="avisos favisos" aria-label="Avisos">
           {avisos.map((a, i) => a.ruta
             ? <a key={i} className="aviso" href={`#/${a.ruta}`} onClick={a.mes && onEditMonth ? (e) => { e.preventDefault(); onEditMonth(a.mes); } : undefined}><b>!</b><span>{a.t}</span><i aria-hidden="true">→</i></a>
-            : <div key={i} className="aviso"><b>!</b><span>{a.t}</span></div>)}
+            : a.clave
+              ? <div key={i} className="aviso aviso-det"><b>!</b><span>{a.t}{(a.detalle || []).length > 0 && <details><summary>Ver detalle</summary><ul>{a.detalle.map((t, j) => <li key={j}>{t}</li>)}</ul></details>}</span><button type="button" className="aviso-rev" onClick={() => revisar(a.clave)}>Marcar como revisado</button></div>
+              : <div key={i} className="aviso"><b>!</b><span>{a.t}</span></div>)}
         </section>
       )}
 
