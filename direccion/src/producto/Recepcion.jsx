@@ -15,6 +15,12 @@ const AVISO = { sin_documento: "Sin factura", diferencia: "Diferencia", sin_codi
 const margen = (pvp, coste) => (pvp > 0 && coste != null ? (1 - coste / pvp) * 100 : null);
 
 // #66: ids de recepciones cuyo número es el código automático (el servidor no lo manda en sus listas)
+// #127: recepciones por correo cuyo documento no es el PDF original del proveedor
+function useFaltaPdf(clave) {
+  const [ids, setIds] = useState(() => new Set());
+  useEffect(() => { sb.select("recepciones", "select=id&falta_pdf=is.true").then((r) => setIds(new Set((r || []).map((x) => x.id)))).catch(() => {}); }, [clave]);
+  return ids;
+}
 function useGenerados(clave) {
   const [ids, setIds] = useState(() => new Set());
   useEffect(() => { sb.select("recepciones", "select=id&doc_numero_generado=is.true").then((r) => setIds(new Set((r || []).map((x) => x.id)))).catch(() => {}); }, [clave]);
@@ -195,6 +201,8 @@ const fechaHora = (t) => (t ? new Date(t).toLocaleString("es-ES", { day: "numeri
 
 function Pedidos({ proveedores, onCambio }) {
   const gen = useGenerados(0);
+  const [verPdf, setVerPdf] = useState(0);
+  const faltaPdf = useFaltaPdf(verPdf);
   const [f, setF] = useState({ q: "", proveedor: "", estado: "", desde: "", hasta: "" });
   const [filas, setFilas] = useState(null);
   const [total, setTotal] = useState(0);
@@ -227,7 +235,7 @@ function Pedidos({ proveedores, onCambio }) {
             <tbody>
               {filas.map((r) => (
                 <tr key={r.id} onClick={() => setAbierto(r.id)} style={{ cursor: "pointer" }}>
-                  <td><button className="btn-txt" style={{ textAlign: "left" }} onClick={(e) => { e.stopPropagation(); setAbierto(r.id); }}><span className="pn">{r.proveedor}</span></button><span className="pf">{[r.doc_tipo === "albaran" ? "Albarán" : r.doc_tipo === "factura" ? "Factura" : null, r.doc_numero].filter(Boolean).join(" ")}{gen.has(r.id) ? " · código interno" : ""}{r.prueba ? " · prueba" : ""}</span></td>
+                  <td><button className="btn-txt" style={{ textAlign: "left" }} onClick={(e) => { e.stopPropagation(); setAbierto(r.id); }}><span className="pn">{r.proveedor}</span></button><span className="pf">{[r.doc_tipo === "albaran" ? "Albarán" : r.doc_tipo === "factura" ? "Factura" : null, r.doc_numero].filter(Boolean).join(" ")}{gen.has(r.id) ? " · código interno" : ""}{r.prueba ? " · prueba" : ""}</span>{faltaPdf.has(r.id) && <span className="pf" style={{ color: "var(--warn, #8A5A00)", fontWeight: 700 }}>Falta el PDF de la factura</span>}</td>
                   <td>{VIA[r.via] || r.via}</td>
                   <td>{ESTADO[r.estado] || r.estado}</td>
                   <td>{r.recepcionado_por || "—"}</td>
@@ -242,7 +250,7 @@ function Pedidos({ proveedores, onCambio }) {
         </div>
       )}
       {filas && filas.length < total && <p style={{ textAlign: "center" }}><button className="btn-l" disabled={mas} onClick={() => { setMas(true); cargar(filas.length); }}>{mas ? "Cargando…" : `Ver más (${total - filas.length} restantes)`}</button></p>}
-      {abierto && <PedidoDetalle id={abierto} onClose={() => setAbierto(null)} onCambio={() => { cargar(0); onCambio(); }} />}
+      {abierto && <PedidoDetalle id={abierto} onClose={() => setAbierto(null)} onCambio={() => { cargar(0); setVerPdf((n) => n + 1); onCambio(); }} />}
     </>
   );
 }
@@ -279,6 +287,23 @@ function PedidoDetalle({ id, onClose, onCambio }) {
   const rec = d.recepcion;
   const doc = d.fotos.length ? d.fotos : [rec.foto_url].filter(Boolean);
   const esPdf = !!rec.doc_url;
+  const docEsPdf = /\.pdf$/i.test(rec.doc_path || "");
+  // #127: subir el PDF original de la factura cuando el documento guardado no es un PDF (.EUR de Ayala, texto…)
+  const subirPdf = async (ev) => {
+    const f = ev.target.files?.[0]; ev.target.value = "";
+    if (!f) return;
+    if (!/\.pdf$/i.test(f.name) && f.type !== "application/pdf") { avisar("Tiene que ser el PDF de la factura", "mal"); return; }
+    if (f.size > 15 * 1024 * 1024) { avisar("El PDF es demasiado grande (máximo 15 MB)", "mal"); return; }
+    setBusy(true);
+    try {
+      const b64 = await new Promise((ok, mal) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => mal(new Error("No se ha podido leer el archivo")); r.readAsDataURL(f); });
+      await sb.fn("recepcion-pdf", { accion: "subir_pdf", id, nombre: f.name, base64: b64 });
+      setD(await fn("pedido_abrir", { id }));
+      avisar("PDF de la factura guardado");
+      onCambio();
+    } catch (e) { avisar(e.message || "No se ha podido subir el PDF", "mal"); }
+    setBusy(false);
+  };
   const cambiar = (lid, c) => setEd((x) => ({ ...x, [lid]: { ...(x[lid] || {}), ...c } }));
   const val = (l, k, def) => (ed[l.id]?.[k] !== undefined ? ed[l.id][k] : def);
   const cambios = d.lineas.map((l) => {
@@ -316,7 +341,14 @@ function PedidoDetalle({ id, onClose, onCambio }) {
     <Panel titulo={`${rec.proveedor}${rec.doc_numero ? ` · ${rec.doc_numero}${gen.has(rec.id) ? " (código interno)" : ""}` : ""}`} sub={`${ESTADO[rec.estado] || rec.estado}${rec.prueba ? " · de prueba" : ""} · recepcionó ${d.recepcionado_por || "—"} · ${fechaHora(rec.confirmado_en || rec.creado_en)}`} onClose={onClose} ancho={920}
       pie={d.corregible ? <button className="btn-p" disabled={busy || !cambios.length} onClick={guardar}>{busy ? "Guardando…" : `Guardar correcciones${cambios.length ? ` (${cambios.length})` : ""}`}</button> : <span className="sub">Solo se corrigen pedidos ya confirmados.</span>}>
       <div style={{ display: "grid", gap: 12, marginBottom: 14 }}>
-        {rec.doc_url && <a className="btn-l" href={rec.doc_url} target="_blank" rel="noreferrer" style={{ justifySelf: "start" }}>Abrir el documento (PDF)</a>}
+        {rec.falta_pdf && (
+          <div style={{ background: "var(--warn-bg, #FFF1D4)", color: "var(--warn, #8A5A00)", borderRadius: 10, padding: "10px 12px", display: "grid", gap: 8 }}>
+            <div><b>Falta el PDF de la factura.</b> El documento guardado no es el PDF original del proveedor{/\.eur$/i.test(rec.doc_path || "") ? " (es el archivo .EUR)" : ""}, y ese PDF es el que vale para la gestoría. Si llega por correo se pone solo; si lo tienes, súbelo aquí.</div>
+            <label className="btn-p" style={{ justifySelf: "start", cursor: busy ? "default" : "pointer" }}>{busy ? "Subiendo…" : "Subir PDF de la factura"}<input type="file" accept="application/pdf,.pdf" onChange={subirPdf} disabled={busy} style={{ display: "none" }} /></label>
+          </div>
+        )}
+        {rec.doc_url && <a className="btn-l" href={rec.doc_url} target="_blank" rel="noreferrer" style={{ justifySelf: "start" }}>{docEsPdf ? "Abrir el documento (PDF)" : "Abrir el documento guardado"}</a>}
+        {rec.doc_original_path && <button className="btn-txt" style={{ justifySelf: "start" }} onClick={async () => { const w = window.open("", "_blank"); try { const r = await sb.fn("recepcion-pdf", { accion: "original", id }); if (r?.url) w.location = r.url; else { w.close(); avisar("No encuentro el archivo original", "mal"); } } catch (e) { w.close(); avisar(e.message, "mal"); } }}>Archivo original del correo (antes del PDF)</button>}
         {!esPdf && doc.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer"><img src={u} alt={`Documento, foto ${i + 1}`} style={{ maxWidth: "100%", maxHeight: 420, borderRadius: 10, border: "1px solid var(--line)" }} /></a>)}
         {!doc.length && !rec.doc_url && <p className="sub">Este pedido no tiene foto ni PDF.</p>}
       </div>

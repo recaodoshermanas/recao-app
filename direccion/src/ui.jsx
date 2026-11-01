@@ -19,13 +19,18 @@ export const lunesDe = (f) => { const d = new Date(`${f}T12:00:00`); d.setDate(d
 // Panel lateral (en móvil, a pantalla completa desde abajo)
 export function Panel({ titulo, sub, onClose, children, pie, ancho }) {
   const ref = useRef(null);
+  // onClose suele llegar como función nueva en cada render de la pantalla de detrás (que se refresca sola): se guarda aparte
+  // para que el panel no vuelva a coger el foco y no se le quite al campo en el que se está escribiendo.
+  const cerrarRef = useRef(onClose);
+  cerrarRef.current = onClose;
   useEffect(() => {
-    const k = (e) => { if (e.key === "Escape") onClose(); };
+    const k = (e) => { if (e.key === "Escape") cerrarRef.current?.(); };
     document.addEventListener("keydown", k);
-    const prev = document.activeElement; ref.current?.focus();
+    const prev = document.activeElement;
+    if (!ref.current?.contains(document.activeElement)) ref.current?.focus();
     document.body.classList.add("con-panel");
     return () => { document.removeEventListener("keydown", k); document.body.classList.remove("con-panel"); prev?.focus?.(); };
-  }, [onClose]);
+  }, []);
   return (
     <div className="panel-fondo" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <aside className="panel" role="dialog" aria-modal="true" aria-label={typeof titulo === "string" ? titulo : undefined} tabIndex={-1} ref={ref} style={ancho ? { width: ancho } : undefined}>
