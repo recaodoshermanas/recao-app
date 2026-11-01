@@ -22,9 +22,11 @@ export function GastosFijos({ mes, valores, onValores, guardarRef }) {
     if (mes < DESDE) { setBusq(false); return; }
     let vivo = true;
     setBusq(null); setSrc({});
-    Promise.all([sb.rpc("gf_buscar", { p_mes: mes }), sb.select("gf_cierre", `select=concepto,origen,importe,movimientos&mes=eq.${mes}`)])
-      .then(([res, guardados]) => {
+    // #124: si el mes está cerrado (o no se sabe) no se recalcula nada; si está abierto se vuelve a buscar en el banco
+    Promise.all([sb.rpc("gf_buscar", { p_mes: mes }), sb.select("gf_cierre", `select=concepto,origen,importe,movimientos&mes=eq.${mes}`), sb.rpc("cierre_mes_estado", { p_mes: mes }).catch(() => false)])
+      .then(([res, guardados, est]) => {
         if (!vivo) return;
+        const cerrado = !est || !!est.cerrado;
         const por = Object.fromEntries((res || []).map((r) => [r.clave, r]));
         const gu = Object.fromEntries((guardados || []).map((g) => [g.concepto, g]));
         const s = {}; const nuevos = {};
@@ -32,7 +34,16 @@ export function GastosFijos({ mes, valores, onValores, guardarRef }) {
           const r = por[c]; if (!r) continue;
           if (gu[c]) {
             const vistos = [...(r.movs || []), ...(r.opciones || []).map((o) => o.mov)];
-            s[c] = { origen: gu[c].origen, movs: (gu[c].movimientos || []).map((id) => vistos.find((m) => m.id === id) || { id }), sin_cargo: false };
+            const guardado = { origen: gu[c].origen, movs: (gu[c].movimientos || []).map((id) => vistos.find((m) => m.id === id) || { id }), sin_cargo: false };
+            if (!cerrado && gu[c].origen === "banco" && (r.estado === "encontrado" || r.estado === "sin_cargo")) {
+              // #124: mes abierto → se vuelve a buscar en el banco (entran los cargos que han llegado después)
+              s[c] = { origen: "banco", movs: r.movs || [], sin_cargo: r.estado === "sin_cargo" };
+              nuevos[c] = r.importe;
+              if (c === "alquiler") nuevos.iva_alquiler = r.iva;
+            } else {
+              s[c] = guardado; // a mano, elegido entre opciones, no encontrado o mes cerrado: se respeta lo guardado
+              if (!cerrado && !(num(valoresRef.current[c]) > 0) && num(gu[c].importe) > 0) nuevos[c] = gu[c].importe; // nunca un 0 por no haberse rellenado
+            }
             continue;
           }
           const actual = num(valoresRef.current[c]);
