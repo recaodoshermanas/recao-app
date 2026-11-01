@@ -198,6 +198,8 @@ export function WorkerView({ facturas, proveedores, onReload, user, panel = fals
                         {f.tipo_pago && <span style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: (ESTILO_PAGO[f.tipo_pago] || ESTILO_PAGO.efectivo)[0], color: (ESTILO_PAGO[f.tipo_pago] || ESTILO_PAGO.efectivo)[1] }}>{etiquetaPago(f.tipo_pago)}</span>}
                         {f.doc_numero && <span>· {f.doc_numero}</span>}
                         {f.doc_numero && f.recepcion_id && /^[A-Z0-9]{3}\d{6}(-\d+)?$/.test(f.doc_numero) && <span style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: "#F0ECE2", color: "#5E5444" }}>código interno</span>}
+                        {f.importe_provisional && <span title="Importe calculado con el archivo .EUR: se ajusta con el total del PDF cuando llegue" style={{ fontSize: "11px", fontWeight: 600, padding: "1px 7px", borderRadius: "999px", background: "#F0ECE2", color: "#5E5444" }}>importe provisional</span>}
+                        {f.revisar && <span title={f.revisar} style={{ fontSize: "11px", fontWeight: 700, padding: "1px 7px", borderRadius: "999px", background: "#FFF1D4", color: "#8A5A00" }}>⚠ {f.revisar}</span>}
                         {f.nota && <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {f.nota}</span>}
                         {!canEdit && <span style={{ fontStyle: "italic", color: C.mutL }}>· de otra persona</span>}
                       </div>
