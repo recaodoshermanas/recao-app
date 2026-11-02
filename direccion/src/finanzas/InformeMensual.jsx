@@ -154,6 +154,7 @@ const mesCortoDe = (m) => mesAnio(`${m}-01`);
 const MET = {
   ventas: ["Venta de Epos (con IVA)", (v) => eur(v, 0)], tickets: ["Tickets", (v) => num(v)], ticket_medio: ["Ticket medio", (v) => eur(v, 2)],
   venta_dia: ["Venta media por día", (v) => eur(v, 0)], margen_pct: ["Margen real de Epos", (v) => pct(v, 1)],
+  margen_epos_pct: ["Margen según Epos (costes sin IVA ni recargo)", (v) => pct(v, 1)],
   coste_vendido: ["Coste de lo vendido (Epos)", (v) => eur(v, 0)], compras: ["Compras de mercancía", (v) => eur(v, 0)], dif_compras_coste: ["Compras menos coste de lo vendido", (v) => eur(v, 0)],
   res_tienda: ["Resultado de la tienda", (v) => eur(v, 0)], res_paqueteria: ["Resultado de la paquetería", (v) => eur(v, 0)], resultado: ["Beneficio del negocio", (v) => eur(v, 0)],
   gastos: ["Gastos totales", (v) => eur(v, 0)], mercancia: ["Compras de mercancía (gasto)", (v) => eur(v, 0)], personal: ["Personal (total)", (v) => eur(v, 0)],
@@ -186,7 +187,8 @@ function TablaComp({ d, ks, mes }) {
           <tbody>
             {ks.map((k) => {
               const f = filas.find((x) => x.k === k); if (!f) return null;
-              const [l, fm] = MET[k]; const esPct = k === "margen_pct";
+              const [l0, fm] = MET[k]; const esPct = k === "margen_pct" || k === "margen_epos_pct";
+              const l = k === "margen_pct" && f.real ? "Margen real (coste completo: con IVA y recargo)" : l0;
               const dm = esPct ? ppDif(f.dif_media) : f.pct_media != null ? `${pctVar(f.pct_media)}` : eurDif(f.dif_media);
               const da = esPct ? ppDif(f.dif_aa) : f.pct_aa != null ? `${pctVar(f.pct_aa)}` : eurDif(f.dif_aa);
               return (
@@ -237,7 +239,7 @@ function InformeV2({ inf }) {
       <Apartado n="1" titulo="El mes en una línea y cifras clave" texto={c.resumen}>
         <dl className="inf-kpis inf-kpis5">
           <div><dt>Venta de Epos</dt><dd>{eur(k.ventas, 0)}</dd></div>
-          <div><dt>Margen real</dt><dd>{k.margen_pct == null ? "–" : pct(k.margen_pct, 1)}</dd></div>
+          <div><dt>Margen real</dt><dd>{k.margen_pct == null ? "–" : pct(k.margen_pct, 1)}</dd>{k.margen_epos_con_iva_pct != null && <small className="inf-nota">Según Epos: {pct(k.margen_epos_con_iva_pct, 1)}</small>}</div>
           <div><dt>Resultado del mes</dt><dd>{eur(k.resultado, 0)}</dd></div>
           <div><dt>Descuadres de caja</dt><dd>{eur(k.descuadres_caja, 2)}</dd></div>
           <div><dt>Dinero total a fin de mes</dt><dd>{k.dinero_total == null ? "–" : eur(k.dinero_total, 0)}</dd></div>
@@ -249,7 +251,8 @@ function InformeV2({ inf }) {
       </Apartado>
 
       <Apartado n="3" titulo="Margen" texto={c.margen}>
-        <TablaComp d={d} mes={mes} ks={["margen_pct", "coste_vendido", "compras", "dif_compras_coste"]} />
+        <TablaComp d={d} mes={mes} ks={d.version >= 3 ? ["margen_pct", "margen_epos_pct", "coste_vendido", "compras", "dif_compras_coste"] : ["margen_pct", "coste_vendido", "compras", "dif_compras_coste"]} />
+        {d.version >= 3 && <p className="inf-nota">Margen real = (venta con IVA − coste completo) / venta con IVA. Coste completo = coste de Epos + IVA + recargo de equivalencia según el grupo de IVA del producto (21 % + 5,2 %; 10 % + 1,4 %; 4 % + 0,5 %). Epos guarda los costes sin IVA ni recargo; en recargo de equivalencia esos impuestos son coste.</p>}
       </Apartado>
 
       <Apartado n="4" titulo="Tienda y paquetería" texto={c.tienda_paq}>
@@ -395,8 +398,10 @@ function InformeV2({ inf }) {
         ) : <p className="inf-nota">No hay plazos de impuestos próximos.</p>}
       </Apartado>
 
+      {d.debiles && <Debiles db={d.debiles} texto={c.debiles} mes={mes} />}
+
       <section className="inf-ap">
-        <h3><span>14</span> Puntos para la reunión</h3>
+        <h3><span>{d.debiles ? 15 : 14}</span> Puntos para la reunión</h3>
         {(c.avisos || []).length ? <ul className="inf-avisos">{c.avisos.map((t, i) => <li key={i}>{t}</li>)}</ul> : <p className="inf-com">Sin puntos.</p>}
         {(d.avisos_finanzas || []).length > 0 && (
           <>
@@ -409,8 +414,97 @@ function InformeV2({ inf }) {
   );
 }
 
+// #130: «Puntos débiles y tensiones». Todas las cifras vienen calculadas (fin_informe_debiles); aquí solo se pintan.
+const DIA_SEM = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+const vsMedia = (a, m, fm) => (m == null ? "sin meses anteriores" : `media de los meses anteriores: ${fm(m)}`);
+function PuntoDebil({ p, n }) {
+  const e2 = (v) => (v == null ? "–" : eur(v, 2)), e0 = (v) => (v == null ? "–" : eur(v, 0));
+  let cuerpo = null;
+  if (p.k === "margen") cuerpo = (
+    <Tabla cols={["", "Este mes"]} filas={[
+      ["Margen real (coste completo)", pct(p.margen_real, 1)], ["Margen según Epos (costes sin IVA ni recargo)", pct(p.margen_epos, 1)],
+      ["Diferencia", `${num(p.diferencia_puntos, 1)} pp`], ["IVA y recargo de las compras que Epos no cuenta", e2(p.iva_recargo_compras)],
+      ["Margen real, media de los meses anteriores", p.media6_margen_real == null ? "–" : `${pct(p.media6_margen_real, 1)} (${ppDif(p.dif_media6_puntos)})`],
+    ]} />);
+  else if (p.k === "perdida") cuerpo = p.medible ? (
+    <Tabla cols={["", "Este mes"]} filas={[
+      ["Stock inicial", e2(p.stock_inicial)], ["+ Compras de mercancía", e2(p.compras)], ["− Stock final", e2(p.stock_final)],
+      ["= Coste de lo vendido según el stock", e2(p.coste_vendido_stock)], ["Coste de lo vendido según los tickets (coste completo)", e2(p.coste_vendido_tickets)],
+      ["Diferencia (pérdida desconocida)", `${e2(p.diferencia)}${p.pct_coste_vendido != null ? ` · ${num(p.pct_coste_vendido, 1)} % del coste de lo vendido` : ""}`],
+    ]} />) : (
+    <>
+      <p className="inf-nota">{p.texto}</p>
+      <Tabla cols={["", "Este mes"]} filas={[["Compras de mercancía", e2(p.compras)], ["Coste completo de lo vendido (tickets)", e2(p.coste_vendido_tickets)], ["Compras − coste de lo vendido", e2(p.compras_menos_coste_vendido)]]} />
+    </>);
+  else if (p.k === "merma") cuerpo = (
+    <p className="inf-nota">{num(p.n)} apunte{p.n === 1 ? "" : "s"} · {num(p.unidades, 2)} unidades · coste completo {e2(p.coste)}{p.casi_cero ? ". Casi no se registra merma en Epos: lo que se tira o se rompe no se está apuntando." : ""}{p.media6_coste_epos != null ? ` · media anterior (coste Epos): ${e2(p.media6_coste_epos)}` : ""}</p>);
+  else if (p.k === "margen_bajo") cuerpo = (
+    <>
+      <p className="inf-nota">Vendido con margen real por debajo del {num(p.umbral_pct, 0)} %: <b>{e2(p.venta)}</b> ({num(p.pct_venta, 1)} % de la venta). Llevarlo al {num(p.umbral_pct, 0)} % supondría <b>{e2(p.llevar_al_umbral)}</b> más de margen. {vsMedia(null, p.media6_venta, e0)}.</p>
+      <h4 className="inf-sub">Familias con margen real por debajo del {num(p.umbral_pct, 0)} %</h4>
+      <Tabla cols={["Familia", "Venta", "Margen real", "Margen €"]} filas={(p.familias || []).map((f) => [f.familia, e2(f.venta), pct(f.margen_pct, 1), e2(f.margen_eur)])} />
+      <h4 className="inf-sub">Productos con más venta por debajo del {num(p.umbral_pct, 0)} %</h4>
+      <Tabla cols={["Producto", "Venta", "Margen real", "Margen €"]} filas={(p.productos || []).map((f) => [f.producto, e2(f.venta), pct(f.margen_pct, 1), e2(f.margen_eur)])} />
+    </>);
+  else if (p.k === "sin_coste") cuerpo = <p className="inf-nota">{num(p.n)} productos vendidos sin coste en Epos, por {e2(p.venta)} de venta ({vsMedia(null, p.media6_venta, e0)}). Su margen no se puede saber.</p>;
+  else if (p.k === "stock") cuerpo = !p.activo ? <p className="inf-nota">No hay foto de stock de este mes.</p> : (
+    <>
+      <Tabla cols={["", `Foto del ${fecha(p.fecha)}`]} filas={[
+        ["Valor del stock (coste completo)", e2(p.valor)], ["Días de venta que cubre", p.dias_venta == null ? "–" : num(p.dias_venta, 1)],
+        ["Parado 30-59 días sin venta", `${e2(p.parado?.d30?.importe)} · ${num(p.parado?.d30?.n)} productos`],
+        ["Parado 60-89 días", `${e2(p.parado?.d60?.importe)} · ${num(p.parado?.d60?.n)} productos`],
+        ["Parado 90 días o más (o sin venta)", `${e2(p.parado?.d90?.importe)} · ${num(p.parado?.d90?.n)} productos`],
+        ["En negativo", `${num(p.negativos_n)} productos · ${num(p.negativos_unid, 0)} unidades`],
+        ["Sin valorar (sin coste)", `${num(p.sin_valorar_n)} productos · ${num(p.sin_valorar_unid, 0)} unidades`],
+      ]} />
+      <h4 className="inf-sub">Más días de venta en stock</h4>
+      <Tabla cols={["Proveedor", "Valor", "Días"]} filas={(p.proveedores_mas_dias || []).map((x) => [x.nombre, e0(x.valor), num(x.dias, 1)])} />
+      <Tabla cols={["Familia", "Valor", "Días"]} filas={(p.familias_mas_dias || []).map((x) => [x.nombre, e0(x.valor), num(x.dias, 1)])} />
+    </>);
+  else if (p.k === "gastos_fijos") cuerpo = (
+    <>
+      <p className="inf-nota">La venta ha crecido un {p.crecimiento_venta_pct == null ? "–" : `${num(p.crecimiento_venta_pct, 1)} %`} frente a la media de los meses anteriores. Se marcan los gastos que suben más de 10 puntos por encima.</p>
+      <Tabla cols={["Gasto", "Este mes", "% venta", "Media anterior", "% venta (media)", "Crecimiento", ""]} filas={(p.gastos || []).map((g) => [g.concepto, e2(g.importe), g.pct_venta == null ? "–" : `${num(g.pct_venta, 2)} %`, e2(g.media6), g.pct_venta_media6 == null ? "–" : `${num(g.pct_venta_media6, 2)} %`, pctVar(g.crecimiento_pct), g.marcado ? "⚠ crece más que la venta" : ""])} />
+    </>);
+  else if (p.k === "comisiones") cuerpo = (
+    <Tabla cols={["", "Este mes"]} filas={[["Datáfono", e2(p.datafono)], ["% sobre lo cobrado con tarjeta", p.pct_tarjeta == null ? "–" : `${num(p.pct_tarjeta, 2)} %`], ["Bizum", e2(p.bizum)], ["Total", e2(p.total)], ["Equivalente anual (× 12)", e2(p.anual)]]} />);
+  else if (p.k === "horas") cuerpo = (
+    <>
+      <p className="inf-nota">Solo como dato. Coste medio de una hora de personal: {p.coste_hora_personal == null ? "–" : eur(p.coste_hora_personal, 2)} (personal del mes {e2(p.personal_mes)} / {num(p.horas_turno, 0)} horas de turno según Horarios). Medias por día con venta ({num(p.dias_con_venta)} días). Se marcan las horas cuyo margen no cubre una hora de personal.</p>
+      <Tabla cols={["Hora", "Venta media", "Margen real medio", ""]} filas={(p.horas || []).map((h) => [`${String(h.hora).padStart(2, "0")}:00`, e2(h.venta_media), e2(h.margen_medio), h.no_cubre ? "⚠ no cubre una hora de personal" : ""])} />
+      <Tabla cols={["Día", "Venta media", "Margen real medio"]} filas={(p.dias_semana || []).map((x) => [DIA_SEM[x.dia] || x.dia, e2(x.venta_media), e2(x.margen_medio)])} />
+    </>);
+  else if (p.k === "avisos_datos") cuerpo = (
+    <>
+      {(p.dias_raros || []).length ? <Tabla cols={["Día", "Margen del día", "Margen del mes", "Producto que lo explica"]} filas={p.dias_raros.map((x) => [fecha(x.fecha), pct(x.margen_dia, 1), pct(x.margen_mes, 1), x.producto ? `${x.producto.nombre} (coste ${e2(x.producto.coste)}, venta ${e2(x.producto.venta)})` : "–"])} />
+        : <p className="inf-nota">Ningún día del mes se aparta más de 10 puntos del margen medio.</p>}
+      {(p.costes_corregidos || []).length > 0 && (
+        <>
+          <h4 className="inf-sub">Costes de Epos corregidos en este mes</h4>
+          <Tabla cols={["Día", "Producto", "Coste antes", "Coste corregido", "Motivo"]} filas={p.costes_corregidos.map((x) => [fecha(x.fecha), x.producto, e2(x.coste_antes), e2(x.coste_corregido), x.motivo])} />
+        </>
+      )}
+    </>);
+  return (
+    <div className="inf-debil">
+      <h4 className="inf-sub">{n}. {p.titulo}{p.euros != null && Number(p.euros) > 0 ? ` · ${eur(p.euros, 0)}` : ""}</h4>
+      {cuerpo}
+    </div>
+  );
+}
+function Debiles({ db, texto }) {
+  return (
+    <section className="inf-ap">
+      <h3><span>14</span> Puntos débiles y tensiones</h3>
+      <p className="inf-nota">Ordenados por los euros que restan. Se compara con la media de los {num(db.n_meses_media)} meses anteriores con datos. Solo se mide: no son recomendaciones de precio, compra ni turnos.</p>
+      {(db.puntos || []).map((p, i) => <PuntoDebil key={p.k} p={p} n={i + 1} />)}
+      <p className="inf-com">{texto ? texto : "Sin comentario."}</p>
+    </section>
+  );
+}
+
 function Informe({ inf }) {
-  return inf.datos && inf.datos.version === 2 ? <InformeV2 inf={inf} /> : <InformeV1 inf={inf} />;
+  return inf.datos && inf.datos.version >= 2 ? <InformeV2 inf={inf} /> : <InformeV1 inf={inf} />;
 }
 
 export function InformeMensual() {

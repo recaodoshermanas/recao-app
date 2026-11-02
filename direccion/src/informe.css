@@ -52,3 +52,7 @@
   .inf-tabla { font-size: 10.5px; }
   .inf-ap { break-inside: avoid-page; }
 }
+
+/* #130: puntos débiles y tensiones */
+.inf-debil { margin: 10px 0 16px; }
+.inf-debil .inf-tabla { margin-top: 6px; }
