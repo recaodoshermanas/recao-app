@@ -25,6 +25,7 @@ import { PlanResumen, Proyectos, PlanTareas, PlanCalendario } from "./plan/Plan.
 import { ProductoResumen, Catalogo, Familias, Proveedores, Salud } from "./producto/Producto.jsx";
 import { Recepcion } from "./producto/Recepcion.jsx";
 import { ProductosRevisar } from "./producto/Revisar.jsx";
+import { ConsumoSocios } from "./producto/ConsumoSocios.jsx";
 import { AppTienda } from "./producto/AppTienda.jsx";
 import { Inventario } from "./producto/Inventario.jsx";
 import { MarketingResumen, MarketingClientes, MarketingCaptacion, MarketingCampanas, MarketingReputacion } from "./marketing/Marketing.jsx";
@@ -214,6 +215,7 @@ export default function App() {
   else if (area.id === "producto" && sub.id === "catalogo") contenido = <Catalogo extra={extra} />;
   else if (area.id === "producto" && sub.id === "recepcion") contenido = <Recepcion />;
   else if (area.id === "producto" && sub.id === "revisar") contenido = <ProductosRevisar />;
+  else if (area.id === "producto" && sub.id === "consumo") contenido = <ConsumoSocios />;
   else if (area.id === "producto" && sub.id === "inventario") contenido = <Inventario />;
   else if (area.id === "producto" && sub.id === "app") contenido = <AppTienda />;
   else if (area.id === "producto" && sub.id === "familias") contenido = <Familias />;
