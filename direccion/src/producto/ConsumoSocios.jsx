@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { Cargando, avisar, confirmar, hoyStr } from "../ui.jsx";
 import { eur, num } from "../fmt.js";
+import { EscanerCamara } from "./EscanerCamara.jsx";
 
 const msg = (e) => { const t = String(e?.message || e || ""); const m = /"error"\s*:\s*"([^"]+)"/.exec(t) || /"message"\s*:\s*"([^"]+)"/.exec(t); return m ? m[1] : t || "No se ha podido"; };
 const numero = (v) => { const n = Number(String(v ?? "").replace(",", ".")); return isFinite(n) ? n : null; };
@@ -23,6 +24,7 @@ export function ConsumoSocios() {
   const [guardando, setGuardando] = useState(false);
   const [lote, setLote] = useState(nuevoLote);
   const [avisos, setAvisos] = useState([]);
+  const [camara, setCamara] = useState(false);
   const seq = useRef(0);
 
   const cargar = useCallback(async () => {
@@ -42,12 +44,24 @@ export function ConsumoSocios() {
       try {
         const d = await sb.rpc("consumo_buscar", { p_q: q });
         if (mi !== seq.current) return;
-        if (d.length === 1 && d[0].cod === q) añadir(d[0]); else setRes(d);
+        const arr = Array.isArray(d) ? d : [];
+        if (arr.length === 1 && arr[0].cod === q) añadir(arr[0]); else setRes(arr);
       } catch (e) { if (mi === seq.current) avisar(msg(e), "mal"); }
     }, 250);
     return () => clearTimeout(t);
   }, [busca]);
 
+  const porCodigo = async (cod) => {
+    try {
+      const d = await sb.rpc("consumo_buscar", { p_q: cod });
+      const arr = Array.isArray(d) ? d : [];
+      const ex = arr.filter((p) => p.cod === cod);
+      if (ex.length === 1) { añadir(ex[0]); avisar(`Añadido: ${ex[0].n}`); }
+      else if (arr.length === 1) { añadir(arr[0]); avisar(`Añadido: ${arr[0].n}`); }
+      else if (!arr.length) avisar(`No hay ningún producto con el código ${cod}`, "mal");
+      else { setBusca(cod); setCamara(false); avisar("Hay varios productos con ese código: elige uno", "mal"); }
+    } catch (e) { avisar(msg(e), "mal"); }
+  };
   const cambia = (id, campo, v) => setLista((l) => l.map((x) => (x.id === id ? { ...x, [campo]: v } : x)));
   const valido = lista.length > 0 && lista.every((x) => numero(x.cantidad) > 0);
 
@@ -74,11 +88,16 @@ export function ConsumoSocios() {
     <>
       <div className="card mt">
         <div className="head"><div><h2>Apuntar consumo</h2><p className="sub">Busca el producto por nombre o escribe/escanea el código de barras, pon la cantidad (en kg si va al peso) y guarda. Resta del stock de Epos como ajuste: no es una venta ni sale en tickets ni en el cierre de caja.</p></div></div>
-        <input className="mini-input" style={{ width: "100%", maxWidth: 480 }} placeholder="Nombre o código de barras" aria-label="Buscar producto" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <div style={{ display: "flex", gap: 8, alignItems: "center", maxWidth: 480 }}>
+          <input className="mini-input" style={{ flex: 1, minWidth: 0, fontSize: 16 }} placeholder="Nombre o código de barras" aria-label="Buscar producto" autoComplete="off" autoCorrect="off" value={busca} onChange={(e) => setBusca(e.target.value)} />
+          <button type="button" className="btn-l" aria-label="Escanear con la cámara" onClick={() => setCamara((c) => !c)}>{camara ? "✕" : "📷"}</button>
+        </div>
+        {camara && <EscanerCamara onCodigo={porCodigo} onCerrar={() => setCamara(false)} />}
         {res.length > 0 && (
           <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4, maxWidth: 480 }}>
             {res.map((p) => (
-              <button key={p.id} className="btn-l" style={{ textAlign: "left" }} onClick={() => añadir(p)}>
+              <button type="button" key={p.id} className="btn-l" style={{ textAlign: "left", whiteSpace: "normal", borderRadius: 12, padding: "11px 14px", touchAction: "manipulation" }}
+                onMouseDown={(e) => e.preventDefault()} onClick={() => añadir(p)}>
                 {p.n}{p.peso ? " (al peso)" : ""} <span className="pf" style={{ display: "inline", marginLeft: 6 }}>{p.cod || ""}</span>
               </button>
             ))}
