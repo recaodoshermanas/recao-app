@@ -12,7 +12,7 @@ const ROJO = "#B3261E";
 const r2 = (x) => Math.round((Number(x) || 0) * 100) / 100;
 const num = (v) => { const s = String(v ?? "").trim().replace(/\s/g, ""); const t = s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s; return /^\d+(\.\d{1,2})?$/.test(t) ? Number(t) : NaN; };
 const txt = (x) => (x == null || x === "" ? "" : String(x).replace(".", ","));
-const APARTADOS = [["sueldo_horas", "Sueldo por horas"], ["eventuales", "Eventuales"], ["horas_extras", "Horas extras"], ["festivos", "Plus de festivos"], ["plus", "Plus del mes"], ["otros", "Otros extras"]];
+const APARTADOS = [["sueldo_horas", "Sueldo por horas"], ["eventuales", "Eventuales"], ["horas_extras", "Horas extras"], ["festivos", "Plus de festivos"], ["plus", "Plus del mes"], ["formacion", "Formación"], ["otros", "Otros extras"]];
 
 export function SalariosMes({ mes, guardado, onCambio, onModo }) {
   const [live, setLive] = useState(null);

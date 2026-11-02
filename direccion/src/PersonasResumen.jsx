@@ -4,7 +4,7 @@ import { ymd, TURNOS, TURNO_OPCIONES, horasTurno } from "../../src/lib/turnos.js
 import { huecosCobertura } from "../../src/lib/cobertura.js";
 import { BOLSA_ACTIVA, DIAS_URGENTE } from "../../src/lib/bolsa.js"; // BOLSA
 
-const LIBRES = new Set(["Descanso", "Vacaciones", "Baja", "Permiso"]);
+const LIBRES = new Set(["Descanso", "Vacaciones", "Baja", "Permiso", "Formación"]);
 const masDias = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
 const diaCorto = (f) => new Date(`${f}T12:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
 

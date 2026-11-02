@@ -21,6 +21,7 @@ const APARTADOS = [
   ["horas_extras", "Horas extras", "Horas extras apuntadas, cuando termina el turno de ese día."],
   ["festivos", "Plus de festivos", "37,50 € por un turno de 8 h; si es más corto, la parte proporcional redondeada al euro."],
   ["plus", "Plus del mes", "Sale el día 1 del mes siguiente, con lo que calcula Equipo → Plus del mes."],
+  ["formacion", "Formación", "Sesiones de formación ya pasadas: horas × 6 € (4 h por defecto, se cambian en Horarios). No cuentan como día trabajado."],
   ["otros", "Otros extras", "Lista fija (como Pedidos) y extras puntuales."],
 ];
 const kPersona = (l) => l.trabajadora_id || `n:${l.nombre}`;

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C } from "../../lib/styles.js";
 import { IcoLeft, IcoRight } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
-import { TURNOS, ymd, horasTurno } from "../../lib/turnos.js";
+import { TURNOS, ymd, horasTurno, HORAS_FORMACION } from "../../lib/turnos.js";
 import { BOLSA_ACTIVA } from "../../lib/bolsa.js"; // BOLSA
 import { cargarFestivos, PLUS_FESTIVO_8H } from "../../lib/festivos.js"; // FESTIVOS
 
@@ -16,6 +16,7 @@ const horaCorta = (h) => (h || "").split("-").map((x) => { const [hh, mm] = x.sp
 export function MiHorarioView({ user }) {
   const [cursor, setCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [mapa, setMapa] = useState({});
+  const [horasFor, setHorasFor] = useState({}); // #138
   const [pend, setPend] = useState({}); // BOLSA: fecha → true si es un descanso compensatorio pendiente
   const [fest, setFest] = useState({}); // FESTIVOS: fecha → { nombre, ambito }
 
@@ -31,8 +32,8 @@ export function MiHorarioView({ user }) {
     const desde = ymd(new Date(cursor.y, cursor.m, 1));
     const hasta = ymd(new Date(cursor.y, cursor.m + 1, 0));
     try {
-      const rows = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${user.id}&fecha=gte.${desde}&fecha=lte.${hasta}`);
-      const m = {}; rows.forEach(r => { m[r.fecha] = r.turno; }); setMapa(m);
+      const rows = await sb.select("horarios", `select=fecha,turno,horas_formacion&usuario_id=eq.${user.id}&fecha=gte.${desde}&fecha=lte.${hasta}`);
+      const m = {}; const hf = {}; rows.forEach(r => { m[r.fecha] = r.turno; if (r.turno === "Formación") hf[r.fecha] = r.horas_formacion ?? HORAS_FORMACION; }); setMapa(m); setHorasFor(hf);
     } catch (e) { setMapa({}); }
     try { setFest(await cargarFestivos(desde, hasta)); } catch (e) { setFest({}); } // FESTIVOS
     if (BOLSA_ACTIVA) { // BOLSA
@@ -71,6 +72,7 @@ export function MiHorarioView({ user }) {
               {esFest && <span aria-label="Festivo" style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: 999, background: C.red }} />}
               <span style={{ fontFamily: F, fontSize: 12.5, fontWeight: 600, color: esFest && !def ? C.red : undefined }}>{d.getDate()}</span>
               {def && <span style={{ fontFamily: F, fontSize: 8.5, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{def.label}</span>}
+              {def && mapa[f] === "Formación" && <span style={{ fontFamily: F, fontSize: 8.5, fontWeight: 700, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{horasFor[f] ?? HORAS_FORMACION} h</span>}
               {def && def.horas && <span style={{ fontFamily: F, fontSize: 8.5, fontWeight: 700, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{horaCorta(horasTurno(mapa[f], f))}</span>}
               {esPend && <span style={{ fontFamily: F, fontSize: 7.5, fontWeight: 700, lineHeight: 1, marginTop: 2, color: "#8A6410" }}>desc. pend.</span>}
             </div>

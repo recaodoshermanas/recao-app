@@ -1,7 +1,7 @@
 // Personas · Horarios: cuadrante semanal con la cobertura integrada.
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
-import { TURNOS, TURNO_OPCIONES, horasTurno, NOTA_FINDE } from "../../../src/lib/turnos.js";
+import { TURNOS, TURNO_OPCIONES, horasTurno, NOTA_FINDE, HORAS_FORMACION, PRECIO_HORA_FORMACION } from "../../../src/lib/turnos.js";
 import { requeridosDe, TURNOS_TRABAJO, REGLA_COBERTURA } from "../../../src/lib/cobertura.js";
 import { Panel, useEquipo, avisar, hoyStr, masDias, lunesDe, fechaCorta, Cargando, Avatar } from "../ui.jsx";
 import { BOLSA_ACTIVA, DIAS_ANTELACION, destinoDe, diasHasta } from "../../../src/lib/bolsa.js"; // BOLSA
@@ -9,8 +9,8 @@ import "./bolsa.css"; // BOLSA
 import { cargarFestivos } from "../../../src/lib/festivos.js"; // FESTIVOS
 import { FestivosPanel } from "./Festivos.jsx"; // FESTIVOS
 
-const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P" };
-const LIBRES = new Set(["Descanso", "Vacaciones", "Baja", "Permiso"]);
+const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P", "Formación": "F" };
+const LIBRES = new Set(["Descanso", "Vacaciones", "Baja", "Permiso", "Formación"]);
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 function huecosDe(filas) {
@@ -35,6 +35,8 @@ export function Horarios({ extra }) {
   const [bolsa, setBolsa] = useState({}); // BOLSA: "fecha|turno" → oferta abierta (próximos 60 días)
   const [festivos, setFestivos] = useState({}); // FESTIVOS: fecha → { nombre, ambito }
   const [verFestivos, setVerFestivos] = useState(false);
+  const [horasFor, setHorasFor] = useState({}); // #138: horas de cada formación de la semana ("uid|fecha" → horas)
+  const [formando, setFormando] = useState(null); // #138: {horas} mientras se elige la duración de una formación
 
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => masDias(lunes, i)), [lunes]);
   const abierto = useRef(false);
@@ -46,8 +48,8 @@ export function Horarios({ extra }) {
   }, [fechaOk, uidIn, equipo, mapa]);
 
   const cargarSemana = useCallback(async () => {
-    const r = await sb.select("horarios", `select=usuario_id,fecha,turno&fecha=gte.${lunes}&fecha=lte.${masDias(lunes, 6)}`);
-    const m = {}; r.forEach((h) => { m[`${h.usuario_id}|${h.fecha}`] = h.turno; }); setMapa(m);
+    const r = await sb.select("horarios", `select=usuario_id,fecha,turno,horas_formacion&fecha=gte.${lunes}&fecha=lte.${masDias(lunes, 6)}`);
+    const m = {}, hf = {}; r.forEach((h) => { m[`${h.usuario_id}|${h.fecha}`] = h.turno; if (h.turno === "Formación") hf[`${h.usuario_id}|${h.fecha}`] = h.horas_formacion ?? HORAS_FORMACION; }); setMapa(m); setHorasFor(hf);
   }, [lunes]);
   const cargarProx = useCallback(async () => {
     const r = await sb.select("horarios", `select=usuario_id,fecha,turno&fecha=gte.${hoy}&fecha=lte.${masDias(hoy, 60)}`);
@@ -90,11 +92,12 @@ export function Horarios({ extra }) {
     return Object.keys(h).sort().flatMap((f) => h[f].map((t) => ({ fecha: f, turno: t })));
   }, [prox]);
 
-  const guardar = async (uid, fecha, turno) => {
+  const guardar = async (uid, fecha, turno, horas) => {
     const k = `${uid}|${fecha}`;
     setMapa((m) => { const n = { ...m }; if (turno) n[k] = turno; else delete n[k]; return n; });
+    setHorasFor((m) => { const n = { ...m }; if (turno === "Formación") n[k] = horas; else delete n[k]; return n; });
     try {
-      if (turno) await sb.upsert("horarios", { usuario_id: uid, fecha, turno }, "usuario_id,fecha");
+      if (turno) await sb.upsert("horarios", { usuario_id: uid, fecha, turno, horas_formacion: turno === "Formación" ? horas : null }, "usuario_id,fecha");
       else await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=eq.${fecha}`);
       cargarProx();
       if (BOLSA_ACTIVA) setTimeout(() => cargarBolsa().catch(() => {}), 400); // si cubría un turno de la bolsa, la base de datos lo retira sola
@@ -157,7 +160,7 @@ export function Horarios({ extra }) {
             </thead>
             <tbody>
               {grupos.map((g) => (
-                <GrupoFilas key={g.id} g={g} dias={dias} mapa={mapa} hoy={hoy} onCelda={setCelda} pendiente={pendiente} />
+                <GrupoFilas key={g.id} g={g} dias={dias} mapa={mapa} hoy={hoy} onCelda={setCelda} pendiente={pendiente} horasFor={horasFor} />
               ))}
               <tr className="cobertura">
                 <th>Cobertura</th>
@@ -202,19 +205,31 @@ export function Horarios({ extra }) {
       </div>
 
       {celda && (
-        <Panel titulo={celda.persona.nombre} sub={fechaCorta(celda.fecha)} onClose={() => setCelda(null)}>
+        <Panel titulo={celda.persona.nombre} sub={fechaCorta(celda.fecha)} onClose={() => { setCelda(null); setFormando(null); }}>
           {pendiente[`${celda.persona.id}|${celda.fecha}`] && <p className="b-leyenda-pend">Este día es su descanso compensatorio pendiente. Si le cambias el turno a mano, la oferta se retira de la bolsa.</p>}
           <div className="opciones-turno">
             {TURNO_OPCIONES.map((t) => {
               const sel = mapa[`${celda.persona.id}|${celda.fecha}`] === t;
               return (
                 <button key={t} className={sel ? "sel" : ""} style={{ background: TURNOS[t].bg, color: TURNOS[t].fg }}
-                  onClick={() => { guardar(celda.persona.id, celda.fecha, t); setCelda(null); }}>
+                  onClick={() => { if (t === "Formación") { setFormando({ horas: String(horasFor[`${celda.persona.id}|${celda.fecha}`] ?? HORAS_FORMACION) }); return; } guardar(celda.persona.id, celda.fecha, t); setCelda(null); }}>
                   <b>{t}</b>{TURNOS[t].horas && <small>{horasTurno(t, celda.fecha)}</small>}
                 </button>
               );
             })}
           </div>
+          {formando && (() => {
+            const h = Number(String(formando.horas).replace(",", "."));
+            const ok = Number.isFinite(h) && h > 0 && h <= 12;
+            return (
+              <div className="hueco-acc">
+                <span><b>Formación</b>: se paga a {PRECIO_HORA_FORMACION} € la hora en el sobre. Horas de esta sesión:</span>
+                <input type="text" inputMode="decimal" value={formando.horas} onChange={(e) => setFormando({ horas: e.target.value })} style={{ width: 70 }} aria-label="Horas de formación" />
+                <span>{ok ? `${(h * PRECIO_HORA_FORMACION).toFixed(2).replace(".", ",")} €` : "Pon entre 0,5 y 12 horas"}</span>
+                <button className="btn-p" disabled={!ok} onClick={() => { guardar(celda.persona.id, celda.fecha, "Formación", Math.round(h * 100) / 100); setFormando(null); setCelda(null); }}>Guardar formación</button>
+              </div>
+            );
+          })()}
           {mapa[`${celda.persona.id}|${celda.fecha}`] && (
             <button className="btn-l quitar" onClick={() => { guardar(celda.persona.id, celda.fecha, null); setCelda(null); }}>Quitar turno</button>
           )}
@@ -235,7 +250,7 @@ export function Horarios({ extra }) {
   );
 }
 
-function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {} }) {
+function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {}, horasFor = {} }) {
   return (
     <>
       <tr className="grupo"><th colSpan={8}>{g.label}</th></tr>
@@ -250,7 +265,7 @@ function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {} }) {
                 <button className={`celda ${t ? "" : "vacia"}${pendiente[`${p.id}|${f}`] ? " pend" : ""}`} onClick={() => onCelda({ persona: p, fecha: f })}
                   style={info ? { background: info.bg, color: info.fg } : undefined}
                   aria-label={`${p.nombre}, ${fechaCorta(f)}: ${t || "sin turno"}`} title={t ? `${t}${info?.horas ? " · " + horasTurno(t, f) : ""}` : "Sin turno"}>
-                  {t ? ABREV[t] || t : "+"}
+                  {t ? (t === "Formación" ? `F ${horasFor[`${p.id}|${f}`] ?? HORAS_FORMACION}h` : ABREV[t] || t) : "+"}
                 </button>
               </td>
             );

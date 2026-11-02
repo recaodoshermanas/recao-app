@@ -13,7 +13,7 @@ import { Formacion } from "./Formacion.jsx"; // #79
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const tipoDe = (u) => (u.rol === "admin" ? "Dirección" : u.eventual ? "Eventual" : (u.tipo_turno || u.jornada) === "principal" ? "Principal" : (u.tipo_turno || u.jornada) === "apoyo" ? "Apoyo" : "Equipo");
-const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P" };
+const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P", "Formación": "F" };
 const ultimoDia = (a, m) => new Date(a, m, 0).getDate();
 const pctTxt = (v) => (v == null ? "–" : `${Math.round(n0(v) * 100)} %`);
 

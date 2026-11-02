@@ -8,6 +8,8 @@ export const TURNOS = {
   "Vacaciones": { label: "Vacaciones", horas: "",            tipo: "libre",    bg: "#60d4d6", fg: "#0a3b3b" },
   "Baja":       { label: "Baja",       horas: "",            tipo: "libre",    bg: "#F3D9D4", fg: "#8a3a2c" },
   "Permiso":    { label: "Permiso",    horas: "",            tipo: "libre",    bg: "#E4DAF0", fg: "#5a4a7a" },
+  // #138: se paga a 6 €/h en el sobre (4 h por defecto, editables); no cuenta como día trabajado
+  "Formación":  { label: "Formación",  horas: "",            tipo: "libre",    bg: "#D7E8FB", fg: "#16406e" },
 };
 
 // Horarios que cambian según el día de la semana. Cada regla vale desde su fecha (y hasta la siguiente).
@@ -36,7 +38,9 @@ export function horasExtraAuto(turno, fecha) {
   return new Date(`${fecha}T12:00:00`).getDay() === 6 ? 1 : 0;
 }
 
-export const TURNO_OPCIONES = ["Mañana", "Tarde", "Apoyo 1", "Apoyo 2", "Apoyo 3", "Descanso", "Vacaciones", "Baja", "Permiso"];
+export const TURNO_OPCIONES = ["Mañana", "Tarde", "Apoyo 1", "Apoyo 2", "Apoyo 3", "Descanso", "Vacaciones", "Baja", "Permiso", "Formación"];
+export const PRECIO_HORA_FORMACION = 6;
+export const HORAS_FORMACION = 4;
 
 export function ymd(d) {
   const y = d.getFullYear();
