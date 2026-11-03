@@ -36,9 +36,10 @@ const pill = (tipo) => {
 const resaltar = (v, umbral) => (Math.abs(n(v)) > umbral ? { fontWeight: 800, color: "#fff", background: "var(--down)", borderRadius: 6, padding: "0 5px" } : { fontWeight: 700, color: n(v) < 0 ? "var(--down)" : "inherit" });
 
 // ---------- efectivo: igual que en la Apertura de sobres ----------
-function Efectivo({ s, umbral, setSobres, onEditando }) {
+function Efectivo({ s, umbral, setSobres, onEdit }) {
   const [modo, setModo] = useState(false);
-  useEffect(() => { if (onEditando) onEditando(modo); }, [modo, onEditando]); // #145: avisa al salir con el cierre a medias
+  // #145: avisa al padre si hay un «Incorrecto» abierto sin guardar (cierre a medias)
+  useEffect(() => { if (onEdit) onEdit(modo); return () => { if (onEdit) onEdit(false); }; }, [modo, onEdit]);
   const [billetes, setBilletes] = useState(s.billetes != null ? String(s.billetes).replace(".", ",") : "");
   const [nota, setNota] = useState(s.nota || "");
   const [busy, setBusy] = useState(false);
@@ -143,7 +144,7 @@ function Banco({ caja, r, setTarjeta }) {
   );
 }
 
-function Linea({ s, banco, umbral, setSobres, setTarjeta, onEditando }) {
+function Linea({ s, banco, umbral, setSobres, setTarjeta, onEdit }) {
   const turno = s.dos_turnos ? "mañana y tarde" : s.turno;
   const ef = s.estado === "correcto" ? ["Efectivo correcto", "ok"] : s.estado === "incorrecto" ? [`Efectivo incorrecto ${signo(s.descuadre)}`, "mal"] : ["Efectivo sin revisar", "neutro"];
   const tj = banco ? (banco.r.revisar ? ["Tarjeta: revisar", "aviso"] : banco.r.pendiente ? ["Esperando la remesa", "neutro"] : ["Tarjeta al día", "ok"]) : null;
@@ -160,7 +161,7 @@ function Linea({ s, banco, umbral, setSobres, setTarjeta, onEditando }) {
         </div>
       </div>
       <div style={S.bloques}>
-        <Efectivo key={`${s.eod_id}-${s.estado}-${s.billetes}`} s={s} umbral={umbral} setSobres={setSobres} onEditando={onEditando} />
+        <Efectivo key={`${s.eod_id}-${s.estado}-${s.billetes}`} s={s} umbral={umbral} setSobres={setSobres} onEdit={onEdit} />
         <div style={S.bloque}>
           <div style={S.et}>Tarjeta</div>
           <div style={S.fila}><span>Esperado por Epos</span><span>{e2(s.ta_esperado)}</span></div>
@@ -178,17 +179,19 @@ export function CuadreTurnos({ mes }) {
   const [sobres, setSobres] = useState(null); // null cargando · false sin acceso
   const [tarjeta, setTarjeta] = useState(null);
   const [pendientes, setPendientes] = useState(false);
-  const [diaSel, setDiaSel] = useState(null); // #145: primero el día, luego el cierre
+  // #145: navegación por pasos: día → cierre. «editando» = hay un «Incorrecto» abierto sin guardar.
+  const [diaSel, setDiaSel] = useState(null);
   const [cierreSel, setCierreSel] = useState(null);
-  const [aviso, setAviso] = useState(null); // "atras" | "dia" cuando se intenta salir con el cierre sin terminar
-  const editando = useRef(false);
-  const onEditando = useCallback((v) => { editando.current = v; }, []);
+  const [editando, setEditando] = useState(false);
+  const [aviso, setAviso] = useState(null); // destino al que se quiere ir: {dia, cierre}
+  const editRef = useRef(false);
+  const onEdit = useCallback((v) => { editRef.current = v; setEditando(v); }, []);
   const cargar = useCallback(() => {
     setSobres(null); setTarjeta(null);
     sb.rpc("sobres_mes", { p_mes: mes }).then(setSobres, () => setSobres(false));
     sb.rpc("tarjeta_banco_mes", { p_mes: mes }).then(setTarjeta, () => setTarjeta(false));
   }, [mes]);
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { cargar(); setDiaSel(null); setCierreSel(null); setAviso(null); }, [cargar]);
 
   // la tarjeta frente al banco es por caja y día: va en la última línea de esa caja ese día
   const lineas = useMemo(() => {
@@ -209,6 +212,20 @@ export function CuadreTurnos({ mes }) {
     });
   }, [sobres, tarjeta]);
 
+  const actual = cierreSel != null ? lineas.find((l) => l.s.eod_id === cierreSel) : null;
+  // un cierre está completo si está marcado (correcto, o incorrecto con billetes) y no hay un «Incorrecto» abierto sin guardar
+  const incompleto = !!actual && (!actual.s.estado || (actual.s.estado === "incorrecto" && actual.s.billetes == null) || editando);
+  useEffect(() => {
+    if (!incompleto) return undefined;
+    const f = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", f);
+    return () => window.removeEventListener("beforeunload", f);
+  }, [incompleto]);
+  const ir = (d, c) => {
+    if (incompleto && (d !== diaSel || c !== cierreSel)) { setAviso({ d, c }); return; }
+    setAviso(null); setDiaSel(d); setCierreSel(c);
+  };
+
   if (sobres === false) return <div className="card c12"><h2>Cuadre por turno</h2><p className="empty">Solo pueden verlo los socios de dirección.</p></div>;
   if (!sobres) return <div className="card c12"><h2>Cuadre por turno</h2><p className="state">Cargando…</p></div>;
   const umbral = n(sobres.umbral_cajon) || 5;
@@ -217,7 +234,6 @@ export function CuadreTurnos({ mes }) {
   const porRevisar = n(t1.por_revisar) + n(t2.por_revisar);
   const comRev = n(t1.comision_revisar) + n(t2.comision_revisar), desRev = n(t1.descuadre_revisar) + n(t2.descuadre_revisar);
   const revisarTxt = porRevisar > 0 ? `${porRevisar} día${porRevisar === 1 ? "" : "s"} por revisar: no cuentan todavía (comisión ${e2(comRev)}, descuadre ${signo(desRev)})` : null; // #97
-  const visibles = pendientes ? lineas.filter((l) => l.pendiente) : lineas;
   const tot = (titulo, valor, sub, mal) => (
     <div style={S.totc}>
       <div style={S.et}>{titulo}</div>
@@ -225,60 +241,6 @@ export function CuadreTurnos({ mes }) {
       {sub && <div style={S.mut}>{sub}</div>}
     </div>
   );
-  // ---------- navegación #145: días → cierres → cierre ----------
-  const diasLista = [...new Set(visibles.map((l) => l.s.fecha))].sort();
-  const delDia = visibles.filter((l) => l.s.fecha === diaSel);
-  const actual = cierreSel != null ? lineas.find((l) => l.s.eod_id === cierreSel) : null;
-  const salir = (destino) => {
-    setAviso(null); editando.current = false;
-    if (destino === "dia") setCierreSel(null); else { setCierreSel(null); setDiaSel(null); }
-  };
-  const intentar = (destino) => { const incompleto = actual && (!actual.s.estado || editando.current); // sin marcar, o «incorrecto» sin guardar la cantidad
-    if (incompleto) setAviso(destino); else salir(destino); };
-  const estadoCierre = (l) => (l.s.estado === "correcto" ? "✓ correcto" : l.s.estado === "incorrecto" ? `✗ ${signo(l.s.descuadre)}` : "sin revisar") + (l.banco && l.banco.r.revisar ? " · tarjeta por revisar" : "");
-  let vista;
-  if (visibles.length === 0) vista = <p className="empty">{lineas.length ? "No queda nada pendiente este mes." : "Todavía no hay cierres de Epos este mes."}</p>;
-  else if (actual) vista = (
-    <div>
-      <div style={S.acciones}>
-        <button type="button" className="btn-l" onClick={() => intentar("dia")}>← Volver a los cierres del día</button>
-        <button type="button" className="btn-l" onClick={() => intentar("dias")}>Volver a los días</button>
-      </div>
-      {aviso && (
-        <div role="alertdialog" style={{ ...S.bloque, margin: "10px 0", borderColor: "var(--down)" }}>
-          <div style={{ fontWeight: 800 }}>¿Estás seguro?</div>
-          <div>{editando.current ? "Has marcado el cierre como incorrecto pero no has guardado la cantidad." : "No has hecho nada en este cierre."}</div>
-          <div style={S.acciones}>
-            <button type="button" className="btn-p" onClick={() => setAviso(null)}>Quedarme</button>
-            <button type="button" className="btn-l" onClick={() => salir(aviso)}>Salir sin terminar</button>
-          </div>
-        </div>
-      )}
-      <Linea key={actual.s.eod_id} s={actual.s} banco={actual.banco} umbral={umbral} setSobres={setSobres} setTarjeta={setTarjeta} onEditando={onEditando} />
-    </div>
-  );
-  else if (diaSel) vista = (
-    <div>
-      <div style={S.acciones}><button type="button" className="btn-l" onClick={() => setDiaSel(null)}>← Volver a los días</button></div>
-      <div style={{ ...S.tit, margin: "10px 0 4px" }}>{dia(diaSel)}: elige un cierre</div>
-      <div style={S.acciones}>
-        {delDia.map((l) => (
-          <button key={l.s.eod_id} type="button" className="btn-l" onClick={() => { editando.current = false; setAviso(null); setCierreSel(l.s.eod_id); }}>
-            {(l.s.dos_turnos ? "Mañana y tarde" : l.s.turno)} · caja {l.s.caja} · {estadoCierre(l)}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-  else vista = (
-    <div style={S.acciones}>
-      {diasLista.map((f) => {
-        const ls = visibles.filter((l) => l.s.fecha === f); const pend = ls.filter((l) => l.pendiente).length;
-        return <button key={f} type="button" className={pend ? "btn-l" : "btn-ok"} onClick={() => setDiaSel(f)}>{dia(f)} · {ls.length} cierre{ls.length === 1 ? "" : "s"}{pend ? ` · ${pend} por revisar` : " ✓"}</button>;
-      })}
-    </div>
-  );
-
   return (
     <>
       <div style={S.tot}>
@@ -290,9 +252,67 @@ export function CuadreTurnos({ mes }) {
       </div>
       {tarjeta && tarjeta.caja2 && tarjeta.caja2.extracto && Number(tarjeta.caja2.extracto.movimientos) === 0 && <p className="sub">Todavía no se ha subido el extracto de La Caixa: <a href="#/finanzas/banco/bancos">súbelo en Finanzas → Bancos</a>.</p>}
       {(sobres.facturas_sin_sobre || []).length > 0 && <p className="sub aviso-txt">Facturas en efectivo de caja sin ningún cierre de Epos en su turno (no se restan de ningún sobre): {sobres.facturas_sin_sobre.map((f) => `${dia(f.fecha)} · ${f.proveedor} ${e2(f.importe)}`).join("; ")}.</p>}
-      <label className="chk" style={{ marginTop: 0 }}><input type="checkbox" checked={pendientes} onChange={(e) => { setPendientes(e.target.checked); setDiaSel(null); setCierreSel(null); }} /> Solo pendientes ({lineas.filter((l) => l.pendiente).length})</label>
-      <p className="sub">Elige un día y después un cierre. Efectivo: «Correcto» si el sobre tiene lo que debería (vale lo marcado) o «Incorrecto» con los billetes contados. Tarjeta: el ingreso del banco y la comisión van en la última línea de cada caja y día. En rojo, las diferencias de más de {e2(umbral)}.</p>
-      {vista}
+      <label className="chk" style={{ marginTop: 0 }}><input type="checkbox" checked={pendientes} onChange={(e) => setPendientes(e.target.checked)} /> Solo pendientes ({lineas.filter((l) => l.pendiente).length})</label>
+      <p className="sub">Elige el día y luego el cierre. Efectivo: «Correcto» si el sobre tiene lo que debería (vale lo marcado) o «Incorrecto» con los billetes contados. Tarjeta: el ingreso del banco y la comisión van en la última línea de cada caja y día. En rojo, las diferencias de más de {e2(umbral)}.</p>
+      {aviso && (
+        <div role="alertdialog" aria-label="Cierre sin terminar" style={{ border: "1px solid var(--down)", borderRadius: 12, padding: "10px 12px", margin: "0 0 12px", background: "rgba(178,65,42,.08)" }}>
+          <div style={{ fontWeight: 800 }}>¿Estás seguro?</div>
+          <div style={S.mut}>{!actual.s.estado && !editando ? "No has hecho nada en este cierre." : "Este cierre está a medias: falta guardar la cantidad."}</div>
+          <div style={S.acciones}>
+            <button type="button" className="btn-p" onClick={() => setAviso(null)}>Quedarme</button>
+            <button type="button" className="btn-l" onClick={() => { setDiaSel(aviso.d); setCierreSel(aviso.c); setAviso(null); }}>Salir</button>
+          </div>
+        </div>
+      )}
+      {(() => {
+        const porDia = {};
+        lineas.forEach((l) => { (porDia[l.s.fecha] = porDia[l.s.fecha] || []).push(l); });
+        const ym = String(mes).slice(0, 7);
+        const nDias = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
+        const fechas = Array.from({ length: nDias }, (_, i) => `${ym}-${String(i + 1).padStart(2, "0")}`);
+        if (cierreSel != null && actual) {
+          return (
+            <div>
+              <button type="button" className="btn-l" onClick={() => ir(diaSel, null)}>← Cierres del {dia(diaSel)}</button>
+              <Linea key={actual.s.eod_id} s={actual.s} banco={actual.banco} umbral={umbral} setSobres={setSobres} setTarjeta={setTarjeta} onEdit={onEdit} />
+            </div>
+          );
+        }
+        if (diaSel) {
+          const del = (porDia[diaSel] || []).filter((l) => !pendientes || l.pendiente);
+          return (
+            <div>
+              <button type="button" className="btn-l" onClick={() => ir(null, null)}>← Días del mes</button>
+              <h3 style={{ ...S.tit, margin: "12px 0 6px" }}>{dia(diaSel)}</h3>
+              {del.length === 0 ? <p className="empty">No queda nada pendiente este día.</p> : (
+                <div style={S.acciones}>
+                  {del.map((l) => {
+                    const turno = l.s.dos_turnos ? "mañana y tarde" : l.s.turno;
+                    const est = l.s.estado === "correcto" ? "✓ " : l.s.estado === "incorrecto" ? "✗ " : "";
+                    return <button key={l.s.eod_id} type="button" className="btn-l" onClick={() => ir(diaSel, l.s.eod_id)} style={l.pendiente ? { borderColor: "var(--down)" } : null}>{est}{turno} · caja {l.s.caja}</button>;
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        }
+        if (!lineas.length) return <p className="empty">Todavía no hay cierres de Epos este mes.</p>;
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(76px, 1fr))", gap: 6 }}>
+            {fechas.map((f) => {
+              const ls = porDia[f] || [];
+              const pend = ls.filter((l) => l.pendiente).length;
+              const off = !ls.length || (pendientes && !pend);
+              return (
+                <button key={f} type="button" className="btn-l" disabled={off} onClick={() => ir(f, null)} style={{ borderRadius: 12, textAlign: "center", lineHeight: 1.3, ...(pend ? { borderColor: "var(--down)" } : null) }}>
+                  <div style={{ fontWeight: 800 }}>{Number(f.slice(8))}</div>
+                  <div style={S.mut}>{ls.length ? (pend ? `${pend} por revisar` : "al día") : "sin cierres"}</div>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
     </>
   );
 }
