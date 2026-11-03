@@ -160,3 +160,6 @@
 .favisos .aviso-det summary { cursor: pointer; color: var(--text-2); }
 .favisos .aviso-det ul { margin: 6px 0 0 18px; padding: 0; }
 .favisos .aviso-det .aviso-rev { margin-left: auto; flex-shrink: 0; font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+/* #148: una tarjeta plegada sin contenido (bloque que no aplica) no se muestra */
+.ff-pl:has(> .ff-cuerpo:empty) { display: none; }
+.favisos .aviso b { background: none; min-width: 0; height: auto; padding: 0; font-size: 18px; }
