@@ -56,3 +56,14 @@
 /* #130: puntos débiles y tensiones */
 .inf-debil { margin: 10px 0 16px; }
 .inf-debil .inf-tabla { margin-top: 6px; }
+
+/* #132: Fuertes, débiles y posibles mejoras */
+.inf-fd { margin: 10px 0 14px; padding-left: 10px; border-left: 3px solid var(--line, #ccc); break-inside: avoid; }
+.inf-fd.fuerte { border-left-color: #2e8b57; }
+.inf-fd.debil { border-left-color: #c0392b; }
+.inf-fd .inf-tabla { margin-top: 6px; }
+.inf-fd-t { margin: 18px 0 4px; font-size: 14px; }
+.inf-fd-t.fuerte { color: #2e8b57; }
+.inf-fd-t.debil { color: #c0392b; }
+.inf-mej-t { margin: 8px 0 2px; font-size: 12.5px; font-weight: 600; }
+.inf-mejoras { margin: 0 0 4px; padding-left: 18px; font-size: 13px; }

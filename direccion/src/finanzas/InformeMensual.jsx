@@ -399,9 +399,10 @@ function InformeV2({ inf }) {
       </Apartado>
 
       {d.debiles && <Debiles db={d.debiles} texto={c.debiles} mes={mes} />}
+      {d.fuertes && <Fuertes fd={d.fuertes} texto={c.fuertes_debiles} mejoras={c.mejoras || {}} n={d.debiles ? 15 : 14} />}
 
       <section className="inf-ap">
-        <h3><span>{d.debiles ? 15 : 14}</span> Puntos para la reunión</h3>
+        <h3><span>{14 + (d.debiles ? 1 : 0) + (d.fuertes ? 1 : 0)}</span> Puntos para la reunión</h3>
         {(c.avisos || []).length ? <ul className="inf-avisos">{c.avisos.map((t, i) => <li key={i}>{t}</li>)}</ul> : <p className="inf-com">Sin puntos.</p>}
         {(d.avisos_finanzas || []).length > 0 && (
           <>
@@ -499,6 +500,56 @@ function Debiles({ db, texto }) {
       <p className="inf-nota">Ordenados por los euros que restan. Se compara con la media de los {num(db.n_meses_media)} meses anteriores con datos. Solo se mide: no son recomendaciones de precio, compra ni turnos.</p>
       {(db.puntos || []).map((p, i) => <PuntoDebil key={p.k} p={p} n={i + 1} />)}
       <p className="inf-com">{texto ? texto : "Sin comentario."}</p>
+    </section>
+  );
+}
+
+// #132: «Fuertes, débiles y posibles mejoras». La app clasifica con reglas fijas (fin_informe_fuertes); la IA solo redacta las mejoras.
+const FORMA_PAGO = { efectivo: "Efectivo de caja", caja_fuerte: "Caja fuerte", efectivo_sobres: "Efectivo de sobres" };
+function DetalleFuerte({ it }) {
+  const x = it.datos || {}, e2 = (v) => (v == null ? "–" : eur(v, 2));
+  if (it.k === "dinero" && x.total != null) return (
+    <Tabla cols={["", "A fin de mes"]} filas={[
+      ["BBVA", e2(x.bbva)], ["La Caixa (último extracto)", e2(x.caixa)], ["Caja fuerte", e2(x.caja_fuerte)],
+      ...(x.con_sobres ? [["Efectivo de sobres", e2(x.sobres)]] : []),
+      ["Total", e2(x.total)], ["En efectivo", `${e2(x.efectivo)} · ${pct(x.pct_efectivo, 1)}`],
+    ]} />);
+  if (it.k === "pagos_efectivo" && (x.lista || []).length) return (
+    <Tabla cols={["Día", "Proveedor", "Forma de pago", "Importe"]} filas={x.lista.map((l) => [fecha(l.fecha), l.proveedor, FORMA_PAGO[l.forma] || l.forma, e2(l.importe)])} />);
+  if (it.k === "proveedores" && (x.proveedores || []).length) return (
+    <Tabla cols={["Proveedor", "Compras", "% compras", "Venta en Epos", "% venta"]} filas={x.proveedores.map((l) => [l.proveedor, e2(l.compras), pct(l.pct_compras, 1), l.venta_epos == null ? "sin equivalente en Epos" : e2(l.venta_epos), l.pct_venta == null ? "–" : pct(l.pct_venta, 1)])} />);
+  if (it.k === "paqueteria" && (x.empresas || []).length) return (
+    <Tabla cols={["Empresa", "Comisión", "%"]} filas={x.empresas.map((l) => [l.empresa, e2(l.importe), pct(l.pct, 1)])} />);
+  return null;
+}
+function ItemFuerte({ it, mejoras }) {
+  const ms = mejoras[it.k] || [];
+  return (
+    <div className={`inf-fd ${it.estado === "fuerte" ? "fuerte" : "debil"}`}>
+      <h4 className="inf-sub">{it.titulo}{Number(it.euros) > 0 ? ` · ${eur(it.euros, 0)}` : ""}</h4>
+      <p className="inf-nota">{it.resumen}</p>
+      <DetalleFuerte it={it} />
+      {ms.length > 0 && (<><p className="inf-mej-t">Posibles mejoras</p><ul className="inf-mejoras">{ms.map((t, i) => <li key={i}>{t}</li>)}</ul></>)}
+    </div>
+  );
+}
+function Fuertes({ fd, texto, mejoras, n }) {
+  const debiles = fd.debiles || [], fuertes = fd.fuertes || [], sin = fd.sin_valorar || [];
+  return (
+    <section className="inf-ap">
+      <h3><span>{n}</span> Fuertes, débiles y posibles mejoras</h3>
+      <p className="inf-nota">La app marca cada indicador con reglas fijas: mejor que la media de los meses anteriores es fuerte y peor es débil (con menos de 3 meses de datos, solo las reglas fijas). Ordenados por los euros que pesan. Las mejoras son sugerencias redactadas por la IA con estas cifras.</p>
+      {texto ? <p className="inf-com">{texto}</p> : null}
+      <h4 className="inf-fd-t debil">Débiles ({debiles.length})</h4>
+      {debiles.length ? debiles.map((it) => <ItemFuerte key={it.k} it={it} mejoras={mejoras} />) : <p className="inf-nota">Ninguno este mes.</p>}
+      <h4 className="inf-fd-t fuerte">Fuertes ({fuertes.length})</h4>
+      {fuertes.length ? fuertes.map((it) => <ItemFuerte key={it.k} it={it} mejoras={mejoras} />) : <p className="inf-nota">Ninguno este mes.</p>}
+      {sin.length > 0 && (
+        <>
+          <h4 className="inf-fd-t">Sin valorar</h4>
+          {sin.map((it) => <p key={it.k} className="inf-nota"><b>{it.titulo}:</b> {it.resumen}</p>)}
+        </>
+      )}
     </section>
   );
 }
