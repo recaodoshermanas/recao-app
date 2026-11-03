@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { hoyStr } from "../ui.jsx";
 import { eur } from "../fmt.js";
-import { FraseFija, TresNumeros, Plegable } from "./Facil.jsx"; // #148
 
 const CSS = `
 .dh { margin-bottom: 18px; }
@@ -32,7 +31,8 @@ const cuando = (ts) => {
   return `el ${d.toLocaleDateString("es-ES", { day: "numeric", month: "short" })} a las ${hora}`;
 };
 
-export function DineroHoy({ ganado, ganadoFlecha, bajo }) {
+// #148: la carga y el cálculo se comparten con la parte de arriba del Resumen (ResumenFacil.jsx)
+export function useDineroHoy() {
   const [d, setD] = useState(null);
   const [fallo, setFallo] = useState(false);
   useEffect(() => {
@@ -51,10 +51,10 @@ export function DineroHoy({ ganado, ganadoFlecha, bajo }) {
     })();
     return () => { vivo = false; };
   }, []);
+  return { d, fallo };
+}
 
-  if (fallo) return <>{bajo}</>;
-  if (!d) return <><FraseFija>Aquí ves de un vistazo cuánto dinero tenemos y si hay algo que hacer.</FraseFija><p className="sub">Cargando…</p>{bajo}</>;
-
+export function calcDinero(d) {
   const bbva = (d.cu.v || []).find((c) => c.banco === "BBVA" && c.aspsp_nombre !== "Extracto manual");
   const caixa = (d.cu.v || []).find((c) => c.aspsp_nombre === "Extracto manual" && c.saldo != null);
   const caixaFecha = caixa?.saldo_fecha ? new Date(caixa.saldo_fecha).toLocaleDateString("sv-SE") : "";
@@ -71,6 +71,14 @@ export function DineroHoy({ ganado, ganadoFlecha, bajo }) {
     verSobres && { k: "sobres", t: "Efectivo de sobres guardado", ruta: "finanzas/efectivo/sobres", ok: true, v: n(d.so.v?.saldo) },
     { k: "caja", t: "Caja fuerte", ruta: "finanzas/efectivo/caja", ok: !d.ca.e, v: n(d.ca.v?.saldo), s: d.ca.e ? "No se ha podido cargar" : "" },
   ].filter(Boolean);
+  return { filas, verSobres, caixaFecha };
+}
+
+export function DineroHoy() {
+  const { d, fallo } = useDineroHoy();
+  if (fallo) return null;
+  if (!d) return <section className="card dh"><h2>El dinero que tenemos hoy</h2><p className="sub">Cargando…</p></section>;
+  const { filas, verSobres } = calcDinero(d);
   const total = filas.reduce((s, f) => s + (f.ok ? f.v : 0), 0);
   const pend = d.pa.e ? null : (d.pa.v?.pendientes || []);
   const pendTotal = pend ? pend.reduce((s, x) => s + n(x.importe), 0) : null;
@@ -81,25 +89,7 @@ export function DineroHoy({ ganado, ganadoFlecha, bajo }) {
       <b>{f.ok ? eur(f.v, 2) : "—"}</b>
     </a>
   );
-  const banco = filas.filter((f) => (f.k === "bbva" || f.k === "caixa") && f.ok).reduce((t, f) => t + f.v, 0);
-  const efSobres = verSobres ? n(d.so.v?.saldo) : 0;
-  const efCaja = d.ca.e ? 0 : n(d.ca.v?.saldo);
-  const efectivo = efSobres + efCaja;
-  const bancoInfo = `Es BBVA${bbva && bbva.saldo != null ? ` (${eur(n(bbva.saldo), 2)})` : ""} más La Caixa${caixa ? ` (${eur(n(caixa.saldo), 2)}${caixaFecha ? `, según el último PDF del ${ddmm(caixaFecha)}` : ""})` : " (sin dato)"}.`;
-  const efInfo = verSobres
-    ? `Es el efectivo de sobres que queda más la caja fuerte. Ejemplo con nuestros datos: sobres ${eur(efSobres, 2)} + caja fuerte ${eur(efCaja, 2)} = ${eur(efectivo, 2)}.`
-    : `Es lo que hay en la caja fuerte (${eur(efCaja, 2)}). El efectivo de sobres solo lo ven los socios y no se suma.`;
-  const numeros = [
-    { t: "Banco", v: eur(banco, 0), info: bancoInfo },
-    { t: "Efectivo", v: eur(efectivo, 0), info: efInfo },
-    ...(ganado != null ? [{ t: "Ganado este mes", v: eur(Math.round(ganado), 0), flecha: ganadoFlecha, info: "Es el mismo resultado que sale en Cómo vamos → Cuenta de resultados para el mes en curso (todavía provisional hasta cerrar el mes): lo vendido menos compras, gastos fijos y personal." }] : []),
-  ];
   return (
-    <>
-      <FraseFija>Aquí ves de un vistazo cuánto dinero tenemos y si hay algo que hacer.</FraseFija>
-      <TresNumeros frase={`Hoy tenemos ${eur(total, 0)} entre banco y efectivo`} numeros={numeros} />
-      {bajo}
-      <Plegable titulo="El dinero que tenemos hoy" total={eur(total, 2)} pendiente={filas.some((f) => f.aviso) ? "Algún saldo está sin actualizar" : null}>
     <section className="card dh" aria-label="El dinero que tenemos hoy">
       <style>{CSS}</style>
       <h2>El dinero que tenemos hoy</h2>
@@ -112,7 +102,5 @@ export function DineroHoy({ ganado, ganadoFlecha, bajo }) {
       </div>
       {!verSobres && <p className="sub">El efectivo de sobres solo lo ven los socios, y no se suma.</p>}
     </section>
-      </Plegable>
-    </>
   );
 }
