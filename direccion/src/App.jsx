@@ -28,6 +28,7 @@ import { ProductosRevisar } from "./producto/Revisar.jsx";
 import { ConsumoSocios } from "./producto/ConsumoSocios.jsx";
 import { AppTienda } from "./producto/AppTienda.jsx";
 import { Lab, AvisosLab } from "./producto/Lab.jsx";
+import { Radar, AvisosRadar } from "./producto/Radar.jsx";
 import { Inventario } from "./producto/Inventario.jsx";
 import { MarketingResumen, MarketingClientes, MarketingCaptacion, MarketingCampanas, MarketingReputacion } from "./marketing/Marketing.jsx";
 import { TecSolicitudes } from "./tecnologia/Solicitudes.jsx";
@@ -212,7 +213,7 @@ export default function App() {
   else if (area.id === "personas" && sub.id === "solicitudes") contenido = <Solicitudes />;
   else if (area.id === "personas" && sub.id === "seguimiento") contenido = <Seguimiento sub={extra} />;
   else if (area.id === "personas" && sub.id === "equipo") contenido = <Equipo user={user} extra={extra} />;
-  else if (area.id === "producto" && sub.id === "resumen") contenido = <><AvisosLab /><ProductoResumen /></>;
+  else if (area.id === "producto" && sub.id === "resumen") contenido = <><AvisosLab /><AvisosRadar /><ProductoResumen /></>;
   else if (area.id === "producto" && sub.id === "catalogo") contenido = <Catalogo extra={extra} />;
   else if (area.id === "producto" && sub.id === "recepcion") contenido = <Recepcion />;
   else if (area.id === "producto" && sub.id === "revisar") contenido = <ProductosRevisar />;
@@ -222,6 +223,7 @@ export default function App() {
   else if (area.id === "producto" && sub.id === "familias") contenido = <Familias />;
   else if (area.id === "producto" && sub.id === "proveedores") contenido = <Proveedores />;
   else if (area.id === "producto" && sub.id === "lab") contenido = <Lab />;
+  else if (area.id === "producto" && sub.id === "radar") contenido = <Radar />;
   else if (area.id === "producto" && sub.id === "salud") contenido = <Salud extra={extra} />;
   else if (area.id === "marketing" && sub.id === "resumen") contenido = <MarketingResumen />;
   else if (area.id === "marketing" && sub.id === "clientes") contenido = <MarketingClientes />;
