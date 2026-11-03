@@ -30,6 +30,26 @@ function cambioUds(l, u) {
   if (l.base_unit != null) c.base_unit = Math.round(Number(l.base_unit) * ant / u * 10000) / 10000;
   return c;
 }
+// #139: aviso de coste que cambia mucho (o bulto que parece venir como 1 unidad) antes de confirmar
+const UMBRAL_COSTE = 2;
+const PARECE_BULTO = /\b(EXP|EXPOSITOR|CAJA|PACK|BOLSA)\b|\d+\s*(UD|UDS|UNID)\b/i;
+function avisoCoste(l, costes) {
+  if (l.tipo !== "venta" || alPeso(l) || regaloDe(l) != null || l.cant_doc == null) return null;
+  const nuevo = l.base_unit != null ? Number(l.base_unit) : null;
+  const q = numero(l.q);
+  if (!(nuevo > 0) || !(q > 0)) return null; // líneas a 0 € (regalos) no se marcan
+  const u = Number(l.unidades_por || 1);
+  const clave = `${nuevo}|${u}|${q}`;
+  if (l.coste_ok === clave) return null;
+  const actual = l.product_id != null && l.emparejado !== "nuevo" ? costes[l.product_id] : null;
+  if (actual > 0) {
+    const f = nuevo / actual;
+    if (f > UMBRAL_COSTE || f < 1 / UMBRAL_COSTE) return { tipo: "cambio", actual, nuevo, f, clave };
+    return null;
+  }
+  if (Math.abs(u - 1) < 1e-9 && numero(l.cant_doc) === 1 && q === 1 && PARECE_BULTO.test(l.descripcion || "")) return { tipo: "bulto", nuevo, clave };
+  return null;
+}
 const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 18, padding: 16, boxShadow: SHADOW.card, display: "flex", flexDirection: "column", gap: 10 };
 const chip = (bg, fg) => ({ fontFamily: F, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: bg, color: fg });
 const CHIPS = { email: ["#EAF0F8", "#2F5C8F", "EMAIL"], foto: ["#FBF0DA", "#7A5410", "FOTO"], manual: ["#F0ECE2", "#5E5444", "MANUAL"] };
@@ -702,6 +722,28 @@ function ComoSeVende({ l, onCambio }) {
   );
 }
 
+// ---------- #139 · ¿son correctas las unidades? ----------
+function AvisoCoste({ l, aviso, marcar, onCambio }) {
+  const [n, setN] = useState("");
+  const k = Math.round(numero(n));
+  const txt = aviso.tipo === "cambio"
+    ? `El coste por unidad pasa de ${eur(aviso.actual)} a ${eur(aviso.nuevo)} (${aviso.f >= 1 ? `×${fmt(Math.round(aviso.f * 10) / 10)}` : `÷${fmt(Math.round(10 / aviso.f) / 10)}`}). ¿Cuántas unidades trae este bulto?`
+    : `Parece un bulto (expositor, caja o pack) pero está como 1 unidad a ${eur(aviso.nuevo)}. ¿Cuántas unidades trae?`;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "#FBEAE7", border: marcar ? `2px solid ${C.red}` : "1.5px solid #E7B8B1", borderRadius: 12, padding: "10px 12px", fontFamily: F, fontSize: 12.5, color: "#7A2A20" }}>
+      <div style={{ fontWeight: 700 }}>{txt}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <label htmlFor={`ac-${l.id ?? l.orden ?? l.k}`}>Unidades por bulto</label>
+        <input id={`ac-${l.id ?? l.orden ?? l.k}`} inputMode="numeric" value={n} onChange={(e) => setN(e.target.value)} placeholder="N"
+          style={{ width: 64, height: 40, textAlign: "center", border: `1px solid ${C.brd}`, borderRadius: 10, fontFamily: F, fontSize: 16, fontWeight: 700 }} />
+        <button type="button" disabled={!(k >= 2)} onClick={() => onCambio(cambioUds(l, k))} style={{ ...btnPeq, height: 40, padding: "0 12px", opacity: k >= 2 ? 1 : 0.5 }}>Corregir</button>
+        <button type="button" onClick={() => onCambio({ coste_ok: aviso.clave })} style={{ ...btnPeq, height: 40, padding: "0 12px" }}>Sí, es correcto</button>
+      </div>
+      <div style={{ color: C.mut }}>Se aprende para este producto de este proveedor. El precio de venta no cambia solo.</div>
+    </div>
+  );
+}
+
 // ---------- una línea del pedido ----------
 const MOTIVOS_NP = [["expositor", "Expositor o surtido sin desglosar"], ["portes", "Portes / transporte"], ["envases", "Envases / fianzas"], ["material", "Material para la tienda (bolsas, limpieza…)"], ["otro", "Otro"]];
 const motivoNP = (l) => l.no_producto_motivo === "otro" && l.no_producto_texto ? `Otro: ${l.no_producto_texto}` : (MOTIVOS_NP.find(([k]) => k === l.no_producto_motivo)?.[1] || "No es un producto");
@@ -742,7 +784,7 @@ function NoEsProducto({ l, onCambio, onAnadirExpo, hijos, onQuitar }) {
   );
 }
 
-function Linea({ l, manual, onCambio, onAsociar, marcar, normal, hijos = [], onAnadirExpo, onQuitar }) {
+function Linea({ l, manual, aviso, onCambio, onAsociar, marcar, normal, hijos = [], onAnadirExpo, onQuitar }) {
   const dif = l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-3;
   const titulo = l.nuevo?.nombre || l.producto?.nombre || l.descripcion;
   const sinProducto = l.tipo === "venta" && !l.producto && l.emparejado !== "nuevo";
@@ -794,6 +836,7 @@ function Linea({ l, manual, onCambio, onAsociar, marcar, normal, hijos = [], onA
           {l.coste_txt != null && l.base_unit != null && Math.abs(numero(l.coste_txt) - Number(l.base_unit)) > 0.0005 && <div style={{ gridColumn: "1 / -1", fontFamily: F, fontSize: 12, color: "#1E6B3C" }}>Corregido (se había leído {dineroSube(l.base_unit)} €/kg). Al confirmar, este es el coste que va a la caja.</div>}
         </div>
       )}
+      {aviso && <AvisoCoste l={l} aviso={aviso} marcar={marcar} onCambio={onCambio} />}
       {pregunta && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: "#FBF0DA", borderRadius: 12, padding: "8px 10px", fontFamily: F, fontSize: 12.5, color: "#6B4A0C" }}>
           <span style={{ flex: "1 1 180px", fontWeight: 600 }}>{pregunta.txt}</span>
@@ -886,6 +929,20 @@ function Revisar({ datos, onHecho, onVolver }) {
     });
   });
   const [marcar, setMarcar] = useState(false);
+  // #139: coste actual de los productos de la recepción, para detectar saltos grandes
+  const [costes, setCostes] = useState({});
+  const idsClave = [...new Set(lineas.map((l) => l.product_id).filter((x) => x != null))].sort().join(",");
+  useEffect(() => {
+    if (!idsClave) return;
+    let vivo = true;
+    sb.rpc("recepcion_costes_actuales", { p_ids: idsClave.split(",").map(Number) }).then((r) => {
+      if (!vivo || !Array.isArray(r)) return;
+      setCostes((c) => { const m = { ...c }; for (const x of r) m[x.product_id] = Number(x.coste); return m; });
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, [idsClave]);
+  const avisos = lineas.map((l) => avisoCoste(l, costes));
+  const listaAviso = lineas.filter((l, i) => avisos[i]);
   const listaPend = lineas.filter((l) => l.tipo === "venta" && !l.producto && l.emparejado !== "nuevo" && numero(l.q) > 0);
   const pendientes = listaPend.length;
   const difs = lineas.filter((l) => l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-3).length;
@@ -900,6 +957,7 @@ function Revisar({ datos, onHecho, onVolver }) {
   };
   const confirmar = async () => {
     if (pendientes) { setMsg(`Falta decir qué producto es: ${listaPend.map((l) => l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
+    if (listaAviso.length) { setMsg(`Falta contestar si son correctas las unidades de: ${listaAviso.map((l) => l.producto?.nombre || l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     if (!lineas.some((l) => numero(l.q) > 0)) { setMsg("No hay nada que recepcionar"); return; }
     if (conFactura && !pago) { setMsg("Elige cómo se ha pagado la factura"); return; }
     if (conFactura && !sinImporte && !(Number.isFinite(facImporteN) && facImporteN !== 0)) { setMsg("Pon el importe total de la factura o marca «No sé el importe»"); return; }
@@ -987,7 +1045,7 @@ function Revisar({ datos, onHecho, onVolver }) {
           {!manual && <p style={{ margin: 0, fontFamily: F, fontSize: 13, color: C.mut }}>Salen las unidades del documento. Cuenta lo que ha llegado y cambia lo que no coincida.</p>}
           {manual && <p style={{ margin: 0, fontFamily: F, fontSize: 13, color: C.mut }}>Pon solo lo que ha llegado. El coste sale de la última compra (sin IVA): cámbialo si es otro.</p>}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {lineas.map((l, i) => <Linea key={l.id ?? l.k ?? `n${i}`} l={l} manual={manual} marcar={marcar} normal={regaloDe(l) != null ? lineas.find((x) => x !== l && Number(x.orden) === regaloDe(l)) : null} onCambio={(c) => cambiar(i, c)} onAsociar={(modo) => setPanel({ modo, idx: i })}
+            {lineas.map((l, i) => <Linea key={l.id ?? l.k ?? `n${i}`} l={l} aviso={avisos[i]} manual={manual} marcar={marcar} normal={regaloDe(l) != null ? lineas.find((x) => x !== l && Number(x.orden) === regaloDe(l)) : null} onCambio={(c) => cambiar(i, c)} onAsociar={(modo) => setPanel({ modo, idx: i })}
               hijos={l.orden != null ? lineas.filter((x) => x.expositor_de != null && Number(x.expositor_de) === Number(l.orden)).map((x) => ({ k: x.id ?? x.k, nombre: x.nuevo?.nombre || x.producto?.nombre || x.descripcion, q: numero(x.q) })) : []}
               onAnadirExpo={() => setPanel({ modo: "anadir", expo: Number(l.orden) })} onQuitar={(k) => setLineas((ls) => ls.filter((x) => (x.id ?? x.k) !== k))} />)}
           </div>
