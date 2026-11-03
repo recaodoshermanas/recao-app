@@ -14,6 +14,7 @@ import { PagosPendientes } from "./finanzas/PagosPendientes.jsx"; // #27
 import { Inversiones } from "./finanzas/Inversiones.jsx"; // #40
 import { Mantenimiento } from "./finanzas/Mantenimiento.jsx"; // #42
 import { StockFinanzas } from "./finanzas/StockFinanzas.jsx"; // #120
+import { Glosario, ExplicaResumen, Recorrido } from "./finanzas/Guia.jsx"; // #142
 import { Horarios } from "./personas/Horarios.jsx";
 import { Solicitudes } from "./personas/Solicitudes.jsx";
 import { Seguimiento } from "./personas/Seguimiento.jsx";
@@ -198,7 +199,7 @@ export default function App() {
     return () => window.removeEventListener("recao-nav", h);
   }, []);
 
-  const editarMes = useCallback((mk) => { setMesFoco(mk); ir("finanzas/resultados/cierre"); }, []);
+  const editarMes = useCallback((mk) => { setMesFoco(mk); ir("finanzas/cierre/cierre"); }, []);
 
   if (checking) return <div className="state">Cargando…</div>;
   if (!esAdmin || tokenRecuperar()) return <Login onLogin={async (e, p) => { setAviso(""); return login(e, p); }} aviso={aviso} />;
@@ -236,7 +237,8 @@ export default function App() {
   else if (area.id === "plan" && sub.id === "calendario") contenido = <PlanCalendario user={user} />;
   else if (area.id === "tecnologia" && sub.id === "como-pedir") contenido = <TecGuia />;
   else if (area.id === "tecnologia") contenido = <TecSolicitudes key={extra || "lista"} user={user} extra={extra} />;
-  else if (area.id === "finanzas" && sub.id === "resumen") contenido = <><DineroHoy /><FinanzasResumen onEditMonth={editarMes} /></>;
+  else if (area.id === "finanzas" && sub.id === "resumen") contenido = <><Recorrido /><DineroHoy /><FinanzasResumen onEditMonth={editarMes} /><ExplicaResumen /></>;
+  else if (area.id === "finanzas" && sub.id === "glosario") contenido = <><Recorrido /><Glosario /></>;
   else if (area.id === "finanzas" && sub.id === "stock") contenido = <StockFinanzas />;
   else if (area.id === "finanzas") {
     const pantalla = {

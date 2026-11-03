@@ -21,11 +21,11 @@ export const AREAS = [
     id: "finanzas", label: "Finanzas", quien: "Miguel",
     subs: [
       { id: "resumen", label: "Resumen" },
-      { id: "resultados", label: "Resultados" },
-      { id: "efectivo", label: "Efectivo" },
-      { id: "banco", label: "Banco" },
-      { id: "gastos", label: "Gastos" },
+      { id: "dia", label: "Día a día" },
+      { id: "cierre", label: "Cierre de mes" },
+      { id: "como", label: "Cómo vamos" },
       { id: "stock", label: "Stock" },
+      { id: "glosario", label: "Glosario" },
     ],
   },
   {
@@ -75,13 +75,17 @@ export const AREAS = [
 // #60: Finanzas se agrupa en 5 apartados; cada uno tiene dentro sus pestañas (la primera es la de por defecto).
 // La URL es #/finanzas/<apartado>/<pestaña>. Las pantallas "legado" vienen de la app (Facturas, Cierre de mes, Tesorería).
 export const FIN_PESTANAS = {
-  resultados: [{ id: "resultados", label: "Cuenta de resultados" }, { id: "cierre", label: "Cierre de mes" }],
-  efectivo: [{ id: "caja", label: "Caja" }, { id: "sobres", label: "Efectivo de sobres" }],
-  banco: [{ id: "bancos", label: "Bancos" }, { id: "pagos", label: "Facturas pendientes de pago" }, { id: "tesoreria", label: "Tesorería" }],
-  gastos: [{ id: "facturas", label: "Facturas" }, { id: "compras", label: "Compras" }, { id: "mantenimiento", label: "Mantenimiento" }, { id: "inversiones", label: "Inversiones" }],
+  dia: [{ id: "sobres", label: "Sobres" }, { id: "facturas", label: "Facturas" }, { id: "compras", label: "Compras" }, { id: "bancos", label: "Bancos" }, { id: "pagos", label: "Facturas pendientes de pago" }, { id: "mantenimiento", label: "Mantenimiento" }, { id: "inversiones", label: "Inversiones" }],
+  cierre: [{ id: "cierre", label: "Lista de cierre" }, { id: "caja", label: "Descuadres de caja" }],
+  como: [{ id: "resultados", label: "Cuenta de resultados" }, { id: "tesoreria", label: "Tesorería" }],
 };
-// Enlaces antiguos de Finanzas (#/finanzas/caja…) → apartado nuevo; la pestaña es la propia antigua
-const FIN_ANTIGUAS = { cierre: "resultados", caja: "efectivo", sobres: "efectivo", bancos: "banco", pagos: "banco", tesoreria: "banco", facturas: "gastos", compras: "gastos", mantenimiento: "gastos", inversiones: "gastos" };
+// #142: Finanzas se reorganiza por tareas. Los enlaces antiguos (#/finanzas/efectivo/caja, #/finanzas/banco/bancos…)
+// siguen funcionando: cada pestaña antigua lleva a su sitio nuevo. Los correos y avisos de la app usan estas rutas antiguas.
+const FIN_DESTINO = {
+  sobres: "dia", facturas: "dia", compras: "dia", bancos: "dia", pagos: "dia", mantenimiento: "dia", inversiones: "dia",
+  cierre: "cierre", caja: "cierre", resultados: "como", tesoreria: "como",
+};
+const FIN_SUB_ANTIGUO = { efectivo: "caja", banco: "bancos", gastos: "facturas" }; // apartado antiguo sin pestaña → su primera pestaña
 
 // Lo que mandan las notificaciones de la app (evento "recao-nav") → dónde se abre aquí
 // El botón de los correos (función notificaciones-email) usa estas mismas rutas: si se cambian aquí, cambiarlas también allí.
@@ -101,10 +105,14 @@ export function leerRuta(hash) {
   const [a, s0, extra] = String(hash || "").split("?")[0].replace(/^#\/?/, "").split("/"); // #81: «?mes=…» no cuenta para la ruta
   const area = AREAS.find((x) => x.id === a && !x.pronto) || AREAS[0];
   if (area.id === "finanzas") {
-    const antigua = FIN_ANTIGUAS[s0];
-    const sub = area.subs.find((x) => x.id === (antigua || s0)) || area.subs[0];
+    let subId = s0, pedida = extra;
+    if (!["resumen", "dia", "cierre", "como", "stock", "glosario"].includes(s0)) { // enlace antiguo
+      if (s0 === "resultados") { pedida = extra === "cierre" ? "cierre" : "resultados"; subId = FIN_DESTINO[pedida]; }
+      else if (FIN_SUB_ANTIGUO[s0]) { pedida = extra || FIN_SUB_ANTIGUO[s0]; subId = FIN_DESTINO[pedida]; }
+      else if (FIN_DESTINO[s0]) { pedida = s0; subId = FIN_DESTINO[s0]; }
+    }
+    const sub = area.subs.find((x) => x.id === subId) || area.subs[0];
     const pestanas = FIN_PESTANAS[sub.id];
-    const pedida = antigua ? s0 : extra;
     const tab = pestanas ? (pestanas.find((t) => t.id === pedida) || pestanas[0]).id : undefined;
     return { area, sub, extra: tab };
   }
