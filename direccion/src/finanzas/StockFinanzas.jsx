@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../src/lib/supabase.js";
 import { eur, num, pct, parseDate, mesAnio } from "../fmt.js";
+import { Que } from "./Guia.jsx"; // #142: botón «?» que explica cada cifra
 
 const n0 = (v) => Number(v) || 0;
 const fechaTxt = (f) => parseDate(f).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
@@ -10,10 +11,26 @@ const cant = (x) => `${num(x.cantidad, x.al_peso ? 2 : 0)} ${x.al_peso ? "kg" : 
 const dias = (d) => (d == null ? "sin ventas" : `${num(d, 1)} días`);
 const NUM = { textAlign: "right", whiteSpace: "nowrap" };
 
-function Kpi({ titulo, valor, sub, tono }) {
+const FRASE_FIJA = "Aquí ves cuánto dinero tenemos metido en mercancía en la tienda.";
+
+// #152: tarjeta plegada (cerrada por defecto) con su total y ✅ (todo bien) o ⚠️ (hay algo pendiente)
+function Plegable({ titulo, total, aviso, children }) {
+  return (
+    <details className="card fpleg" style={{ margin: "14px 0", padding: "12px 16px" }}>
+      <summary style={{ cursor: "pointer", fontWeight: 700, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <span>{aviso ? "⚠️" : "✅"} {titulo}</span>
+        {total && <span className="sub" style={{ margin: 0, fontWeight: 400 }}>{total}</span>}
+        {aviso && <span className="sub" style={{ margin: 0, fontWeight: 400 }}>· {aviso}</span>}
+      </summary>
+      {children}
+    </details>
+  );
+}
+
+function Kpi({ titulo, valor, sub, tono, que }) {
   return (
     <div className="card fkpi">
-      <h2>{titulo}</h2>
+      <h2>{titulo}{que && <Que texto={que} />}</h2>
       <p className={`num${tono ? " " + tono : ""}`}>{valor}</p>
       {sub && <p className="sub">{sub}</p>}
     </div>
@@ -88,12 +105,21 @@ export function StockFinanzas() {
 
   if (fallo) return <div className="state">No se han podido cargar los datos. Recarga la página en un momento.</div>;
   if (!s) return <div className="state">Cargando…</div>;
-  if (!s.activo) return <div className="state">El stock se activa cuando dirección pone la fecha del inventario inicial.</div>;
-  if (!s.ultima) return <div className="state">Aún no hay ninguna foto del stock desde el inventario del {fechaTxt(s.inventario)}. Saldrá a la mañana siguiente.</div>;
+  if (!s.activo) return <div className="state"><div><p className="sub">{FRASE_FIJA}</p><p><b>Todavía no hay inventario: estas cifras no son reales aún.</b></p><p className="sub">El stock se activa cuando dirección pone la fecha del inventario inicial.</p></div></div>;
+  if (!s.ultima) return <div className="state"><div><p className="sub">{FRASE_FIJA}</p><p><b>Todavía no hay inventario: estas cifras no son reales aún.</b></p><p className="sub">{`Aún no hay ninguna foto del stock desde el inventario del ${fechaTxt(s.inventario)}. Saldrá a la mañana siguiente.`}</p></div></div>;
 
   const u = s.ultima, valor = n0(s.valor);
   const productos = verTodos ? s.productos : s.productos.slice(0, 20);
   const mp = s.margen, margen = n0(mp.pvp) - n0(mp.coste);
+  const sumaTramo = (k) => tramos[k].reduce((a, p) => a + n0(p.importe), 0);
+  const parado = sumaTramo(30) + sumaTramo(60) + sumaTramo(90);
+  const nParado = tramos[30].length + tramos[60].length + tramos[90].length;
+  const mesActual = String(s.fecha).slice(0, 7);
+  const mesAnt = [...(s.meses || [])].reverse().find((m) => m.mes < mesActual);
+  const difMes = mesAnt ? valor - n0(mesAnt.valor) : null;
+  const ej = [...(mp.categorias || [])].sort((a, b) => n0(b.pvp) - n0(a.pvp))[0];
+  const ejTxt = ej && n0(ej.pvp) ? ` Ejemplo con nuestros datos: en ${ej.nombre} el stock vale ${eur(ej.coste, 0)} a coste y ${eur(ej.pvp, 0)} a precio de venta; el margen es ${eur(n0(ej.pvp) - n0(ej.coste), 0)} (${pct((n0(ej.pvp) - n0(ej.coste)) / n0(ej.pvp) * 100)}).` : "";
+  const nSinValorar = s.sin_valorar.length, nNeg = s.negativos.length;
 
   async function descargar() {
     setBajando(true); setErrXl("");
@@ -117,7 +143,21 @@ export function StockFinanzas() {
 
   return (
     <>
-      {/* 1. Valor del stock */}
+      {/* #152: frase fija, frase respuesta y 3 números */}
+      <div className="card c12" style={{ marginBottom: 14 }}>
+        <p className="sub" style={{ marginTop: 0 }}>{FRASE_FIJA}</p>
+        <p style={{ fontSize: 22, fontWeight: 800, margin: "6px 0 14px" }}>Tenemos {eur(valor, 0)} en mercancía en la tienda</p>
+        <div className="grid sin-margen">
+          <Kpi titulo="Valor del stock" valor={eur(valor, 0)} que={`Lo que costaría comprar de nuevo todo lo que hay en la tienda hoy, con IVA y recargo (coste completo). Sale de la foto de la noche del ${fechaTxt(s.fecha)}. Si falta el coste de algún producto, ese producto no suma (sale en «Sin valorar»).`}
+            sub={difMes == null ? `${num(u.productos_con_stock)} productos con stock` : `${difMes >= 0 ? "↑" : "↓"} ${eur(Math.abs(difMes), 0)} ${difMes >= 0 ? "más" : "menos"} que a fin de ${mesAnio(`${mesAnt.mes}-01`)}`} />
+          <Kpi titulo="Stock parado" valor={eur(parado, 0)} sub={`${num(nParado)} productos sin venderse en 30 días o más`} tono={parado > 0 ? "mal" : ""}
+            que="Productos que llevan tiempo sin venderse (30 días o más). Es dinero dormido: está metido en mercancía que no se mueve. Los que nunca aparecen en las ventas cuentan como «90 días o más»." />
+          <Kpi titulo="Margen" valor={eur(margen, 0)} sub={n0(mp.pvp) ? `${pct(margen / n0(mp.pvp) * 100)} sobre el precio de venta` : ""} tono={margen < 0 ? "mal" : ""}
+            que={`Lo que ganaríamos si vendiéramos todo el stock a su precio de venta actual: precio de venta menos coste completo.${ejTxt}`} />
+        </div>
+      </div>
+
+      <Plegable titulo="Valor del stock y su evolución" total={eur(valor, 0)}>
       <div className="grid">
         <div className="card c12">
           <div className="head"><div><h2>Valor del stock</h2><p className="sub">Foto de la noche del {fechaTxt(s.fecha)} · valorado a coste con IVA y recargo</p></div></div>
@@ -136,8 +176,10 @@ export function StockFinanzas() {
           </div>
         </div>
       </div>
+      </Plegable>
 
       {/* 2. Reparto del dinero */}
+      <Plegable titulo="En qué está el dinero (categoría, proveedor y productos)" total={`${num(u.productos_con_stock)} productos`}>
       <div className="grid">
         <TablaReparto titulo="Por categoría" filas={s.categorias} total={valor} />
         <TablaReparto titulo="Por proveedor" filas={s.proveedores} total={valor} />
@@ -152,8 +194,10 @@ export function StockFinanzas() {
           {s.productos.length > 20 && <p><button type="button" className="enlace" style={{ background: "none", border: 0, cursor: "pointer", padding: 0 }} onClick={() => setVerTodos(!verTodos)}>{verTodos ? "Ver solo los 20 primeros" : `Ver todos (${num(s.productos.length)})`}</button></p>}
         </div>
       </div>
+      </Plegable>
 
       {/* 3. Días de stock */}
+      <Plegable titulo="Días de stock (rotación)" total={s.dias_total == null ? "sin ventas" : `${num(s.dias_total, 1)} días de ventas`}>
       <div className="grid">
         <div className="card c12">
           <h2>Días de stock (rotación)</h2>
@@ -170,8 +214,10 @@ export function StockFinanzas() {
           );
         })}
       </div>
+      </Plegable>
 
       {/* 4. Stock parado */}
+      <Plegable titulo="Stock parado" total={eur(parado, 0)} aviso={nParado ? `${num(nParado)} productos sin venderse` : null}>
       <div className="grid">
         <div className="card c12">
           <h2>Stock parado</h2>
@@ -195,8 +241,10 @@ export function StockFinanzas() {
           )}
         </div>
       </div>
+      </Plegable>
 
       {/* 5. Beneficio que lleva dentro */}
+      <Plegable titulo="Beneficio que lleva dentro el stock" total={`margen ${eur(margen, 0)}`} aviso={mp.sin_pvp > 0 ? `${num(mp.sin_pvp)} productos sin precio de venta` : null}>
       <div className="grid">
         <div className="card c12">
           <h2>Beneficio que lleva dentro el stock</h2>
@@ -214,8 +262,11 @@ export function StockFinanzas() {
           </div>
         </div>
       </div>
+      </Plegable>
 
       {/* 6. Sin valorar y negativos */}
+      <Plegable titulo="Sin valorar y stock negativo" total={`${num(nSinValorar)} sin valorar · ${num(nNeg)} negativos`} aviso={nSinValorar || nNeg ? "revisar en Epos" : null}>
+      {nSinValorar > 0 && <p className="sub">⚠️ {num(nSinValorar)} productos están «sin valorar»: no tienen coste en Epos, así que no suman en el valor del stock. Hay que ponerles el coste para que la cifra sea completa.</p>}
       <div className="grid">
         {[["Sin valorar (sin coste en Epos)", s.sin_valorar, "No suman en ningún importe."], ["Stock negativo", s.negativos, "No restan del valor."]].map(([t, l, nota]) => (
           <div className="card c6" key={t}>
@@ -227,8 +278,10 @@ export function StockFinanzas() {
           </div>
         ))}
       </div>
+      </Plegable>
 
       {/* 7. Excel */}
+      <Plegable titulo="Descargar a Excel" total="el stock de un día, producto a producto">
       <div className="grid">
         <div className="card c12">
           <h2>Descargar a Excel</h2>
@@ -242,6 +295,7 @@ export function StockFinanzas() {
           {errXl && <p className="aviso-txt">{errXl}</p>}
         </div>
       </div>
+      </Plegable>
     </>
   );
 }
