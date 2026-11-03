@@ -41,6 +41,7 @@ export const AREAS = [
       { id: "familias", label: "Familias" },
       { id: "proveedores", label: "Proveedores" },
       { id: "salud", label: "Salud del catálogo" },
+      { id: "lab", label: "Lab" },
     ],
   },
   {
