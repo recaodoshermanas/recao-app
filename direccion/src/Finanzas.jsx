@@ -16,6 +16,7 @@ const CATS = [
   { id: "servicios", label: "Servicios" },
   { id: "impuestos", label: "Impuestos" },
   { id: "mantenimiento", label: "Mantenimiento y equipamiento" },
+  { id: "marketing", label: "Marketing" }, // #147
   { id: "otros", label: "Otros" },
 ];
 const CAT_LABEL = Object.fromEntries(CATS.map((c) => [c.id, c.label]));
@@ -395,6 +396,10 @@ export function FinanzasResultados({ onEditMonth }) {
     { k: "resultado", l: "Beneficio del negocio", b: true, r: true },
     // Solo los socios (#14): el reparto no es gasto, va debajo del beneficio
     ...(d.socio ? [{ k: "reparto_sobres", l: "Reparto a socios", neg: true }, { k: "resultado_tras_reparto", l: "Resultado después del reparto", b: true, r2: true }] : []),
+    // #146: lo que no es gasto del mes pero sí dinero que ha salido (solo socios, porque parte del resultado después del reparto)
+    ...(d.socio ? [{ sep: true, k: "sep_otros", l: "Otros pagos del mes que no van en la cuenta de resultados" },
+      { k: "inversiones", l: "Inversiones", nota: "Compras que duran años, como el congelador. No son gasto del mes, pero el dinero ha salido." },
+      { k: "resultado_real", l: "Resultado real del mes", b: true, r3: true, nota: "Lo que de verdad queda: el resultado después del reparto menos las inversiones.", get: (m) => n0(m.resultado_tras_reparto) - n0(m.inversiones) }] : []),
   ];
   const margenFilas = [
     { l: "Venta sin IVA (Epos)", f: (m) => m.epos_sin_iva },
@@ -430,9 +435,9 @@ export function FinanzasResultados({ onEditMonth }) {
             <thead><tr><th />{meses.map((m) => <th key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}`}><button onClick={() => setSel(m.mes)}>{mesCorto(m.mes)}<small>{String(parseDate(m.mes).getFullYear()).slice(2)}</small>{!m.cerrado && <small className="ec"> · {m.mes === mesHoy ? "en curso" : "provisional"}</small>}</button></th>)}</tr></thead>
             <tbody>
               {filas.map((f) => f.sep ? <tr key={f.k} className="sep"><th colSpan={meses.length + 1}>{f.l}</th></tr> : (
-                <tr key={f.k} className={`${f.b || f.b2 ? "b" : ""}${f.r ? " r" : ""}${f.r2 ? " r tras" : ""}`}>
-                  <th>{f.l}</th>
-                  {meses.map((m) => { const txt = f.get ? (f.get(m) == null ? "–" : val(m, n0(f.get(m)))) : f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k])); return <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}${f.r ? (n0(f.get ? f.get(m) : m[f.k]) >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}`}>{txt === "–" ? txt : <button className="cifra" title="Ver de dónde sale" onClick={() => setCifra({ f, m })}>{txt}</button>}</td>; })}
+                <tr key={f.k} className={`${f.b || f.b2 ? "b" : ""}${f.r ? " r" : ""}${f.r2 || f.r3 ? " r tras" : ""}`}>
+                  <th>{f.l}{f.nota && <small style={{ display: "block", fontWeight: 400, whiteSpace: "normal", maxWidth: 260, color: "var(--muted, #6b6558)" }}>{f.nota}</small>}</th>
+                  {meses.map((m) => { const txt = f.get ? (f.get(m) == null ? "–" : val(m, n0(f.get(m)))) : f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k])); return <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}${f.r ? (n0(f.get ? f.get(m) : m[f.k]) >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}${f.r3 ? (n0(f.get(m)) >= 0 ? " up" : " neg-fuerte") : ""}`}>{txt === "–" ? txt : <button className="cifra" title="Ver de dónde sale" onClick={() => setCifra({ f, m })}>{txt}</button>}</td>; })}
                 </tr>
               ))}
               <tr className="sep"><th colSpan={meses.length + 1}>Margen real según Epos (sin IVA)</th></tr>
@@ -446,6 +451,7 @@ export function FinanzasResultados({ onEditMonth }) {
           </table>
         </div>
       </div>
+      {mes && d.socio && <BloqueOtrosPagos mes={mes} />}
       {mes && <DetalleMes mes={mes} disponibles={disponibles} onCambio={recargar} onEditMonth={onEditMonth} />}
       {cifra && <VentanaCifra f={cifra.f} m={cifra.m} filas={filas} socio={!!d.socio} onClose={() => setCifra(null)} onEditMonth={onEditMonth} />}
     </>
@@ -462,13 +468,14 @@ const valorFila = (f, m) => (f.get ? f.get(m) : m[f.k]);
 const ENLACE = {
   ventas: "cierre", paqueteria: "cierre", personal: "cierre", ss: "cierre", local: "cierre", servicios: "cierre", impuestos: "cierre", otros: "cierre",
   descuadres_caja: "cierre", variacion_existencias: "cierre",
-  mercancia: "facturas", compras_mercancia: "facturas", mantenimiento: "mantenimiento", reparto_sobres: "sobres",
+  mercancia: "facturas", compras_mercancia: "facturas", mantenimiento: "mantenimiento", reparto_sobres: "sobres", marketing: "sobres", inversiones: "inversiones",
 };
 const PANTALLA = {
   cierre: { l: "Cierre de mes", ruta: "#/finanzas/resultados/cierre" },
   facturas: { l: "Facturas", ruta: "#/finanzas/gastos/facturas" },
   mantenimiento: { l: "Mantenimiento", ruta: "#/finanzas/gastos/mantenimiento" },
   sobres: { l: "Efectivo de sobres", ruta: "#/finanzas/efectivo/sobres" },
+  inversiones: { l: "Inversiones", ruta: "#/finanzas/gastos/inversiones" },
 };
 
 // filas que son suma de otras filas: las partidas son esas filas, con su signo
@@ -481,6 +488,7 @@ function partidasCompuestas(k, m, filas) {
   if (k === "ingresos") return [{ c: "Ventas (con IVA)", i: n0(m.ventas) }, { c: "Ingresos de paquetería", i: n0(m.paqueteria) }];
   if (k === "resultado") return [{ c: "Ventas (con IVA)", i: n0(m.ventas) }, { c: "Ingresos de paquetería", i: n0(m.paqueteria) }, { c: "Gastos (se restan)", i: -n0(m.gastos) },
     ...(n0(m.descuadres_caja) ? [{ c: "Descuadres de caja", i: n0(m.descuadres_caja) }] : [])];
+  if (k === "resultado_real") return [{ c: "Resultado después del reparto", i: n0(m.resultado_tras_reparto) }, { c: "Inversiones (se restan)", i: -n0(m.inversiones) }];
   if (k === "resultado_tras_reparto") return [{ c: "Beneficio del negocio", i: n0(m.resultado) }, { c: "Reparto a socios (se resta)", i: -n0(m.reparto_sobres) }];
   return null;
 }
@@ -590,6 +598,37 @@ function Comparacion({ mes, disponibles }) {
   );
 }
 
+// #146: bloque final de la Cuenta de resultados del mes elegido: en qué más se ha ido el dinero y el resultado real.
+function BloqueOtrosPagos({ mes }) {
+  const [datos, setDatos] = useState(partidasCache[mes.mes] || null);
+  const [fallo, setFallo] = useState(false);
+  useEffect(() => {
+    if (partidasCache[mes.mes]) { setDatos(partidasCache[mes.mes]); return; }
+    let vivo = true; setDatos(null); setFallo(false);
+    sb.rpc("fin_cuenta_partidas", { p_mes: mes.mes }).then((r) => { partidasCache[mes.mes] = r; if (vivo) setDatos(r); }).catch(() => { if (vivo) setFallo(true); });
+    return () => { vivo = false; };
+  }, [mes.mes]);
+  const inv = datos?.filas?.inversiones || [];
+  const totalInv = n0(mes.inversiones);
+  const tras = n0(mes.resultado_tras_reparto);
+  return (
+    <div className="card">
+      <h2>Otros pagos del mes que no van en la cuenta de resultados · {mesAnio(mes.mes)}</h2>
+      <p className="sub">Lo que ha salido de dinero pero no es gasto del mes, y por eso no está arriba. Así se ve el resultado real.</p>
+      {fallo ? <p className="empty">No se ha podido cargar el detalle. Inténtalo de nuevo.</p> : !datos ? <p className="empty">Cargando…</p> : (
+        <ul className="pq-l">
+          {inv.length === 0 ? <li className="nota"><span>Este mes no hay inversiones ni otros pagos fuera de la cuenta.</span><span>0 €</span></li>
+            : inv.map((p, i) => <li key={i}><span>{p.c}<small style={{ display: "block", color: "var(--muted, #6b6558)" }}>{[fechaP(p.f), PAGO[p.d] || p.d].filter(Boolean).join(" · ")}</small></span><span>{eur(n0(p.i), 2)}</span></li>)}
+          <li className="total"><span><b>Total inversiones</b><small style={{ display: "block", fontWeight: 400 }}>Compras que duran años, como el congelador. No son gasto del mes, pero el dinero ha salido.</small></span><b>{eur(totalInv, 2)}</b></li>
+          <li className="nota"><span>Otros pagos fuera de la cuenta: de momento solo se cuentan las inversiones.</span><span>–</span></li>
+          <li><span>Resultado después del reparto</span><span>{eur(tras, 2)}</span></li>
+          <li className="total"><span><b>Resultado real del mes</b><small style={{ display: "block", fontWeight: 400 }}>Resultado después del reparto − inversiones. Es lo que de verdad queda.</small></span><b>{eur(tras - totalInv, 2)}</b></li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function DetalleMes({ mes, disponibles, onCambio, onEditMonth }) {
   const [guardando, setGuardando] = useState(null);
   const cambiar = async (concepto, categoria) => {
@@ -634,6 +673,7 @@ function DetalleMes({ mes, disponibles, onCambio, onEditMonth }) {
         <h3 className="fh3">Gastos fijos</h3>
         <ul className="pq-l">
           {Object.entries(fijos).filter(([, v]) => n0(v)).map(([k, v]) => <li key={k}><span>{FIJ[k] || k}</span><span>{eur(n0(v), 2)}</span></li>)}
+          {n0(mes.marketing) > 0 && <li><span>Marketing (gasto fijo, efectivo de sobres)</span><span>{eur(n0(mes.marketing), 2)}</span></li>}
         </ul>
       </div>
       <div className="card c6">

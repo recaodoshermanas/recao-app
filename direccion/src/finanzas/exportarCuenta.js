@@ -40,6 +40,7 @@ export function filasDetalle(mes) {
   if (n0(mes.extras) > 0) add("Salarios", "Extras a trabajadoras (efectivo de sobres)", mes.extras);
   const FIJ = { ss: "Seguridad Social", alquiler: "Alquiler", iva_alquiler: "IVA del alquiler", luz: "Luz", agua: "Agua", ayuntamiento: "Ayuntamiento", asesoria: "Asesoría", securitas: "Securitas", epos: "Epos", anthropic: "Anthropic-Claude", whatsapp: "WhatsApp Business", whatsapp_varios: "WhatsApp Business - Servicios Varios", hetzner: "Hetzner - Servidor", supabase: "Supabase - Base de datos" };
   Object.entries(mes.fijos_det || {}).filter(([, v]) => n0(v)).forEach(([k, v]) => add("Gastos fijos", FIJ[k] || k, v));
+  if (n0(mes.marketing) > 0) add("Gastos fijos", "Marketing (gasto fijo, efectivo de sobres)", mes.marketing);
   (mes.lineas || []).forEach((l) => add("Otros gastos", l.concepto, l.importe));
   (mes.mantenimiento_det || []).forEach((l) => add("Mantenimiento", l.concepto, l.importe));
   if (n0(mes.inversiones) > 0) add("Inversiones (fuera del resultado)", "Inversiones del mes", mes.inversiones);

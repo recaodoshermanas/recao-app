@@ -10,7 +10,7 @@ import { useCambioEfectivo, avisarCambioEfectivo, EfectivoVivo } from "./finanza
 
 const TIPOS = {
   reparto: { label: "Reparto", chip: "rep" }, extra: { label: "Extra", chip: "ext" }, compra: { label: "Compra", chip: "com" },
-  banco: { label: "Banco", chip: "ban" }, caja_fuerte: { label: "Caja fuerte", chip: "cf" }, inversion: { label: "Inversión", chip: "rep" }, mantenimiento: { label: "Mantenimiento", chip: "cf" },
+  banco: { label: "Banco", chip: "ban" }, caja_fuerte: { label: "Caja fuerte", chip: "cf" }, inversion: { label: "Inversión", chip: "rep" }, mantenimiento: { label: "Mantenimiento", chip: "cf" }, marketing: { label: "Marketing", chip: "cf" },
 };
 const numero = (v) => { const s = String(v ?? "").trim().replace(/\s/g, ""); const t = s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s; const x = Number(t); return t !== "" && /^\d+(\.\d{1,2})?$/.test(t) && Number.isFinite(x) ? x : NaN; };
 const masMes = (m, n) => { const d = new Date(`${m}-15T12:00:00`); d.setMonth(d.getMonth() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
@@ -100,7 +100,7 @@ export function EfectivoSobres() {
                     <td>{s.tipo === "reparto" ? s.persona : s.tipo === "extra" ? <>{s.persona}{s.concepto ? <span className="pf">{s.concepto}</span> : null}</> : s.tipo === "banco" ? `${s.banco}${s.concepto ? ` · ${s.concepto}` : ""}` : (s.concepto || "—")}{s.cambios > 0 && <span className="pf">Corregido</span>}</td>
                     <td>{s.quien || "—"}</td>
                     <td className="r b">−{eur(s.importe, 2)}</td>
-                    <td className="r" style={{ whiteSpace: "nowrap" }}>{s.origen === "factura" ? <span className="pf">Se corrige en la factura</span> : s.origen === "extras" ? <span className="pf">Se cambia en «Extras de trabajadoras»</span> : s.origen === "inversion" ? <span className="pf">Se cambia en «Inversiones»</span> : s.origen === "mantenimiento" ? <span className="pf">Se cambia en «Mantenimiento»</span> : s.origen === "recarga" ? <span className="pf">Se cambia en Caja</span> : <button className="btn-l" onClick={() => setPanel({ editar: s })}>Corregir</button>}</td>
+                    <td className="r" style={{ whiteSpace: "nowrap" }}>{s.origen === "factura" ? <span className="pf">Se corrige en la factura</span> : s.origen === "extras" ? <span className="pf">Se cambia en «Extras de trabajadoras»</span> : s.origen === "inversion" ? <span className="pf">Se cambia en «Inversiones»</span> : s.origen === "mantenimiento" ? <span className="pf">Se cambia en «Mantenimiento»</span> : s.origen === "recarga" ? <span className="pf">Se cambia en Caja</span> : s.origen === "marketing" ? <button className="btn-l" onClick={() => setPanel({ marketing: true })}>Cambiar importe</button> : <button className="btn-l" onClick={() => setPanel({ editar: s })}>Corregir</button>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -116,6 +116,7 @@ export function EfectivoSobres() {
       {panel?.tipo === "reparto" && <PanelReparto d={d} mes={mes} onClose={() => setPanel(null)} onListo={listo} />}
       {panel?.tipo && panel.tipo !== "reparto" && <PanelSalida tipo={panel.tipo} d={d} mes={mes} onClose={() => setPanel(null)} onListo={listo} />}
       {panel?.editar && <PanelCorregir s={panel.editar} d={d} onClose={() => setPanel(null)} onListo={(r) => { setPanel(null); if (r?.mes === mes) setD(r); else cargar(); }} />}
+      {panel?.marketing && <PanelMarketing mes={mes} actual={d.salidas.find((x) => x.origen === "marketing")?.importe} onClose={() => setPanel(null)} onListo={listo} />}
       {panel?.config && <PanelConfig d={d} onClose={() => setPanel(null)} onListo={() => { setPanel(null); cargar(); }} />}
     </>
   );
@@ -138,6 +139,26 @@ function PanelPartida({ sp, onClose, onListo }) {
       <label className="campo">Importe (€)<input inputMode="decimal" value={imp} onChange={(e) => setImp(e.target.value)} placeholder="0,00" autoFocus /></label>
       {imp && !Number.isFinite(x) && <p className="es-rojo" style={{ marginTop: 0 }}>Pon un importe válido, con 2 decimales como mucho.</p>}
       <label className="campo">Nota (opcional)<input value={nota} maxLength={200} onChange={(e) => setNota(e.target.value)} placeholder="Ej.: contado en casa el 30/9" /></label>
+    </Panel>
+  );
+}
+
+// #147: cambiar el importe de Marketing SOLO de este mes (el mes siguiente vuelve a los 500 € de siempre)
+function PanelMarketing({ mes, actual, onClose, onListo }) {
+  const [imp, setImp] = useState(actual != null ? String(actual).replace(".", ",") : "");
+  const [busy, setBusy] = useState(false);
+  const x = imp === "0" ? 0 : numero(imp);
+  const guardar = async () => {
+    setBusy(true);
+    try { onListo(await sb.rpc("marketing_fijar", { p_mes: mes, p_importe: x })); avisar("Marketing cambiado solo para este mes"); }
+    catch (e) { avisar(e.message || "No se ha podido guardar", "mal"); }
+    setBusy(false);
+  };
+  return (
+    <Panel titulo={`Marketing · ${mesAnio(`${mes}-01`)}`} sub="El cambio vale solo para este mes. El mes siguiente vuelve a salir el importe de siempre (500 €). Se ve igual aquí y en la Cuenta de resultados." onClose={onClose} ancho="440px"
+      pie={<button className="btn-p" disabled={busy || !Number.isFinite(x)} onClick={guardar}>{busy ? "Guardando…" : "Guardar"}</button>}>
+      <label className="campo">Importe de este mes (€)<input inputMode="decimal" value={imp} onChange={(e) => setImp(e.target.value)} placeholder="500,00" autoFocus /></label>
+      {imp && !Number.isFinite(x) && <p className="es-rojo" style={{ marginTop: 0 }}>Pon un importe válido, con 2 decimales como mucho.</p>}
     </Panel>
   );
 }
