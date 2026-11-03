@@ -7,6 +7,8 @@ import { eur, eurK, pct, num, mesCorto, mesAnio, parseDate } from "./fmt.js";
 import { CajaFuerte } from "./CajaFuerte.jsx"; // CAJA FUERTE (#11)
 import { CuadreTurnos } from "./finanzas/CuadreTurnos.jsx"; // #81
 import { InformeMensual } from "./finanzas/InformeMensual.jsx"; // #65
+import { ResumenArriba, Plegable } from "./finanzas/ResumenFacil.jsx"; // #148
+import { DineroHoy } from "./finanzas/DineroHoy.jsx";
 import { armarTabla, exportarExcel, exportarPdf } from "./finanzas/exportarCuenta.js"; // #71
 
 const CATS = [
@@ -147,62 +149,62 @@ export function FinanzasResumen({ onEditMonth }) {
 
   return (
     <>
-      <section className="fhero">
-        <div className="fhero-t">
-          <h1>{nombreMesActual} · día {c.dia} de {c.diasMes}</h1>
-          <p className="fhero-s">Beneficio estimado del mes si se vende como en las últimas semanas (cierre previsto ≈ {eur(sinDecimales(c.proyeccion))}) y los gastos siguen como en los tres últimos meses.</p>
-        </div>
-        <div className="fhero-esc">
-          <p className="fhero-k">Con lo que estáis comprando</p>
-          <p className="big">{eur(sinDecimales(c.benefCompras))}</p>
-          <p className="fhero-n">Compras = {pct(n0(c.P.compras_ratio) * 100, 0)} de la venta, como de media en los 3 últimos meses. Es lo que dice hoy la cuenta de resultados.</p>
-        </div>
-        <div className="fhero-esc">
-          <p className="fhero-k">Con el margen real de Epos</p>
-          <p className="big">{eur(sinDecimales(c.benefMargen))}</p>
-          <p className="fhero-n">Margen sobre lo vendido del {pct(c.margen * 100, 1)}. Si las compras se ajustan a lo que se vende, este sería el beneficio.</p>
-        </div>
-        <dl className="fhero-dl">
-          <div><dt>Venta necesaria al día para cubrir gastos</dt><dd>{eur(sinDecimales(c.necesariaDia))}</dd></div>
-          <div><dt>Venta media al día (últimas 4 semanas)</dt><dd>{eur(sinDecimales(c.mediaDia))}</dd></div>
-          <div><dt>Diferencia entre los dos escenarios</dt><dd>{eur(sinDecimales(c.benefMargen - c.benefCompras))}</dd><span>Es lo que hay que explicar con el inventario: stock acumulado, costes de Epos desactualizados o mermas.</span></div>
-        </dl>
-      </section>
+      <ResumenArriba d={d} avisos={avisos} onEditMonth={onEditMonth} onRevisar={revisar} />
 
-      {avisos.length > 0 && (
-        <section className="avisos favisos" aria-label="Avisos">
-          {avisos.map((a, i) => a.ruta
-            ? <a key={i} className="aviso" href={`#/${a.ruta}`} onClick={a.mes && onEditMonth ? (e) => { e.preventDefault(); onEditMonth(a.mes); } : undefined}><b>!</b><span>{a.t}</span><i aria-hidden="true">→</i></a>
-            : a.clave
-              ? <div key={i} className="aviso aviso-det"><b>!</b><span>{a.t}{(a.detalle || []).length > 0 && <details><summary>Ver detalle</summary><ul>{a.detalle.map((t, j) => <li key={j}>{t}</li>)}</ul></details>}</span><button type="button" className="aviso-rev" onClick={() => revisar(a.clave)}>Marcar como revisado</button></div>
-              : <div key={i} className="aviso"><b>!</b><span>{a.t}</span></div>)}
-        </section>
-      )}
+      <Plegable titulo="El dinero que tenemos hoy" total={null}><DineroHoy /></Plegable>
 
-      <div className="grid">
-        <Kpi titulo="Venta del mes" valor={eur(sinDecimales(c.P.venta))} sub={`${c.dia} días · cierre previsto ≈ ${eur(sinDecimales(c.proyeccion))}`} tip="La previsión suma lo que llevamos y, para cada día que queda, la venta media de ese día de la semana en las últimas 4 semanas." />
-        <Kpi titulo="Margen real" valor={pct(c.margen * 100)} sub="Venta sin IVA menos coste de lo vendido (Epos)" tip="Calculado con el coste de cada producto en Epos. Si algún coste está desactualizado, el margen real será otro." />
-        <Kpi titulo="Gastos fijos al mes" valor={eur(sinDecimales(c.fijos))} sub={`Personal ${eur(sinDecimales(c.P.personal))} · local ${eur(sinDecimales(c.P.local))} · resto ${eur(sinDecimales(n0(c.P.servicios) + n0(c.P.otros)))}`} tip="Media de los tres últimos meses cerrados, sin compras de mercancía ni impuestos." />
-        <Kpi titulo="Compras este mes" valor={eur(sinDecimales(c.P.facturas))} sub={`Coste de lo vendido: ${eur(sinDecimales(c.P.coste))}`} tono={c.P.facturas > c.P.coste * 1.1 ? "mal" : ""} />
-      </div>
-
-      <div className="grid">
-        <div className="card c12">
-          <div className="head">
-            <div><h2>Últimos 12 meses</h2><p className="sub">Ingresos (gris) y resultado (verde) de cada mes cerrado</p></div>
-            <a className="enlace" href="#/finanzas/resultados">Cuenta de resultados →</a>
+      <Plegable titulo={`Beneficio estimado de ${nombreMesActual.toLowerCase()}`} total={eur(sinDecimales(c.benefCompras))}>
+        <section className="fhero">
+          <div className="fhero-t">
+            <h1>{nombreMesActual} · día {c.dia} de {c.diasMes}</h1>
+            <p className="fhero-s">Beneficio estimado del mes si se vende como en las últimas semanas (cierre previsto ≈ {eur(sinDecimales(c.proyeccion))}) y los gastos siguen como en los tres últimos meses.</p>
           </div>
-          <GraficoMeses meses={cerrados} />
+          <div className="fhero-esc">
+            <p className="fhero-k">Con lo que estáis comprando</p>
+            <p className="big">{eur(sinDecimales(c.benefCompras))}</p>
+            <p className="fhero-n">Compras = {pct(n0(c.P.compras_ratio) * 100, 0)} de la venta, como de media en los 3 últimos meses. Es lo que dice hoy la cuenta de resultados.</p>
+          </div>
+          <div className="fhero-esc">
+            <p className="fhero-k">Con el margen real de Epos</p>
+            <p className="big">{eur(sinDecimales(c.benefMargen))}</p>
+            <p className="fhero-n">Margen sobre lo vendido del {pct(c.margen * 100, 1)}. Si las compras se ajustan a lo que se vende, este sería el beneficio.</p>
+          </div>
+          <dl className="fhero-dl">
+            <div><dt>Venta necesaria al día para cubrir gastos</dt><dd>{eur(sinDecimales(c.necesariaDia))}</dd></div>
+            <div><dt>Venta media al día (últimas 4 semanas)</dt><dd>{eur(sinDecimales(c.mediaDia))}</dd></div>
+            <div><dt>Diferencia entre los dos escenarios</dt><dd>{eur(sinDecimales(c.benefMargen - c.benefCompras))}</dd><span>Es lo que hay que explicar con el inventario: stock acumulado, costes de Epos desactualizados o mermas.</span></div>
+          </dl>
+        </section>
+      </Plegable>
+
+      <Plegable titulo="Cifras del mes" total={`Venta ${eur(sinDecimales(c.P.venta))}`}>
+        <div className="grid">
+          <Kpi titulo="Venta del mes" valor={eur(sinDecimales(c.P.venta))} sub={`${c.dia} días · cierre previsto ≈ ${eur(sinDecimales(c.proyeccion))}`} tip="La previsión suma lo que llevamos y, para cada día que queda, la venta media de ese día de la semana en las últimas 4 semanas." />
+          <Kpi titulo="Margen real" valor={pct(c.margen * 100)} sub="Venta sin IVA menos coste de lo vendido (Epos)" tip="Calculado con el coste de cada producto en Epos. Si algún coste está desactualizado, el margen real será otro." />
+          <Kpi titulo="Gastos fijos al mes" valor={eur(sinDecimales(c.fijos))} sub={`Personal ${eur(sinDecimales(c.P.personal))} · local ${eur(sinDecimales(c.P.local))} · resto ${eur(sinDecimales(n0(c.P.servicios) + n0(c.P.otros)))}`} tip="Media de los tres últimos meses cerrados, sin compras de mercancía ni impuestos." />
+          <Kpi titulo="Compras este mes" valor={eur(sinDecimales(c.P.facturas))} sub={`Coste de lo vendido: ${eur(sinDecimales(c.P.coste))}`} tono={c.P.facturas > c.P.coste * 1.1 ? "mal" : ""} />
         </div>
-      </div>
+      </Plegable>
 
-      <ImpuestosResumen />
+      <Plegable titulo="Últimos 12 meses" total={null}>
+        <div className="grid">
+          <div className="card c12">
+            <div className="head">
+              <div><h2>Últimos 12 meses</h2><p className="sub">Ingresos (gris) y resultado (verde) de cada mes cerrado</p></div>
+              <a className="enlace" href="#/finanzas/resultados">Cuenta de resultados →</a>
+            </div>
+            <GraficoMeses meses={cerrados} />
+          </div>
+        </div>
+      </Plegable>
 
-      <StockResumen />
+      <Plegable titulo="Impuestos (calendario)"><ImpuestosResumen /></Plegable>
 
-      {ult && <Estructura mes={ult} />}
+      <Plegable titulo="Stock"><StockResumen /></Plegable>
 
-      <InformeMensual />
+      {ult && <Plegable titulo="A dónde va cada 100 € que entran"><Estructura mes={ult} /></Plegable>}
+
+      <Plegable titulo="Informe del mes (día 10)"><InformeMensual /></Plegable>
     </>
   );
 }
