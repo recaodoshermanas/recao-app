@@ -6,6 +6,7 @@ import { sb } from "../../../src/lib/supabase.js";
 import { Pestanas, Cargando, avisar, hace } from "../ui.jsx";
 import { eur } from "../fmt.js";
 import { guardarCambios } from "./datos.js";
+import { SecLentos } from "./Pedidos.jsx";
 
 const fn = (accion, datos = {}) => sb.fn("recepcion", { accion, ...datos });
 const numero = (v) => { const n = Number(String(v ?? "").replace(",", ".")); return isFinite(n) ? n : null; };
@@ -17,6 +18,7 @@ const SECCIONES = [
   { id: "precio", label: "Precio" }, { id: "coste", label: "Subidas de coste" }, { id: "iva", label: "IVA" },
   { id: "codigo", label: "Código de barras" }, { id: "nuevos", label: "Productos nuevos" }, { id: "incidencias", label: "Incidencias" },
   { id: "tienda", label: "Precios cambiados en tienda" }, // #35
+  { id: "lentos", label: "Seguir comprando o no" }, // #144
 ];
 const NOMBRE_SEC = Object.fromEntries(SECCIONES.map((s) => [s.id, s.label]));
 const margen = (coste, pvp) => (pvp > 0 ? Math.round((1 - coste / pvp) * 1000) / 10 : null);
@@ -52,10 +54,10 @@ function EnTienda({ a, tipo, onListo, busy, setBusy }) {
 }
 const NotaTienda = ({ a }) => (a.tienda_nota ? <span className="pf" style={{ color: "#5E5444", fontWeight: 700 }}>{a.tienda_nota}</span> : null);
 
-export function ProductosRevisar() {
+export function ProductosRevisar({ extra }) {
   const [d, setD] = useState(null);
   const [s, setS] = useState(null);
-  const [tab, setTab] = useState("precio");
+  const [tab, setTab] = useState(extra === "lentos" ? "lentos" : "precio");
   const [tienda, setTienda] = useState(null); // #35: cambios de precio hechos por las trabajadoras
   const cargar = useCallback(async () => {
     const [a, b, t] = await Promise.allSettled([fn("revisar_panel"), sb.rpc("revisar_secciones"), cargarTienda()]);
@@ -76,6 +78,7 @@ export function ProductosRevisar() {
     precio: new Set(s.precio.map((x) => Number(x.product_id))), coste: new Set(s.coste.map((x) => Number(x.product_id))), iva: new Set(s.iva.map((x) => Number(x.product_id))),
     codigo: new Set(codigo.flatMap((i) => [Number(i.product_id_existente), Number(i.product_id_nuevo)]).filter(Boolean)),
     nuevos: new Set(altas.map((a) => Number(a.product_id)).filter(Boolean)), incidencias: new Set(incid.flatMap((i) => [Number(i.product_id_existente), Number(i.product_id_nuevo)]).filter(Boolean)),
+    lentos: new Set(),
     tienda: new Set(tienda.lista.map((x) => Number(x.product_id))),
   };
   const otras = (pid, actual) => SECCIONES.map((x) => x.id).filter((k) => k !== actual && ids[k].has(Number(pid)));
@@ -90,6 +93,7 @@ export function ProductosRevisar() {
       {tab === "iva" && <SecIva lista={s.iva} otras={otras} onListo={conS} />}
       {tab === "codigo" && <Incidencias lista={codigo} P={P} U={U} onHecho={cargar} otras={otras} sec="codigo" vacio="No hay códigos repetidos. Aparecen cuando un producto nuevo o un código puesto en tienda ya lo tenía otro producto." titulo="Códigos de barras repetidos" />}
       {tab === "nuevos" && <Nuevos d={d} P={P} U={U} cargar={cargar} otras={otras} />}
+      {tab === "lentos" && <SecLentos />}
       {tab === "tienda" && <SecTienda lista={tienda.lista} nombres={tienda.nombres} otras={otras} onHecho={cargar} />}
       {tab === "incidencias" && <Incidencias lista={incid} P={P} U={U} onHecho={cargar} otras={otras} sec="incidencias" vacio="No hay incidencias. Aparecen cuando una trabajadora dice que un código lleva al producto equivocado." titulo="«No es este producto»" />}
     </>
