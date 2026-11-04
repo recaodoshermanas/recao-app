@@ -17,6 +17,22 @@ import { CierreLista } from "./CierreLista.jsx"; // #76
 const ESPERA = 1500; // ms sin tocar nada antes de guardar mientras se escribe
 const estable = (x) => JSON.stringify(x, (k, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map((c) => [c, v[c]])) : v)); // compara sin importar el orden de las claves
 
+// #150: cada bloque del cierre va plegado (cerrado por defecto) con ✅ / ⚠️; la lista de cierre lo abre al tocar su punto.
+function Bloque({ id, titulo, sub, pks, cierre, abiertos, setAbiertos, children }) {
+  const pts = ((cierre && cierre.puntos) || []).filter((x) => (pks || []).includes(x.k));
+  const pend = pts.filter((x) => !x.ok).length;
+  return (
+    <details id={id} open={!!abiertos[id]} onToggle={(e) => { const o = e.currentTarget.open; setAbiertos((p) => (!!p[id] === o ? p : { ...p, [id]: o })); }}
+      style={{ ...crd, padding: 0, scrollMarginTop: 12 }}>
+      <summary style={{ cursor: "pointer", padding: "14px 16px", fontFamily: F, fontSize: 14.5, fontWeight: 700, color: C.char, display: "flex", gap: 8, alignItems: "baseline" }}>
+        <span>{pts.length ? (pend ? "⚠️" : "✅") : "▫️"} {titulo}</span>
+        {sub && <span style={{ fontWeight: 400, fontSize: 12, color: C.mut }}>{sub}</span>}
+      </summary>
+      <div style={{ padding: "0 12px 12px" }}>{children}</div>
+    </details>
+  );
+}
+
 export function DatosMesView({ facturas, monthlyData, config, onReload, initialMonth }) {
   // #76: desde octubre de 2026 salen todos los meses hasta el actual, aunque aún no tengan nada guardado
   const desdeOct = [];
@@ -43,6 +59,8 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
   const [tarjeta, setTarjeta] = useState(null); // #74: desde octubre de 2026, ventas de Epos y tarjeta de la caja 1 frente a BBVA (false = sin acceso)
   const [repartoSobres, setRepartoSobres] = useState(null); // #75: solo lectura, sale de Efectivo de sobres (null = no es socio)
   const [cierre, setCierre] = useState(null); // #76: estado de la lista de cierre (null cargando · false error)
+  const [abiertos, setAbiertos] = useState({}); // #150: bloques desplegados
+  const [descuadre, setDescuadre] = useState(null); // #150: descuadres de caja del mes (misma cifra que la Cuenta de resultados)
   const [guardado, setGuardado] = useState(null); // #77: { zona, estado: "guardando" | "ok" | "error" }
   const sucio = useRef(false);
   const zona = useRef("");
@@ -192,7 +210,15 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
     return () => { window.removeEventListener("beforeunload", antes); if (sucio.current) guardarRef.current?.(); };
   }, []);
   const cambiarMes = async (m) => { if (sucio.current) await guardarRef.current?.(); setSelMonth(m); };
-  const irA = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
+  const irA = (id) => { setAbiertos((p) => ({ ...p, [id]: true })); setTimeout(() => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 80); };
+  // #150: descuadres de caja del mes, de la misma fuente que la Cuenta de resultados
+  useEffect(() => {
+    let vivo = true;
+    setDescuadre(null);
+    sb.rpc("dash_finanzas").then((r) => { const m = ((r && r.meses) || []).find((x) => String(x.mes).slice(0, 7) === selMonth); if (vivo && m && m.descuadres_caja != null) setDescuadre(Number(m.descuadres_caja)); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [selMonth]);
+  const BL = { cierre, abiertos, setAbiertos };
   const Aviso = ({ z }) => {
     if (!guardado || guardado.zona !== z) return null;
     if (guardado.estado === "guardando") return <div style={{ fontFamily: F, fontSize: 12, color: C.mut, margin: "-6px 2px 10px" }}>Guardando…</div>;
@@ -222,7 +248,7 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         </select>
       </div>
 
-      <CierreLista mes={selMonth} estado={cierre} onEstado={(r) => { setCierre(r); onReload(); }} irA={irA} />
+      <CierreLista mes={selMonth} estado={cierre} onEstado={(r) => { setCierre(r); onReload(); }} irA={irA} descuadre={descuadre} />
 
       <DescuadreSobres datos={sobres.datos} />
 
@@ -238,24 +264,24 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
       )}
 
       {sobres.datos !== false && <Sec title="Efectivo" sub="Los sobres de los cierres de caja" />}
-      <div id="cm-sobres"><AperturaSobres mes={selMonth} datos={sobres.datos} setDatos={(r) => { sobres.setDatos(r); if (r) cargarCierre(); }} /></div>
-      <div id="cm-epos">{sobres.datos !== false && <EposCierres mes={selMonth} />}</div>
-      <div id="cm-tarjeta"><TarjetaBanco mes={selMonth} datos={tarjeta} setDatos={(r) => { setTarjeta(r); cargarCierre(); }} /></div>
+      <Bloque id="cm-sobres" titulo="Apertura de sobres" pks={["sobres"]} {...BL}><AperturaSobres mes={selMonth} datos={sobres.datos} setDatos={(r) => { sobres.setDatos(r); if (r) cargarCierre(); }} /></Bloque>
+      {sobres.datos !== false && <Bloque id="cm-epos" titulo="Ventas y cierres de Epos" pks={["ventas"]} {...BL}><EposCierres mes={selMonth} /></Bloque>}
+      <Bloque id="cm-tarjeta" titulo="Tarjeta frente al banco" pks={["tarjeta", "tarjeta2"]} {...BL}><TarjetaBanco mes={selMonth} datos={tarjeta} setDatos={(r) => { setTarjeta(r); cargarCierre(); }} /></Bloque>
 
       {stockActivo && <Sec title="Stock" sub="Fotos del stock de Epos valorado a coste (con IVA y recargo)" />}
       <StockCierre mes={selMonth} onActivo={setStockActivo} />
 
-      <Sec title="Facturas proveedores" sub="Registradas por trabajadoras" />
-      <div style={crd}>
+      <Bloque id="cm-facturas" titulo="Facturas de proveedores" sub={`${facturasMonth.length} · ${fmt2(totalFacturas)}`} pks={["facturas"]} {...BL}>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span style={{ fontFamily: F, fontSize: "14px", color: C.char }}>{facturasMonth.length} facturas</span>
+          <span style={{ fontFamily: F, fontSize: "14px", color: C.char }}>{facturasMonth.length} facturas registradas por las trabajadoras</span>
           <span style={{ fontFamily: F, fontSize: "16px", fontWeight: 700, color: C.char }}>{fmt2(totalFacturas)}</span>
         </div>
-      </div>
+        <a href="#/finanzas/gastos/facturas" style={{ fontFamily: F, fontSize: "12.5px", fontWeight: 600, color: C.blu }}>Ver las facturas</a>
+      </Bloque>
 
-      <div id="cm-ingresos" {...zonaProps("ingresos")}>
-      <Sec title="Ingresos" />
-      <div style={crd}>
+      <div {...zonaProps("ingresos")}>
+      <Bloque id="cm-ingresos" titulo="Ingresos y paquetería" pks={["paqueteria"]} {...BL}>
+      <div>
         <label style={lbl}>Ventas EPOS (€)</label>
         {desdeEpos ? (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "16px", fontFamily: F, fontSize: "15px", color: C.char }}>
@@ -276,11 +302,12 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
           ))}
         </div>
       </div>
+      </Bloque>
       <Aviso z="ingresos" />
       </div>
 
-      <div id="cm-salarios" {...zonaProps("salarios")}>
-      <Sec title="Salarios" />
+      <div {...zonaProps("salarios")}>
+      <Bloque id="cm-salarios" titulo="Salarios" pks={["salarios"]} {...BL}>
       <SalariosMes mes={selMonth} guardado={md.salarios} onCambio={setSalV2} onModo={setSalNuevo} />
       {salNuevo === false && <div style={crd}>
         {salarios.map(s => (
@@ -292,20 +319,22 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         ))}
         <button onClick={() => setSalarios(p => [...p, { id: uid(), nombre: "", amount: 0 }])} style={{ border: `1.5px dashed ${C.brd}`, background: "none", fontFamily: F, fontSize: "12px", color: C.mut, padding: "10px", borderRadius: "8px", width: "100%", cursor: "pointer" }}>+ Añadir salario</button>
       </div>}
+      </Bloque>
       <Aviso z="salarios" />
       </div>
 
-      <div id="cm-gf" {...zonaProps("gf")}>
-      <Sec title="Gastos fijos" />
-      <div style={crd}>
+      <div {...zonaProps("gf")}>
+      <Bloque id="cm-gf" titulo="Gastos fijos" pks={["gastos_fijos"]} {...BL}>
+      <div>
         <GastosFijos mes={selMonth} valores={gastosFijos} onValores={v => { setGastosFijos(p => ({ ...p, ...v })); tocar("gf"); }} guardarRef={gfGuardar} />
       </div>
+      </Bloque>
       <Aviso z="gf" />
       </div>
 
       <div {...zonaProps("otros")}>
-      <Sec title="Otros gastos operativos" />
-      <div style={crd}>
+      <Bloque id="cm-otros" titulo="Otros gastos operativos" {...BL}>
+      <div>
         {otrosGastos.map(o => (
           <div key={o.id} style={{ display: "flex", gap: "8px", marginBottom: "8px", alignItems: "center" }}>
             <input value={o.concepto} onChange={e => setOtrosGastos(p => p.map(x => x.id === o.id ? { ...x, concepto: e.target.value } : x))} placeholder="Concepto" style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: "13px", marginBottom: 0 }} />
@@ -315,11 +344,12 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         ))}
         <button onClick={() => setOtrosGastos(p => [...p, { id: uid(), concepto: "", amount: 0 }])} style={{ border: `1.5px dashed ${C.brd}`, background: "none", fontFamily: F, fontSize: "12px", color: C.mut, padding: "10px", borderRadius: "8px", width: "100%", cursor: "pointer" }}>+ Añadir gasto</button>
       </div>
+      </Bloque>
       <Aviso z="otros" />
       </div>
 
-      <Sec title="Mantenimiento" sub="Solo lectura: se gestiona en Finanzas → Mantenimiento" />
-      <div style={crd}>
+      <Bloque id="cm-mant" titulo="Mantenimiento" sub="solo lectura" pks={["confirmar"]} {...BL}>
+      <div>
         {mantenimiento.length === 0 ? <div style={{ fontFamily: F, fontSize: "13px", color: C.mut, marginBottom: "8px" }}>Ninguno este mes.</div> : mantenimiento.map(i => (
           <div key={i.id} style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "8px", fontFamily: F, fontSize: "13px", color: C.char }}>
             <span>{i.concepto}</span><span style={{ fontWeight: 700 }}>{fmt2(i.amount)}</span>
@@ -327,11 +357,12 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
         ))}
         <a href="#/finanzas/mantenimiento" style={{ fontFamily: F, fontSize: "12.5px", fontWeight: 600, color: C.blu }}>Gestionar en Mantenimiento</a>
       </div>
+      </Bloque>
 
       <div style={{ marginTop: "28px", padding: "16px 0", borderTop: `2px solid ${C.gold}` }}>
         <div style={{ fontFamily: F, fontSize: "10px", fontWeight: 700, color: C.gold, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "16px" }}>Movimientos de tesorería (no afectan al resultado)</div>
-        <Sec title="Inversiones" sub="Solo lectura: se gestionan en Finanzas → Inversiones" />
-        <div style={crd}>
+        <Bloque id="cm-inv" titulo="Inversiones" sub="solo lectura" pks={["confirmar"]} {...BL}>
+        <div>
           {inversiones.length === 0 ? <div style={{ fontFamily: F, fontSize: "13px", color: C.mut, marginBottom: "8px" }}>Ninguna este mes.</div> : inversiones.map(i => (
             <div key={i.id} style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "8px", fontFamily: F, fontSize: "13px", color: C.char }}>
               <span>{i.concepto}</span><span style={{ fontWeight: 700 }}>{fmt2(i.amount)}</span>
@@ -339,14 +370,16 @@ export function DatosMesView({ facturas, monthlyData, config, onReload, initialM
           ))}
           <a href="#/finanzas/inversiones" style={{ fontFamily: F, fontSize: "12.5px", fontWeight: 600, color: C.blu }}>Gestionar en Inversiones</a>
         </div>
+        </Bloque>
         {repartoSobres !== null && <>
-          <Sec title="Reparto a socios" sub="Solo lectura: se registra en Efectivo de sobres" />
-          <div style={crd}>
+          <Bloque id="cm-reparto" titulo="Reparto a socios" sub="solo lectura" {...BL}>
+          <div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "8px", fontFamily: F, fontSize: "13px", color: C.char }}>
               <span>Reparto a socios</span><span style={{ fontWeight: 700 }}>{fmt2(repartoSobres)}</span>
             </div>
             <a href="#/finanzas/efectivo/sobres" style={{ fontFamily: F, fontSize: "12.5px", fontWeight: 600, color: C.blu }}>Se registra en Efectivo de sobres</a>
           </div>
+          </Bloque>
         </>}
       </div>
 
