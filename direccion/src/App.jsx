@@ -13,6 +13,8 @@ import { PagosPendientes } from "./finanzas/PagosPendientes.jsx"; // #27
 import { Inversiones } from "./finanzas/Inversiones.jsx"; // #40
 import { Mantenimiento } from "./finanzas/Mantenimiento.jsx"; // #42
 import { StockFinanzas } from "./finanzas/StockFinanzas.jsx"; // #120
+import { Plegable } from "./finanzas/Facil.jsx"; // #149
+import { CabCaja, CabSobres, CabBancos, CabPagos, CabCompras, CabMantenimiento, CabInversiones } from "./finanzas/DiaFacil.jsx"; // #149
 import { Glosario, ExplicaResumen, Recorrido } from "./finanzas/Guia.jsx"; // #142
 import { Horarios } from "./personas/Horarios.jsx";
 import { Solicitudes } from "./personas/Solicitudes.jsx";
@@ -241,8 +243,15 @@ export default function App() {
   else if (area.id === "finanzas" && sub.id === "stock") contenido = <StockFinanzas />;
   else if (area.id === "finanzas") {
     const pantalla = {
-      resultados: <FinanzasResultados onEditMonth={editarMes} />, caja: <FinanzasCaja />, sobres: <EfectivoSobres />, compras: <FinanzasCompras />,
-      bancos: <Bancos />, pagos: <PagosPendientes />, inversiones: <Inversiones />, mantenimiento: <Mantenimiento />,
+      resultados: <FinanzasResultados onEditMonth={editarMes} />,
+      // #149: cada pestaña empieza por su frase y 3 números; el detalle de siempre va debajo, en una tarjeta plegable
+      caja: <><CabCaja /><Plegable titulo="Caja fuerte y cuadre por turno" abierta><FinanzasCaja /></Plegable></>,
+      sobres: <><CabSobres /><Plegable titulo="Detalle y acciones del efectivo de sobres" abierta><EfectivoSobres /></Plegable></>,
+      compras: <><CabCompras /><Plegable titulo="Compras frente a lo vendido y por proveedor"><FinanzasCompras /></Plegable></>,
+      bancos: <><CabBancos /><Plegable titulo="Cuentas y movimientos del banco" abierta><Bancos /></Plegable></>,
+      pagos: <><CabPagos /><Plegable titulo="Detalle de facturas pendientes, posibles pagos y pagadas" abierta><PagosPendientes /></Plegable></>,
+      inversiones: <><CabInversiones /><Plegable titulo="Lista y alta de inversiones" abierta><Inversiones /></Plegable></>,
+      mantenimiento: <><CabMantenimiento /><Plegable titulo="Lista y alta de arreglos" abierta><Mantenimiento /></Plegable></>,
     }[extra] || <Legado area={area.id} sub={extra} datos={datos} user={user} mesFoco={mesFoco} onEditMonth={editarMes} />;
     contenido = (
       <>
