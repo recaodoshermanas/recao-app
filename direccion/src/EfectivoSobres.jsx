@@ -1,5 +1,5 @@
 // Finanzas → Efectivo de sobres (solicitud #14): a dónde va el efectivo de los sobres. Solo los 4 socios.
-// Entrada del mes = lo contado al abrir los sobres del mes anterior (se abren el día 1 de este mes).
+// Entrada del mes = lo contado de los sobres del PROPIO mes (sol. #154). Los sueldos/extras y el reparto del mes también salen en ese mes (fecha: último día).
 // Salidas: reparto a socios, extras a trabajadoras, ingresos al banco, reposición de la caja fuerte y compras con «Efectivo sobres» (desde Facturas).
 import { useCallback, useEffect, useState } from "react";
 import { sb } from "../../src/lib/supabase.js";
@@ -54,7 +54,7 @@ export function EfectivoSobres() {
             <button className="btn-l" onClick={() => setMes(masMes(mes, 1))} aria-label="Mes siguiente">›</button>
           </div>
         </div>
-        {!d.apertura_registrada && <p className="es-aviso">Falta registrar la apertura de los sobres de {mesAnio(`${d.mes_sobres}-01`).toLowerCase()} (Cierre de mes → Apertura de sobres). Hasta entonces la entrada cuenta 0 €.</p>}
+        {!d.apertura_registrada && <p className="es-aviso">Faltan por confirmar los sobres de {mesAnio(`${d.mes_sobres}-01`).toLowerCase()} (Cierre de mes → Sobres). Hasta entonces la entrada cuenta 0 €; va sumando según se confirman.</p>}
         {saldo < 0 && <p className="es-rojo">Se ha registrado más salida que efectivo: el saldo está en negativo.</p>}
         <div className="es-kpis">
           {sp ? (
@@ -64,7 +64,7 @@ export function EfectivoSobres() {
           ) : (
             <div><small>Saldo inicial</small><b>{eur(d.saldo_inicial, 2)}</b><span>Lo que quedó del mes anterior</span></div>
           )}
-          <div><small>{sp ? "Sobres de septiembre" : "Entrada"}</small><b>{eur(d.entrada, 2)}</b><span>Sobres de {mesAnio(`${d.mes_sobres}-01`).toLowerCase()}, abiertos el día 1{sp ? " (se meten en Cierre de mes → Apertura de sobres)" : ""}</span></div>
+          <div><small>Entrada</small><b>{eur(d.entrada, 2)}</b><span>Sobres de {mesAnio(`${d.mes_sobres}-01`).toLowerCase()}, con lo confirmado hasta ahora</span></div>
           {Number(d.otras_entradas) > 0 && <div><small>Otras entradas</small><b>{eur(d.otras_entradas, 2)}</b><span>Retiradas del banco (entran solas) y entradas «Pendiente del banco»</span></div>}
           <div><small>Salidas</small><b>{eur(d.total_salidas, 2)}</b><span>{d.salidas.length} movimiento{d.salidas.length === 1 ? "" : "s"}</span></div>
           <div className={`es-saldo${saldo < 0 ? " neg" : ""}`}><small>Queda guardado</small><b>{eur(saldo, 2)}</b></div>
@@ -207,24 +207,31 @@ function Evolucion({ evo, mes, onAbrir }) {
   );
 }
 
+function ultimoDia(m) { const [y, mm] = m.split("-").map(Number); return `${m}-${String(new Date(y, mm, 0).getDate()).padStart(2, "0")}`; }
+
 function PanelReparto({ d, mes, onClose, onListo }) {
-  const [fecha, setFecha] = useState(diaDelMes(mes));
+  const hoyD = hoyStr();
+  const [mesRep, setMesRep] = useState(Number(hoyD.slice(8, 10)) <= 10 ? masMes(hoyD.slice(0, 7), -1) : hoyD.slice(0, 7));
+  const opcionesMes = [masMes(mesRep, 0), masMes(hoyD.slice(0, 7), -2), masMes(hoyD.slice(0, 7), -1), hoyD.slice(0, 7)].filter((m, i, a) => m >= "2026-10" && a.indexOf(m) === i).sort();
+  const fecha = ultimoDia(mesRep);
   const [imp, setImp] = useState(() => Object.fromEntries(d.socios.map((s) => [s.id, String(s.importe).replace(".", ",")])));
   const [busy, setBusy] = useState(false);
   const vals = d.socios.map((s) => ({ id: s.id, importe: imp[s.id] === "" ? 0 : numero(imp[s.id]) }));
-  const ok = vals.every((v) => Number.isFinite(v.importe)) && vals.some((v) => v.importe > 0) && fecha;
+  const ok = vals.every((v) => Number.isFinite(v.importe)) && vals.some((v) => v.importe > 0) && mesRep;
   const total = vals.reduce((t, v) => t + (Number.isFinite(v.importe) ? v.importe : 0), 0);
   const guardar = async () => {
     setBusy(true);
-    try { onListo(await sb.rpc("efectivo_registrar", { p: { tipo: "reparto", fecha, socios: vals } })); avisar("Reparto registrado"); }
+    try { onListo(await sb.rpc("efectivo_registrar", { p: { tipo: "reparto", mes: mesRep, fecha, socios: vals } })); avisar("Reparto registrado"); }
     catch (e) { avisar(e.message || "No se ha podido guardar", "mal"); }
     setBusy(false);
   };
   return (
     <Panel titulo="Registrar reparto" sub="Una salida por socio. Puedes cambiar cada importe antes de confirmar." onClose={onClose} ancho="460px"
       pie={<button className="btn-p" disabled={busy || !ok} onClick={guardar}>{busy ? "Guardando…" : `Confirmar ${eur(total, 2)}`}</button>}>
-      {d.reparto_hecho && <p className="es-aviso">Este mes ya hay un reparto registrado. Si confirmas, se añade otro.</p>}
-      <label className="campo">Fecha<input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></label>
+      {mesRep === mes && d.reparto_hecho && <p className="es-aviso">Este mes ya hay un reparto registrado. Si confirmas, se añade otro.</p>}
+      <label className="campo">Mes al que pertenece el reparto
+        <select value={mesRep} onChange={(e) => setMesRep(e.target.value)}>{opcionesMes.map((m) => <option key={m} value={m}>{mesAnio(`${m}-01`)}</option>)}</select></label>
+      <p className="sub">Se apunta con fecha {fecha.split("-").reverse().join("/")} (último día del mes). Si lo apuntas del 1 al 10, sale elegido el mes anterior.</p>
       {d.socios.map((s) => (
         <label key={s.id} className="campo es-fila">{s.nombre}<input inputMode="decimal" value={imp[s.id]} onChange={(e) => setImp({ ...imp, [s.id]: e.target.value })} /></label>
       ))}
