@@ -18,6 +18,7 @@ import { EscanearProductoView, ComprobarMarcadoView } from "./ProductoTiendaView
 import { CajaView } from "./CajaView.jsx"; // CAJA (caída de Epos)
 import { MisFichajesView } from "./MisFichajesView.jsx"; // FICHAJES
 import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
+import { HacerPedidoView } from "./HacerPedidoView.jsx"; // #143
 import { HorasExtraView } from "../horasextra/HorasExtraView.jsx"; // #39
 import { WorkerView } from "../WorkerView.jsx";
 import { IR_CORREO } from "../../lib/enlaceAviso.js";
@@ -36,6 +37,9 @@ const IcoEscaner = (p) => <Ico {...p}><path d="M4 7V5a1 1 0 0 1 1-1h2" /><path d
 const IcoSinCodigo = (p) => <Ico {...p}><path d="M5 6v12" /><path d="M8 6v7" /><path d="M11 6v4" /><path d="M14 6v2" /><path d="M19 6v5" /><path d="M14 15l5 5" /><path d="M19 15l-5 5" /></Ico>;
 const IcoEtiqueta = (p) => <Ico {...p}><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9" /><circle cx="7.5" cy="7.5" r="1.5" /></Ico>;
 const IcoDoc = (p) => <Ico {...p}><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2" /><path d="M9 13h6" /><path d="M9 17h6" /></Ico>;
+
+const IcoPedido = (p) => <Ico {...p}><path d="M6 4h12l1 4H5l1-4" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M10 12h4" /></Ico>; // #143
+const PEDIDO = { id: "pedido", label: "Hacer pedido", Ico: IcoPedido }; // #143 (solo con permiso)
 
 const IcoFormacion = (p) => <Ico {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9.5v5l4.5-2.5-4.5-2.5" /></Ico>;
 
@@ -60,7 +64,7 @@ const LO_TUYO = [
   { id: "seguimiento", label: "Mi seguimiento", sub: "Avisos, plus y faltas", Ico: (p) => <IcoBars size={20} color={TOSTADO} sw={1.9} {...p} /> },
   { id: "formacion", label: "Formación", Ico: IcoFormacion }, // #101 (el subtítulo depende de los vídeos que le faltan)
 ];
-const TITULOS = { caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", marcado: "Comprobar precio marcado", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", formacion: "Formación", cambio: "Cambiar turno", horasextra: "Horas extra", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { pedido: "Hacer pedido", caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", marcado: "Comprobar precio marcado", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", formacion: "Formación", cambio: "Cambiar turno", horasextra: "Horas extra", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 // A dónde lleva cada destino de la campana o del correo (?ir=…) en la organización nueva: [pantalla, pestaña]
 const DESTINOS = {
@@ -83,6 +87,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
 
   const [porCubrir, setPorCubrir] = useState(0); // BOLSA
   const [porRecepcionar, setPorRecepcionar] = useState({ n: 0, listos: 0 }); // RECEPCION
+  const [puedePedir, setPuedePedir] = useState(false); // #143
   const [sinCodigoN, setSinCodigoN] = useState(0); // #35: altas sin código por escanear
   const [marcadoN, setMarcadoN] = useState(0); // #72: productos que dirección manda comprobar
   const [codigoNuevo, setCodigoNuevo] = useState(""); // #35: código escaneado que no existe → «Añadir producto»
@@ -106,6 +111,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
     if (screen !== "home") return;
     if (BOLSA_ACTIVA) sb.rpc("bolsa_disponibles").then(r => setPorCubrir((r || []).filter(x => x.destino === "plantilla" && !x.rechazado).length)).catch(() => {}); // BOLSA
     sb.fn("recepcion", { accion: "inicio" }).then(r => { const p = r.pendientes || []; setPorRecepcionar({ n: p.length, listos: p.filter(x => x.estado === "por_revisar" && x.via === "email").length }); }).catch(() => {}); // RECEPCION
+    sb.rpc("puede_pedir").then(r => setPuedePedir(r === true)).catch(() => {}); // #143
     sb.fn("recepcion", { accion: "sin_codigo" }).then(r => setSinCodigoN((r.productos || []).length)).catch(() => {}); // #35
     sb.fn("producto-tienda", { accion: "marcado_lista" }).then(r => setMarcadoN((r.productos || []).length)).catch(() => {}); // #72
     sb.fn("disciplina", { action: "mis_avisos" }).then(r => setAvisos((r.avisos || []).filter(a => a.estado === "emitido" && !a.alegacion_en && a.plazo_alegacion && new Date(a.plazo_alegacion) > new Date()))).catch(() => {});
@@ -170,7 +176,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
 
         <div style={seccion}>Producto</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          {PRODUCTO.map(t => {
+          {(puedePedir ? [...PRODUCTO, PEDIDO] : PRODUCTO).map(t => {
             const n = t.id === "recepcion" ? porRecepcionar.n : t.id === "sincodigo" ? sinCodigoN : t.id === "marcado" ? marcadoN : 0;
             return (
               <button key={t.id} type="button" onClick={() => abrir(t.id)} aria-label={n ? `${t.label}: ${n} pendiente${n > 1 ? "s" : ""}` : t.label} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 7, minHeight: 92, padding: "12px 6px", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 15, cursor: "pointer", textAlign: "center", boxShadow: SHADOW.card }}>
@@ -220,6 +226,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
         <div style={{ fontFamily: SF, fontSize: 18, color: C.char }}>{TITULOS[screen]}</div>
       </div>
       {screen === "caja" && <CajaView />}
+      {screen === "pedido" && <HacerPedidoView />}
       {screen === "recepcion" && <RecepcionView />}
       {screen === "anadir" && <AnadirProductoView codigoInicial={codigoNuevo} onFin={() => { setCodigoNuevo(""); setScreen("home"); }} />}
       {screen === "escanear" && <EscanearProductoView onAnadir={(c) => { setCodigoNuevo(c || ""); setScreen("anadir"); }} onFin={() => setScreen("home")} />}
