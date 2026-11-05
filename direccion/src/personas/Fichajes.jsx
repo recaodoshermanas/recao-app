@@ -41,6 +41,7 @@ export function Fichajes() {
 
   if (!d) return <Cargando texto="Cargando fichajes…" />;
   const revisar = d.dias.filter((x) => (x.incidencias || []).some((i) => INC[i]));
+  const revisados = d.dias.filter((x) => x.revisado);
   const pendientes = d.solicitudes.filter((s) => s.estado === "pendiente");
   const sinEpos = d.usuarios.filter((u) => !u.epos_staff_id);
   const opciones = [
@@ -60,7 +61,7 @@ export function Fichajes() {
       {sinEpos.length > 0 && <p className="b-nota">{sinEpos.length} trabajadora{sinEpos.length > 1 ? "s" : ""} sin usuario en la caja: sus horas no quedan registradas. Dadlas de alta en Epos (cada una con su PIN) y vinculadlas en «Usuarios de Epos».</p>}
       <Pestanas valor={tab} opciones={opciones} onChange={setTab} etiqueta="Secciones de fichajes" />
       <div className="card mt">
-        {tab === "revisar" && <Revisar dias={revisar} onEditar={setEditar} />}
+        {tab === "revisar" && <Revisar dias={revisar} revisados={revisados} onEditar={setEditar} onCambio={recargarTodo} />}
         {tab === "peticiones" && <Peticiones lista={d.solicitudes} onCambio={recargarTodo} />}
         {tab === "mes" && <Mes mes={mes} setMes={setMes} d={dm} onEditar={setEditar} />}
         {tab === "usuarios" && <Usuarios usuarios={d.usuarios} onCambio={recargarTodo} />}
@@ -70,8 +71,37 @@ export function Fichajes() {
   );
 }
 
-function Revisar({ dias, onEditar }) {
-  if (!dias.length) return <p className="empty">Nada que revisar en los últimos 30 días.</p>;
+function Revisar({ dias, revisados = [], onEditar, onCambio }) {
+  const darPorBueno = async (x) => {
+    const motivo = window.prompt("Dar por bueno este día. Motivo (opcional; lo verá la trabajadora):");
+    if (motivo === null) return;
+    try { await fn("dar_por_bueno", { usuario_id: x.usuario_id, fecha: x.fecha, motivo: motivo.trim() || undefined }); avisar("Dado por bueno y avisada"); onCambio(); } catch (e) { avisar(e.message, "mal"); }
+  };
+  const deshacer = async (x) => {
+    try { await fn("deshacer_bueno", { usuario_id: x.usuario_id, fecha: x.fecha }); avisar("Vuelve a estar pendiente"); onCambio(); } catch (e) { avisar(e.message, "mal"); }
+  };
+  const bloqueRevisados = revisados.length > 0 && (
+    <div style={{ marginTop: 20 }}>
+      <h3 style={{ margin: "0 0 8px" }}>Revisados</h3>
+      <div className="tabla-scroll">
+        <table className="ranking">
+          <thead><tr><th>Día</th><th>Persona</th><th>Fichado</th><th>Revisado</th><th></th></tr></thead>
+          <tbody>
+            {revisados.map((x) => (
+              <tr key={`r-${x.usuario_id}-${x.fecha}`}>
+                <td>{fechaCorta(x.fecha)}</td>
+                <td><span className="pn">{x.nombre}</span></td>
+                <td>{(x.fichajes || []).map((f) => <span key={f.id} className="pf" style={{ color: "inherit" }}>{hora(f.entrada)}–{hora(f.salida)}</span>)}</td>
+                <td><span className="pf" style={{ color: "inherit" }}>Revisado{x.revisado.por ? ` por ${x.revisado.por}` : ""} · {hace(x.revisado.en)}{x.revisado.motivo ? ` · ${x.revisado.motivo}` : ""}</span></td>
+                <td className="r"><button className="btn-txt" onClick={() => deshacer(x)}>Deshacer</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+  if (!dias.length) return <><p className="empty">Nada que revisar en los últimos 30 días.</p>{bloqueRevisados}</>;
   return (
     <>
       <div className="head"><div><h2>Por revisar · últimos 30 días</h2><p className="sub">Días en los que el fichaje no cuadra con el horario. Corrige lo que esté mal; lo que esté bien (por ejemplo, una hora extra real) puedes dejarlo.</p></div></div>
@@ -86,12 +116,13 @@ function Revisar({ dias, onEditar }) {
                 <td>{x.turno ? <>{x.turno}<span className="pf">{String(x.ini).slice(0, 5)}–{String(x.fin).slice(0, 5)}</span></> : "—"}</td>
                 <td>{(x.fichajes || []).map((f) => <span key={f.id} className="pf" style={{ color: "inherit" }}>{hora(f.entrada)}–{hora(f.salida)}{f.corregido ? " ✎" : ""}</span>)}{!x.fichajes && "—"}</td>
                 <td><Chips lista={x.incidencias} /></td>
-                <td className="r"><button className="btn-l" onClick={() => onEditar(x)}>Corregir</button></td>
+                <td className="r" style={{ whiteSpace: "nowrap" }}><button className="btn-l" onClick={() => onEditar(x)}>Corregir</button> <button className="btn-txt" onClick={() => darPorBueno(x)}>Dar por bueno</button></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {bloqueRevisados}
     </>
   );
 }
