@@ -78,13 +78,13 @@ export const AREAS = [
 export const FIN_PESTANAS = {
   dia: [{ id: "sobres", label: "Sobres" }, { id: "facturas", label: "Facturas" }, { id: "compras", label: "Compras" }, { id: "bancos", label: "Bancos" }, { id: "pagos", label: "Facturas pendientes de pago" }, { id: "mantenimiento", label: "Mantenimiento" }, { id: "inversiones", label: "Inversiones" }],
   cierre: [{ id: "cierre", label: "Lista de cierre" }, { id: "caja", label: "Descuadres de caja" }],
-  como: [{ id: "resultados", label: "Cuenta de resultados" }, { id: "tesoreria", label: "Tesorería" }],
+  como: [{ id: "resultados", label: "Cuenta de resultados" }, { id: "tesoreria", label: "Tesorería" }, { id: "historia", label: "La historia del dinero" }],
 };
 // #142: Finanzas se reorganiza por tareas. Los enlaces antiguos (#/finanzas/efectivo/caja, #/finanzas/banco/bancos…)
 // siguen funcionando: cada pestaña antigua lleva a su sitio nuevo. Los correos y avisos de la app usan estas rutas antiguas.
 const FIN_DESTINO = {
   sobres: "dia", facturas: "dia", compras: "dia", bancos: "dia", pagos: "dia", mantenimiento: "dia", inversiones: "dia",
-  cierre: "cierre", caja: "cierre", resultados: "como", tesoreria: "como",
+  cierre: "cierre", caja: "cierre", resultados: "como", tesoreria: "como", historia: "como",
 };
 const FIN_SUB_ANTIGUO = { efectivo: "caja", banco: "bancos", gastos: "facturas" }; // apartado antiguo sin pestaña → su primera pestaña
 

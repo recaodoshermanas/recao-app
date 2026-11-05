@@ -4,6 +4,7 @@ import { CabFacturas } from "./finanzas/DiaFacil.jsx"; // #149
 import { Plegable } from "./finanzas/Facil.jsx"; // #149
 import { DatosMesView } from "../../src/views/owner/DatosMesView.jsx";
 import { Tesoreria } from "./finanzas/Tesoreria.jsx"; // #89: sustituye a TesoreriaView (saldo estimado)
+import { HistoriaDinero } from "./finanzas/HistoriaDinero.jsx"; // #153
 import { AjustesView } from "../../src/views/owner/AjustesView.jsx";
 import { AnalyticaView } from "../../src/views/owner/AnalyticaView.jsx";
 import { CVCandidatosView } from "../../src/views/owner/CVCandidatosView.jsx";
@@ -29,6 +30,7 @@ export function Legado({ area, sub, datos, user, mesFoco, onEditMonth }) {
   switch (v) {
     case "personas/seleccion": vista = <CVCandidatosView currentUser={user} />; break;
     case "finanzas/tesoreria": vista = <Tesoreria />; break;
+    case "finanzas/historia": vista = <HistoriaDinero />; break;
     case "finanzas/cierre": vista = <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={reload} initialMonth={mesFoco} />; break;
     case "finanzas/facturas": vista = <><CabFacturas facturas={facturas} /><Plegable titulo="Facturas, filtros y paquete del trimestre" abierta><PaqueteTrimestre facturas={facturas} /><WorkerView facturas={facturas} proveedores={proveedores} onReload={reload} user={user} panel /></Plegable></>; break;
     case "producto/analitica": vista = <AnalyticaView />; break;
