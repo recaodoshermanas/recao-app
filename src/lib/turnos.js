@@ -23,11 +23,26 @@ const REGLAS = [
   { desde: "2026-11-04", dias: { 1: { "Apoyo 2": "16:00-22:00" }, 2: { "Apoyo 2": "16:00-22:00" }, 3: { "Apoyo 2": "16:00-22:00" }, 4: { "Apoyo 2": "16:00-22:00" }, 6: { "Apoyo 2": "16:00-23:00" }, 0: { "Apoyo 2": "16:00-22:00", "Apoyo 3": "17:00-23:00" } } },
 ];
 export const NOTA_FINDE = "Lunes a jueves (desde el 4/11): Apoyo 2 16:00-22:00 · Sábado: Apoyo 2 16:00-23:00 (1 h extra) · Domingo: Apoyo 2 16:00-22:00, Apoyo 3 17:00-23:00";
+// #162 · Navidad 2026-27: horarios especiales (la misma regla está en la base de datos, función turno_horas)
+const NAV_RED = { "Mañana": "07:00-13:00", "Tarde": "13:00-19:00", "Apoyo 1": "09:00-14:00", "Apoyo 2": "14:00-19:00" }; // 24 y 31 de diciembre
+const NAV_FEST = { "Mañana": "09:00-16:00", "Tarde": "16:00-23:00", "Apoyo 1": "11:00-16:00", "Apoyo 2": "16:00-22:00" }; // 25/12, 1/1 y 6/1
+const NAV_DIAS_RED = ["2026-12-24", "2026-12-31"];
+export const NAV_DIAS_FEST = ["2026-12-25", "2027-01-01", "2027-01-06"];
+// Horas que se PAGAN esos días (no las trabajadas): 24 y 31 un turno normal; 25, 1 y 6 un turno normal doble (y sin plus festivo)
+const NAV_PAGO = { "Mañana": 8, "Tarde": 8, "Apoyo 1": 6, "Apoyo 2": 6 };
+export function horasPagoNavidad(turno, fecha) {
+  if (!NAV_PAGO[turno]) return null;
+  if (NAV_DIAS_RED.includes(fecha)) return NAV_PAGO[turno];
+  if (NAV_DIAS_FEST.includes(fecha)) return NAV_PAGO[turno] * 2;
+  return null;
+}
 function reglaDe(fecha) { let r = null; for (const x of REGLAS) if (fecha >= x.desde) r = x; return r; }
 // Horas del turno un día concreto (fecha "AAAA-MM-DD"); sin fecha, las de siempre
 export function horasTurno(turno, fecha) {
   const base = TURNOS[turno]?.horas || "";
   if (!base || !fecha) return base;
+  if (NAV_DIAS_RED.includes(fecha) && NAV_RED[turno]) return NAV_RED[turno];
+  if (NAV_DIAS_FEST.includes(fecha) && NAV_FEST[turno]) return NAV_FEST[turno];
   const r = reglaDe(fecha); if (!r) return base;
   const dow = new Date(`${fecha}T12:00:00`).getDay();
   return r.dias[dow]?.[turno] || base;

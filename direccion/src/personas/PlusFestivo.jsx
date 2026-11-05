@@ -2,7 +2,7 @@
 // Sale del cuadrante (horarios): turnos de trabajo en días marcados como festivo. Con el fichaje al lado para comprobarlo.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
-import { cargarFestivos, horasDeTurno, plusFestivo, PLUS_FESTIVO_8H, AMBITOS } from "../../../src/lib/festivos.js";
+import { cargarFestivos, horasDeTurno, plusFestivo, plusFestivoDia, PLUS_FESTIVO_8H, AMBITOS } from "../../../src/lib/festivos.js";
 import { TURNOS_TRABAJO } from "../../../src/lib/cobertura.js";
 import { Avatar, fechaCorta, hoyStr } from "../ui.jsx";
 import { eur } from "../fmt.js";
@@ -33,7 +33,7 @@ export function PlusFestivo({ equipo }) {
       const fichados = new Set((fs || []).map((x) => `${x.usuario_id}|${String(x.entrada).slice(0, 10)}`));
       const turnos = (hs || []).filter((h) => TURNOS_TRABAJO.includes(h.turno)).map((h) => {
         const horas = horasDeTurno(h.turno, h.fecha);
-        return { ...h, horas, importe: plusFestivo(horas), fichado: fichados.has(`${h.usuario_id}|${h.fecha}`) };
+        return { ...h, horas, importe: plusFestivoDia(h.fecha, horas), fichado: fichados.has(`${h.usuario_id}|${h.fecha}`) };
       });
       setDatos({ festivos, turnos, fichados });
     } catch (e) { setDatos({ festivos: {}, turnos: [], error: true }); }

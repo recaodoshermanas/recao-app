@@ -1,7 +1,7 @@
 // Festivos (nacionales, de Andalucía y locales de Dos Hermanas) y plus por trabajarlos.
 // La lista vive en la tabla `festivos`; dirección la mantiene desde Personas → Horarios → Festivos.
 import { sb } from "./supabase.js";
-import { horasTurno } from "./turnos.js";
+import { horasTurno, horasPagoNavidad, NAV_DIAS_FEST } from "./turnos.js";
 
 export const AMBITOS = { nacional: "Nacional", andalucia: "Andalucía", local: "Local (Dos Hermanas)" };
 
@@ -23,6 +23,14 @@ export function horasDeTurno(turno, fecha) {
   if (fin <= ini) fin += 24 * 60;
   return (fin - ini) / 60;
 }
+
+// #162: horas que se pagan un día concreto (el 24 y 31/12 el turno normal; el 25/12, 1/1 y 6/1 un turno normal doble)
+export function horasPagoDeTurno(turno, fecha) {
+  const n = horasPagoNavidad(turno, fecha);
+  return n != null ? n : horasDeTurno(turno, fecha);
+}
+// #162: el 25/12, 1/1 y 6/1 no hay plus festivo: lo sustituye el turno doble
+export const plusFestivoDia = (fecha, horas) => (NAV_DIAS_FEST.includes(fecha) ? 0 : plusFestivo(horas));
 
 // #59: 37,50 € por un turno de 8 h; si dura otra cosa, la parte proporcional redondeada hacia arriba al euro (6 h = 29 €).
 // La misma regla está en la base de datos (función extras_auto, que lo mete en Efectivo de sobres y Salarios).
