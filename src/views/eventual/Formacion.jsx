@@ -44,7 +44,8 @@ const chip = (txt, bg, fg) => <span style={{ fontFamily: F, fontSize: 11, fontWe
 export function FormacionView({ videos, abrirId, onCambio, onVolver }) {
   const [sel, setSel] = useState(abrirId || null);
   const [portadas, setPortadas] = useState({});
-  useEffect(() => { sb.fn("formacion", { accion: "portadas" }).then((r) => setPortadas(r.portadas || {})).catch(() => {}); }, [(videos || []).length]);
+  const [fotogramas, setFotogramas] = useState({});
+  useEffect(() => { sb.fn("formacion", { accion: "portadas" }).then((r) => { setPortadas(r.portadas || {}); setFotogramas(r.fotogramas || {}); }).catch(() => {}); }, [(videos || []).length]);
   useEffect(() => { if (abrirId) setSel(abrirId); }, [abrirId]);
   const lista = videos || [];
   const { total, completos } = resumenFormacion(lista);
@@ -64,6 +65,7 @@ export function FormacionView({ videos, abrirId, onCambio, onVolver }) {
             <button key={v.id} onClick={() => setSel(v.id)} style={{ display: "flex", gap: 12, alignItems: "center", textAlign: "left", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 10, cursor: "pointer" }}>
               <span style={{ width: 96, height: 60, flexShrink: 0, borderRadius: 10, background: C.char, overflow: "hidden", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {portadas[v.id] && <img src={portadas[v.id]} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+                {!portadas[v.id] && fotogramas[v.id] && <video src={fotogramas[v.id] + "#t=0.1"} preload="metadata" muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />}
                 <span style={{ position: "relative", width: 26, height: 26, borderRadius: "50%", background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ borderLeft: "9px solid #fff", borderTop: "6px solid transparent", borderBottom: "6px solid transparent", marginLeft: 2 }} /></span>
               </span>
               <span style={{ flex: 1, minWidth: 0 }}>
@@ -195,7 +197,7 @@ function Reproductor({ video, portada, onCambio, onSalir }) {
         {error ? <div style={{ padding: 30, color: "#fff", fontFamily: F, fontSize: 14, textAlign: "center" }}>{error}</div>
           : !url ? <div style={{ padding: 30, color: "#fff", fontFamily: F, fontSize: 14, textAlign: "center" }}>Cargando vídeo…</div>
           : (
-            <video ref={vref} src={url} poster={portada || undefined} playsInline webkit-playsinline="true" preload="metadata" controlsList="nodownload noplaybackrate" disablePictureInPicture disableRemotePlayback
+            <video ref={vref} src={portada ? url : url + "#t=0.1"} poster={portada || undefined} playsInline webkit-playsinline="true" preload="metadata" controlsList="nodownload noplaybackrate" disablePictureInPicture disableRemotePlayback
               onContextMenu={(e) => e.preventDefault()} onClick={alternar}
               onLoadedMetadata={alCargar} onTimeUpdate={alAvanzar} onSeeking={alBuscar} onRateChange={() => { if (vref.current) vref.current.playbackRate = 1; }}
               onPlay={() => setJugando(true)} onPause={() => { setJugando(false); guardar(maxRef.current); }} onEnded={alAcabar}
