@@ -8,6 +8,7 @@ import { CajaFuerte } from "./CajaFuerte.jsx"; // CAJA FUERTE (#11)
 import { CuadreTurnos } from "./finanzas/CuadreTurnos.jsx"; // #81
 import { InformeMensual } from "./finanzas/InformeMensual.jsx"; // #65
 import { ResumenArriba, Plegable } from "./finanzas/ResumenFacil.jsx"; // #148
+import { FraseFija, TresNumeros, flechaMes, Plegable as PlegableFacil } from "./finanzas/Facil.jsx"; // #151
 import { DineroHoy } from "./finanzas/DineroHoy.jsx";
 import { armarTabla, exportarExcel, exportarPdf } from "./finanzas/exportarCuenta.js"; // #71
 
@@ -379,7 +380,7 @@ export function FinanzasResultados({ onEditMonth }) {
   const resTienda = (m) => n0(m.ventas) - n0(m.gastos);
   const filas = [
     { sep: true, k: "sep_tienda", l: "Tienda" },
-    { k: "ventas", l: "Ventas (con IVA)" },
+    { k: "ventas", l: "Ventas (con IVA)", ayuda: "Todo lo cobrado en la tienda este mes, con el IVA incluido." },
     // #61: en los meses con stock inicial y final, la mercancía es el coste de lo vendido (compras + variación de existencias)
     ...(meses.some((m) => m.variacion_existencias != null)
       ? [{ k: "compras_mercancia", l: "Compras de mercancía", neg: true, get: (m) => (m.compras_mercancia != null ? m.compras_mercancia : m.mercancia) },
@@ -387,17 +388,17 @@ export function FinanzasResultados({ onEditMonth }) {
          { k: "mercancia", l: "Coste de la mercancía vendida", neg: true, b2: true, get: (m) => m.mercancia },
          ...CATS.filter((c) => c.id !== "mercancia").flatMap(filaCat)]
       : CATS.flatMap(filaCat)),
-    { k: "gastos", l: "Gastos", b: true, neg: true },
-    { k: "resultado_tienda", l: "Resultado de la tienda", b: true, r: true, get: resTienda },
+    { k: "gastos", l: "Gastos", b: true, neg: true, ayuda: "La suma de todos los gastos de la tienda del mes (mercancía, personal, local, servicios…)." },
+    { k: "resultado_tienda", l: "Resultado de la tienda", b: true, r: true, get: resTienda, ayuda: "Lo que ha ganado (o perdido) la tienda: ventas menos gastos." },
     { sep: true, k: "sep_paq", l: "Paquetería" },
-    { k: "paqueteria", l: "Ingresos de paquetería" },
+    { k: "paqueteria", l: "Ingresos de paquetería", ayuda: "Lo que ha ganado el mes la paquetería. No tiene gastos propios." },
     { k: "resultado_paqueteria", l: "Resultado de la paquetería", b: true, r: true, get: (m) => n0(m.paqueteria) },
     { sep: true, k: "sep_total", l: "Total del negocio" },
     // #36: desde octubre de 2026, la suma de los descuadres de los sobres (resta si falta dinero, suma si sobra)
     ...(meses.some((m) => m.mes >= "2026-10") ? [{ k: "descuadres_caja", l: "Descuadres de caja" }] : []),
-    { k: "resultado", l: "Beneficio del negocio", b: true, r: true },
+    { k: "resultado", l: "Beneficio del negocio", b: true, r: true, ayuda: "Lo que ha ganado (o perdido) todo el negocio este mes: tienda + paquetería ± descuadres de caja." },
     // Solo los socios (#14): el reparto no es gasto, va debajo del beneficio
-    ...(d.socio ? [{ k: "reparto_sobres", l: "Reparto a socios", neg: true }, { k: "resultado_tras_reparto", l: "Resultado después del reparto", b: true, r2: true }] : []),
+    ...(d.socio ? [{ k: "reparto_sobres", l: "Reparto a socios", neg: true, ayuda: "El dinero que os habéis llevado los socios. No es un gasto, pero ese dinero ya no está en el negocio." }, { k: "resultado_tras_reparto", l: "Resultado después del reparto", b: true, r2: true, ayuda: "Lo que queda del beneficio después de repartir a los socios." }] : []),
     // #146: lo que no es gasto del mes pero sí dinero que ha salido (solo socios, porque parte del resultado después del reparto)
     ...(d.socio ? [{ sep: true, k: "sep_otros", l: "Otros pagos del mes que no van en la cuenta de resultados" },
       { k: "inversiones", l: "Inversiones", nota: "Compras que duran años, como el congelador. No son gasto del mes, pero el dinero ha salido." },
@@ -418,8 +419,29 @@ export function FinanzasResultados({ onEditMonth }) {
     } catch (e) { window.alert("No se ha podido generar el archivo. Inténtalo de nuevo."); }
     setExportando(null);
   };
+  // #151: frase fija + frase respuesta + 3 números (Vendido · Gastado · Ganado) con flecha contra el mes anterior
+  const nomMes = (m) => mesAnio(m).split(" ")[0].toLowerCase();
+  const antD = parseDate(mes.mes); antD.setMonth(antD.getMonth() - 1);
+  const antKey = `${antD.getFullYear()}-${String(antD.getMonth() + 1).padStart(2, "0")}-01`;
+  const ant = disponibles[antKey];
+  const vendido = (m) => n0(m.ventas) + n0(m.paqueteria);
+  const ganado = (m) => n0(m.resultado);
+  const gastado = (m) => vendido(m) - ganado(m);
+  const g = ganado(mes);
+  const fraseRes = <>{mes.cerrado ? "En" : "Este mes, en"} {nomMes(mes.mes)} hemos {g >= 0 ? "ganado" : <span style={{ color: "var(--down, #b3261e)" }}>perdido</span>} <span style={g < 0 ? { color: "var(--down, #b3261e)" } : undefined}>{eur(Math.abs(g), 0)}</span></>;
+  const numerosRes = [
+    { t: "Vendido", v: eur(vendido(mes), 0), flecha: ant ? flechaMes(vendido(mes), vendido(ant), nomMes(ant.mes), (x) => eur(x, 0), true) : null, info: "Todo lo que se ha cobrado este mes: ventas de la tienda (con IVA) más paquetería." },
+    { t: "Gastado", v: eur(gastado(mes), 0), flecha: ant ? flechaMes(gastado(mes), gastado(ant), nomMes(ant.mes), (x) => eur(x, 0), false) : null, info: "Todo lo que ha costado el mes: mercancía, personal, local, servicios, impuestos… (más los descuadres de caja si los hubo)." },
+    { t: "Ganado", v: eur(g, 0), flecha: ant ? flechaMes(g, ganado(ant), nomMes(ant.mes), (x) => eur(x, 0), true) : null, info: "Vendido menos gastado. Es el «Beneficio del negocio» de la cuenta de abajo." },
+  ];
   return (
     <>
+      <div className="card">
+        <FraseFija>Aquí ves si este mes hemos ganado o perdido dinero</FraseFija>
+        <TresNumeros frase={fraseRes} numeros={numerosRes} />
+        {!mes.cerrado && <p className="sub">Mes sin cerrar: las cifras son provisionales.</p>}
+      </div>
+      <PlegableFacil titulo="La escalera completa, mes a mes" total={`${nomMes(mes.mes)}: ${eur(g, 0)}`}>
       <div className="card">
         <div className="head">
           <div><h2>Cuenta de resultados</h2><p className="sub">Como la hoja de Ingresos y gastos (con IVA), pero agrupada por tipo de gasto. Pulsa un mes para ver el detalle.</p></div>
@@ -438,7 +460,7 @@ export function FinanzasResultados({ onEditMonth }) {
             <tbody>
               {filas.map((f) => f.sep ? <tr key={f.k} className="sep"><th colSpan={meses.length + 1}>{f.l}</th></tr> : (
                 <tr key={f.k} className={`${f.b || f.b2 ? "b" : ""}${f.r ? " r" : ""}${f.r2 || f.r3 ? " r tras" : ""}`}>
-                  <th>{f.l}{f.nota && <small style={{ display: "block", fontWeight: 400, whiteSpace: "normal", maxWidth: 260, color: "var(--muted, #6b6558)" }}>{f.nota}</small>}</th>
+                  <th>{f.l}{f.ayuda && <span title={f.ayuda} aria-label={f.ayuda} style={{ marginLeft: 6, cursor: "help", fontWeight: 700 }}>ⓘ</span>}{f.nota && <small style={{ display: "block", fontWeight: 400, whiteSpace: "normal", maxWidth: 260, color: "var(--muted, #6b6558)" }}>{f.nota}</small>}</th>
                   {meses.map((m) => { const txt = f.get ? (f.get(m) == null ? "–" : val(m, n0(f.get(m)))) : f.neg && f.k === "reparto_sobres" && n0(m[f.k]) ? `−${val(m, n0(m[f.k]))}` : val(m, n0(m[f.k])); return <td key={m.mes} className={`${m.mes === mes.mes ? "sel" : ""}${m.cerrado ? "" : " curso"}${f.r ? (n0(f.get ? f.get(m) : m[f.k]) >= 0 ? " up" : " down") : ""}${f.r2 ? (n0(m.resultado_tras_reparto) >= 0 ? " up" : " neg-fuerte") : ""}${f.r3 ? (n0(f.get(m)) >= 0 ? " up" : " neg-fuerte") : ""}`}>{txt === "–" ? txt : <button className="cifra" title="Ver de dónde sale" onClick={() => setCifra({ f, m })}>{txt}</button>}</td>; })}
                 </tr>
               ))}
@@ -453,7 +475,8 @@ export function FinanzasResultados({ onEditMonth }) {
           </table>
         </div>
       </div>
-      {mes && d.socio && <BloqueOtrosPagos mes={mes} />}
+      </PlegableFacil>
+      {mes && d.socio && <PlegableFacil titulo="En qué más se ha ido el dinero (inversiones y otros pagos)"><BloqueOtrosPagos mes={mes} /></PlegableFacil>}
       {mes && <DetalleMes mes={mes} disponibles={disponibles} onCambio={recargar} onEditMonth={onEditMonth} />}
       {cifra && <VentanaCifra f={cifra.f} m={cifra.m} filas={filas} socio={!!d.socio} onClose={() => setCifra(null)} onEditMonth={onEditMonth} />}
     </>
