@@ -15,6 +15,7 @@ export function DisciplinaAdminView() {
   const [verif, setVerif] = useState([]);
   const [causas, setCausas] = useState([]);
   const [nocierre, setNocierre] = useState([]);
+  const [reabiertos, setReabiertos] = useState([]);
   const [avisos, setAvisos] = useState([]);
   const [fEstado, setFEstado] = useState("emitido");
   const [loading, setLoading] = useState(true);
@@ -54,7 +55,7 @@ export function DisciplinaAdminView() {
     try {
       if (tab === "verif") setVerif((await call("bandeja_verificaciones")).items || []);
       else if (tab === "causas") setCausas((await call("bandeja_causas")).items || []);
-      else if (tab === "nocierre") setNocierre((await call("bandeja_no_cierre")).items || []);
+      else if (tab === "nocierre") { const b = await sb.rpc("sin_cerrar_bandeja", {}); setNocierre((b && b.items) || []); setReabiertos((b && b.reabiertos) || []); }
       else if (tab === "avisos") setAvisos((await call("listar_avisos", fEstado ? { estado: fEstado } : {})).avisos || []);
     } catch (e) { flash(e.message || "Error"); }
     setLoading(false);
@@ -81,6 +82,7 @@ export function DisciplinaAdminView() {
   const descartar = async (id) => { if (!window.confirm("¿Descartar esta verificación? No generará aviso.")) return; setBusy(true); try { await call("descartar_verificacion", { incidencia_id: id }); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const revisarCausa = async (id, decision) => { if (decision === "rechazada" && !window.confirm("Rechazar la causa generará un aviso a las dos personas del turno. ¿Seguir?")) return; setBusy(true); try { await call("revisar_causa", { cierre_item_id: id, decision, justificacion: causaNota[id] || null }); flash(decision === "rechazada" ? "Causa rechazada · aviso emitido" : "Causa validada"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const emitirNoCierre = async (fecha, turno) => { if (!window.confirm("Se emitirá un aviso a las dos personas de ese turno por no registrar el cierre. ¿Seguir?")) return; setBusy(true); try { await call("emitir_no_cierre", { fecha, turno }); flash("Aviso de no-cierre emitido"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
+  const reabrirTurno = async (fecha, turno) => { if (!window.confirm("Se reabrirá el cierre de ese turno: a las personas del turno les vuelve a aparecer para cerrarlo (48 h), con la fecha original. Ya no se podrá emitir el aviso de «sin cerrar». Si acumulan 3 reaperturas en 30 días se registra un fallo en el plus. ¿Reabrir?")) return; setBusy(true); try { const r = await sb.rpc("reabrir_turno_cierre", { p_fecha: fecha, p_turno: turno }); flash(r && r.fallos_creados ? "Turno reabierto · se ha registrado un fallo de plus por 3 reaperturas" : "Turno reabierto"); await load(); } catch (e) { flash((e.message || "Error").replace(/^RPC [^:]+: \d+ /, "")); } setBusy(false); };
   const abrirResolver = (a) => { setResolviendo(a); setRRes("confirmado"); setRNivel(""); setRNota(""); };
   const resolver = async () => { setBusy(true); try { await call("resolver", { aviso_id: resolviendo.id, resultado: rRes, nivel: rRes === "confirmado" && rNivel ? rNivel : undefined, nota: rNota || undefined }); setResolviendo(null); flash("Aviso resuelto"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const abrirManual = () => { setNaUid(trabajadoras[0]?.id || ""); setNaFecha(new Date().toISOString().slice(0, 10)); setNaTurno("mañana"); setNaDesc(""); setNaOpen(true); };
@@ -130,14 +132,32 @@ export function DisciplinaAdminView() {
       </div>
     ));
 
-  const NoCierre = () => nocierre.length === 0 ? vacio("Todos los turnos cerrados ✓")
-    : nocierre.map((it, i) => (
+  const fmtHora = (iso) => new Date(iso).toLocaleString("es-ES", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+  const NoCierre = () => (nocierre.length === 0 && reabiertos.length === 0) ? vacio("Todos los turnos cerrados ✓")
+    : (<>
+      {nocierre.length > 0 && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, margin: "0 2px 10px", lineHeight: 1.5 }}>Solo aparecen los turnos cuyo plazo ya terminó (mañana 19:00 · tarde 3:00 de la madrugada). Dirección tiene 72 h para reabrirlos; si no se reabre, se puede emitir el aviso de siempre.</div>}
+      {nocierre.map((it, i) => (
       <div key={i} style={card}>
         <div style={{ fontFamily: SF, fontSize: 16, color: C.char, textTransform: "capitalize" }}>Turno {it.turno} · {fmtDia(it.fecha)}</div>
         <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 5 }}>No se registró el cierre. Responsables: <b>{it.principal_nombre}</b>{it.apoyo_nombre ? <> y <b>{it.apoyo_nombre}</b></> : " (solo principal)"}</div>
-        <button onClick={() => emitirNoCierre(it.fecha, it.turno)} disabled={busy} style={{ width: "100%", marginTop: 12, background: C.char, color: C.gold, border: "none", borderRadius: 10, padding: 12, fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Emitir aviso</button>
+        {it.puede_reabrir
+          ? <>
+              <button onClick={() => reabrirTurno(it.fecha, it.turno)} disabled={busy} style={{ width: "100%", marginTop: 12, background: C.char, color: C.gold, border: "none", borderRadius: 10, padding: 12, fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Reabrir turno</button>
+              <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 6 }}>Se puede reabrir hasta el {fmtHora(it.reabrir_hasta)}</div>
+            </>
+          : <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 10 }}>Han pasado más de 72 h: ya no se puede reabrir.</div>}
+        <button onClick={() => emitirNoCierre(it.fecha, it.turno)} disabled={busy} style={{ width: "100%", marginTop: 10, background: "#fff", color: C.mut, border: `1.5px solid ${C.brd}`, borderRadius: 10, padding: 11, fontFamily: F, fontSize: 13.5, fontWeight: 700, cursor: "pointer" }}>Emitir aviso (sin reabrir)</button>
       </div>
-    ));
+      ))}
+      {reabiertos.length > 0 && <div style={{ ...lbl, marginTop: 16 }}>Reabiertos pendientes de cerrar</div>}
+      {reabiertos.map((it, i) => (
+        <div key={"r" + i} style={card}>
+          <div style={{ fontFamily: SF, fontSize: 16, color: C.char, textTransform: "capitalize" }}>Turno {it.turno} · {fmtDia(it.fecha)}</div>
+          <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 5 }}>{it.personas || "Sin personas en horarios"} · reabierto el {fmtHora(it.reabierto_en)}</div>
+          <div style={{ fontFamily: F, fontSize: 12.5, marginTop: 5, fontWeight: 700, color: it.vencido ? "#B23A2C" : "#1E7A46" }}>{it.vencido ? "Plazo de 48 h vencido sin cerrar" : `Pueden cerrarlo hasta el ${fmtHora(it.vence_en)}`}</div>
+        </div>
+      ))}
+    </>);
 
   const Avisos = () => (
     <div>

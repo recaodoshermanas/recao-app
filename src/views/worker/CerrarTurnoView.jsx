@@ -14,10 +14,17 @@ const chipExtra = { fontFamily: F, fontSize: 10.5, fontWeight: 700, textTransfor
 const grpLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: C.mutL, margin: "2px 2px 10px" };
 
 export function CerrarTurnoView({ user }) {
-  const hoy = new Date();
-  const fecha = ymd(hoy);
-  const dow = isoDow(hoy);
-  const fechaLarga = hoy.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+  // #165: la fecha y la hora las decide el servidor (el móvil solo es el plan B si no hay conexión con ese dato)
+  const [ctx, setCtx] = useState(null);
+  const [fechaSel, setFechaSel] = useState(null);
+  const ahoraDisp = new Date();
+  const fechaHoy = ctx?.hoy || ymd(ahoraDisp);
+  const fechaTarde = ctx?.tarde_fecha || (ahoraDisp.getHours() < 3 ? ymd(new Date(ahoraDisp.getTime() - 86400000)) : fechaHoy);
+  const fecha = fechaSel || fechaHoy;
+  const diaDe = (f) => new Date(f + "T12:00:00");
+  const dow = isoDow(diaDe(fecha));
+  const fechaLarga = diaDe(fecha).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+  const fechaCorta = (f) => diaDe(f).toLocaleDateString("es-ES", { day: "numeric", month: "numeric" });
   // #25: desde el 24/10/2026 el cierre de caja se hace solo en Epos; aquí ya no se piden cifras de caja
   const sinCaja = fecha >= "2026-10-24";
 
@@ -44,17 +51,29 @@ export function CerrarTurnoView({ user }) {
 
   useEffect(() => {
     (async () => {
+      try { const c = await sb.rpc("cierre_contexto", {}); if (c && c.hoy) setCtx(c); } catch (e) { /* noop */ }
+    })();
+  }, [user.id]);
+
+  useEffect(() => {
+    (async () => {
       try {
-        const r = await sb.select("horarios", `select=turno&usuario_id=eq.${user.id}&fecha=eq.${fecha}`);
-        if (r[0] && SUG[r[0].turno]) setSugerido(SUG[r[0].turno]);
+        const fs = ctx?.tarde_de_ayer ? `in.(${fechaHoy},${fechaTarde})` : `eq.${fechaHoy}`;
+        const r = await sb.select("horarios", `select=turno,fecha&usuario_id=eq.${user.id}&fecha=${fs}`);
+        const delHoy = r.find(x => x.fecha === fechaHoy && SUG[x.turno]);
+        const deAyer = r.find(x => x.fecha === fechaTarde && fechaTarde !== fechaHoy && SUG[x.turno] === "tarde");
+        const m = deAyer || delHoy;
+        if (m) setSugerido(SUG[m.turno]);
       } catch (e) { /* noop */ }
     })();
-  }, [user.id, fecha]);
+  }, [user.id, fechaHoy, fechaTarde, ctx?.tarde_de_ayer]);
 
-  const load = useCallback(async (tn) => {
+  const load = useCallback(async (tn, f) => {
+    const ff = f || fecha;
+    const dw = isoDow(diaDe(ff));
     setLoading(true); setMsg("");
     try {
-      const ex = await sb.select("cierres_turno", `select=id&usuario_id=eq.${user.id}&fecha=eq.${fecha}&turno=eq.${tn}`);
+      const ex = await sb.select("cierres_turno", `select=id&usuario_id=eq.${user.id}&fecha=eq.${ff}&turno=eq.${tn}`);
       if (ex[0]) {
         const items = await sb.select("cierre_items", `select=tarea_texto,hecha,justificacion&cierre_id=eq.${ex[0].id}`);
         setYaCerrado(items);
@@ -70,13 +89,13 @@ export function CerrarTurnoView({ user }) {
       }
       setYaCerrado(null); setCajaCerrada(null);
       const all = await sb.select("cierre_tareas", `select=id,orden,texto,dia_semana,hora,grupo&turno=eq.${tn}&activa=eq.true&order=orden.asc`);
-      const aplican = all.filter(t => t.dia_semana == null || t.dia_semana === dow);
+      const aplican = all.filter(t => t.dia_semana == null || t.dia_semana === dw);
       setTareas(aplican);
       const st = {}; aplican.forEach(t => { st[t.id] = { estado: null, nota: "" }; });
       setEstado(st);
     } catch (e) { setMsg(e.message || "Error"); }
     setLoading(false);
-  }, [user.id, fecha, dow]);
+  }, [user.id, fecha]);
 
   const cargarProv = useCallback(async (tn) => {
     try {
@@ -85,8 +104,11 @@ export function CerrarTurnoView({ user }) {
     } catch (e) { setProvList([]); }
   }, [fecha]);
 
-  const elegir = (tn) => { setTurno(tn); setModo("ver"); setExtras([]); load(tn); };
-  const volver = () => { setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setCajaCerrada(null); setExtras([]); setMsg(""); };
+  const elegir = (tn, f) => {
+    const ff = f || (tn === "tarde" ? fechaTarde : fechaHoy);
+    setFechaSel(ff); setTurno(tn); setModo("ver"); setExtras([]); load(tn, ff);
+  };
+  const volver = () => { setFechaSel(null); setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setCajaCerrada(null); setExtras([]); setMsg(""); };
 
   const abrirHojaExtra = async () => {
     setTxtExtra(""); setHojaExtra(true);
@@ -128,10 +150,13 @@ export function CerrarTurnoView({ user }) {
       const items = tareas.map(t => ({ tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", justificacion: justif(estado[t.id]) }));
       const p_caja = sinCaja ? null : { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
       const p_facturas = sinCaja ? [] : Object.entries(selProv).map(([id, c]) => ({ id, caja: c }));
-      await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras });
+      const r = await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras });
+      const fReal = (r && r.fecha) || fecha;
+      if (fReal !== fecha) setFechaSel(fReal);
+      try { const c = await sb.rpc("cierre_contexto", {}); if (c && c.hoy) setCtx(c); } catch (e) { /* noop */ }
       setConfirmando(false);
       setModo("ver");
-      await load(turno);
+      await load(turno, fReal);
     } catch (e) { setMsg(e.message || "Error al cerrar"); setConfirmando(false); }
     setSaving(false);
   };
@@ -193,6 +218,17 @@ export function CerrarTurnoView({ user }) {
       <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
         <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 6 }}>Hoy</div>
         <div style={{ fontFamily: SF, fontSize: 22, color: C.char, textTransform: "capitalize", marginBottom: 22 }}>{fechaLarga}</div>
+        {(ctx?.reabiertos || []).length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontFamily: F, fontSize: 14, color: C.mut, marginBottom: 10 }}>Turnos reabiertos por dirección</div>
+            {ctx.reabiertos.map((rb) => (
+              <button key={rb.fecha + rb.turno} onClick={() => elegir(rb.turno, rb.fecha)} style={{ width: "100%", boxSizing: "border-box", textAlign: "left", background: "#FBF0DA", border: `1.5px solid ${C.gold}`, borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
+                <span style={{ display: "block", fontFamily: SF, fontSize: 16, color: C.char }}>Cerrar turno de {rb.turno} del {fechaCorta(rb.fecha)}</span>
+                <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 3 }}>Reabierto por dirección. Se guarda con su fecha original. Disponible hasta el {new Date(rb.vence_en).toLocaleString("es-ES", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}.</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div style={{ fontFamily: F, fontSize: 14, color: C.mut, marginBottom: 14 }}>¿Qué turno vas a hacer?</div>
         {[["mañana", "Turno de mañana", "07:00 – 15:00", "#cbf7d0", "#06281C", "M"], ["tarde", "Turno de tarde", "15:00 – 23:00", "#f5a68e", "#5a1f10", "T"]].map(([tn, lab, horas, bg, fg, ini]) => (
           <button key={tn} onClick={() => elegir(tn)} style={{ width: "100%", boxSizing: "border-box", textAlign: "left", background: "#fff", border: `1.5px solid ${sugerido === tn ? C.gold : C.brdL}`, borderRadius: 16, padding: 18, marginBottom: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}>
@@ -200,6 +236,7 @@ export function CerrarTurnoView({ user }) {
             <span style={{ flex: 1 }}>
               <span style={{ display: "block", fontFamily: SF, fontSize: 18, color: C.char }}>{lab}</span>
               <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 2 }}>{horas}</span>
+              {tn === "tarde" && fechaTarde !== fechaHoy && <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.goldSub, fontWeight: 700, marginTop: 3 }}>Pendiente de ayer ({fechaCorta(fechaTarde)}) · puedes cerrarlo hasta las 3:00</span>}
             </span>
             {sugerido === tn && <span style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: C.goldSub, background: "#FBF0DA", borderRadius: 999, padding: "4px 9px" }}>Tu turno hoy</span>}
           </button>
