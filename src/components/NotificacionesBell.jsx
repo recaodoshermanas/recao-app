@@ -30,7 +30,7 @@ const DESTINO = {
   horas_extra_pedida: "horas", horas_extra_resuelta: "horasextra", // #39
   // Solicitudes de tecnología (panel de dirección)
   producto_revisar: "productos_revisar", incidencia_codigo: "productos_revisar",
-  caja_fuerte_baja: "caja_fuerte", factura_sin_importe: "facturas", bancos_permiso: "bancos",
+  caja_fuerte_baja: "caja_fuerte", factura_sin_importe: "facturas", bancos_permiso: "bancos", factura_pendiente_pago: "pagos", factura_pendiente_recordatorio: "pagos", // #171
   // Formación en vídeo (#79): la eventual abre el vídeo; dirección, la persona en Personas → Equipo → Formación
   formacion_nueva: "formacion", formacion_recordatorio: "formacion", formacion_21d: "formacion_admin",
   tec_te_toca: "solicitudes_tec", tec_estado: "solicitudes_tec", tec_comentario: "solicitudes_tec", tec_nueva: "solicitudes_tec",
