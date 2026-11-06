@@ -87,14 +87,14 @@ function Aviso({ msg, tipo = "mal" }) {
 function Cargando({ texto }) {
   return <div style={{ padding: "40px 10px", textAlign: "center", fontFamily: F, color: C.mut, fontSize: 14 }}>{texto || "Cargando…"}</div>;
 }
-function Cantidad({ valor, onCambio, etiqueta }) {
+function Cantidad({ valor, onCambio, etiqueta, neg = false }) {
   const v = numero(valor);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-      <button type="button" aria-label={`Quitar uno de ${etiqueta}`} onClick={() => onCambio(Math.max(0, v - 1))} style={{ width: 44, height: 44, borderRadius: 12, border: `1px solid ${C.brd}`, background: C.cream, fontSize: 20, fontFamily: F, color: C.char, cursor: "pointer" }}>−</button>
+      <button type="button" aria-label={`Quitar uno de ${etiqueta}`} onClick={() => onCambio(neg ? v - 1 : Math.max(0, v - 1))} style={{ width: 44, height: 44, borderRadius: 12, border: `1px solid ${C.brd}`, background: C.cream, fontSize: 20, fontFamily: F, color: C.char, cursor: "pointer" }}>−</button>
       <input aria-label={`Unidades de ${etiqueta}`} inputMode="decimal" value={valor} onChange={(e) => onCambio(e.target.value)} onFocus={(e) => e.target.select()}
         style={{ width: 54, height: 44, boxSizing: "border-box", textAlign: "center", border: `1px solid ${C.brdL}`, borderRadius: 10, fontFamily: F, fontSize: 17, fontWeight: 700, color: C.char }} />
-      <button type="button" aria-label={`Añadir uno de ${etiqueta}`} onClick={() => onCambio(v + 1)} style={{ width: 44, height: 44, borderRadius: 12, border: `1px solid ${C.brd}`, background: C.cream, fontSize: 20, fontFamily: F, color: C.char, cursor: "pointer" }}>+</button>
+      <button type="button" aria-label={`Añadir uno de ${etiqueta}`} onClick={() => onCambio(neg ? Math.min(0, v + 1) : v + 1)} style={{ width: 44, height: 44, borderRadius: 12, border: `1px solid ${C.brd}`, background: C.cream, fontSize: 20, fontFamily: F, color: C.char, cursor: "pointer" }}>+</button>
     </div>
   );
 }
@@ -784,7 +784,7 @@ function NoEsProducto({ l, onCambio, onAnadirExpo, hijos, onQuitar }) {
   );
 }
 
-function Linea({ l, manual, aviso, onCambio, onAsociar, marcar, normal, hijos = [], onAnadirExpo, onQuitar }) {
+function Linea({ l, abono, manual, aviso, onCambio, onAsociar, marcar, normal, hijos = [], onAnadirExpo, onQuitar }) {
   const dif = l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-3;
   const titulo = l.nuevo?.nombre || l.producto?.nombre || l.descripcion;
   const sinProducto = l.tipo === "venta" && !l.producto && l.emparejado !== "nuevo";
@@ -822,7 +822,7 @@ function Linea({ l, manual, aviso, onCambio, onAsociar, marcar, normal, hijos = 
             </span>
             kilos recibidos
           </label>
-        ) : <Cantidad valor={l.q} etiqueta={titulo} onCambio={(v) => onCambio({ q: v })} />)}
+        ) : <Cantidad valor={l.q} etiqueta={titulo} neg={!!abono} onCambio={(v) => onCambio({ q: v })} />)}
       </div>
       {l.tipo === "venta" && alPeso(l) && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, alignItems: "end", background: importeNoCuadra(l) ? "#FBEAE7" : "#F7F2E9", borderRadius: 12, padding: "8px 10px" }}>
@@ -929,6 +929,18 @@ function Revisar({ datos, onHecho, onVolver }) {
     });
   });
   const [marcar, setMarcar] = useState(false);
+  // #164: abono / devolución del proveedor. Se detecta si el total viene en negativo o TODAS las líneas con unidades van en negativo
+  // (mezcladas con total positivo = factura normal: las negativas ya están en el total)
+  const [abono, setAbono] = useState(() => {
+    const ls = (datos.lineas || []).map((l) => Number(l.uds_confirmadas ?? l.uds_doc ?? 0)).filter((n) => n !== 0);
+    return (rec.total != null && Number(rec.total) < 0) || (ls.length > 0 && ls.every((n) => n < 0));
+  });
+  const [stockAbono, setStockAbono] = useState(null); // 'restar' | 'no'
+  const cambiarAbono = (on) => {
+    setAbono(on); setStockAbono(null);
+    setLineas((ls) => ls.map((l) => { const n = numero(l.q); return n === 0 ? l : { ...l, q: fmt(on ? -Math.abs(n) : Math.abs(n)) }; }));
+    setFacImporte((f) => { const n = importeNum(f); return Number.isFinite(n) && n !== 0 ? dinero(on ? -Math.abs(n) : Math.abs(n)) : f; });
+  };
   // #139: coste actual de los productos de la recepción, para detectar saltos grandes
   const [costes, setCostes] = useState({});
   const idsClave = [...new Set(lineas.map((l) => l.product_id).filter((x) => x != null))].sort().join(",");
@@ -943,7 +955,7 @@ function Revisar({ datos, onHecho, onVolver }) {
   }, [idsClave]);
   const avisos = lineas.map((l) => avisoCoste(l, costes));
   const listaAviso = lineas.filter((l, i) => avisos[i]);
-  const listaPend = lineas.filter((l) => l.tipo === "venta" && !l.producto && l.emparejado !== "nuevo" && numero(l.q) > 0);
+  const listaPend = lineas.filter((l) => l.tipo === "venta" && !l.producto && (l.emparejado !== "nuevo" || abono) && (abono ? numero(l.q) !== 0 : numero(l.q) > 0));
   const pendientes = listaPend.length;
   const difs = lineas.filter((l) => l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-3).length;
   const total = lineas.filter((l) => l.tipo === "venta").reduce((s, l) => s + numero(l.q), 0);
@@ -958,7 +970,11 @@ function Revisar({ datos, onHecho, onVolver }) {
   const confirmar = async () => {
     if (pendientes) { setMsg(`Falta decir qué producto es: ${listaPend.map((l) => l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     if (listaAviso.length) { setMsg(`Falta contestar si son correctas las unidades de: ${listaAviso.map((l) => l.producto?.nombre || l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
-    if (!lineas.some((l) => numero(l.q) > 0)) { setMsg("No hay nada que recepcionar"); return; }
+    if (!lineas.some((l) => (abono ? numero(l.q) < 0 : numero(l.q) > 0))) { setMsg(abono ? "No hay nada que devolver: pon las unidades en negativo" : "No hay nada que recepcionar"); return; }
+    if (abono && lineas.some((l) => numero(l.q) > 0)) { setMsg("En un abono todas las cantidades van en negativo"); return; }
+    if (abono && !stockAbono) { setMsg("Elige si hay que restar el stock de la devolución o no tocarlo"); return; }
+    if (!abono && lineas.some((l) => numero(l.q) < 0)) { setMsg("Hay cantidades en negativo: marca el documento como «Abono / devolución»"); return; }
+    if (abono && Number.isFinite(facImporteN) && facImporteN > 0 && !sinImporte) { setMsg("El importe de un abono va en negativo (dinero a favor de Recao)"); return; }
     if (conFactura && !pago) { setMsg("Elige cómo se ha pagado la factura"); return; }
     if (conFactura && !sinImporte && !(Number.isFinite(facImporteN) && facImporteN !== 0)) { setMsg("Pon el importe total de la factura o marca «No sé el importe»"); return; }
     if (!numFac.trim()) { setMsg("Pon el número de factura o albarán. Si el papel no lo trae, deja el código automático"); return; }
@@ -979,7 +995,8 @@ function Revisar({ datos, onHecho, onVolver }) {
     try {
       // #24: importe y forma de pago se guardan antes; al confirmar, la factura se crea sola en «Facturas»
       if (conFactura) await sb.rpc("recepcion_factura_preparar", { p_id: rec.id, p_pago: pago, p_importe: sinImporte ? null : Math.round(facImporteN * 100) / 100, p_sin_importe: sinImporte, p_numero: numEsAuto ? null : numFac.trim() || null });
-      const r = await fn("confirmar", {
+      // #164: un abono se confirma en su propia función (no da de alta productos ni toca costes); resta stock solo si se ha dicho
+      const r = abono ? await sb.fn("recepcion-abono", { id: rec.id, restar_stock: stockAbono === "restar", lineas: lineas.map((l) => ({ id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, descripcion: l.descripcion })) }) : await fn("confirmar", {
         id: rec.id,
         lineas: lineas.map((l) => { const ce = costeExpo.get(l.id ?? l.k); return { id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, no_producto_motivo: l.tipo !== "venta" ? (l.no_producto_motivo || "otro") : null, no_producto_texto: l.tipo !== "venta" ? l.no_producto_texto || null : null, expositor_de: l.expositor_de ?? undefined, unidades_por: l.unidades_por, descripcion: l.descripcion, nuevo: l.emparejado === "nuevo" && !l.product_id ? (ce != null ? { ...l.nuevo, coste: ce } : l.nuevo) : undefined, coste_sin_iva: ce != null && l.emparejado !== "nuevo" ? ce : l.emparejado === "nuevo" ? undefined : l.coste_txt ? subeCent(numero(l.coste_txt)) : manual && l.coste_ref != null ? l.coste_ref : undefined }; }),
       });
@@ -1045,7 +1062,7 @@ function Revisar({ datos, onHecho, onVolver }) {
           {!manual && <p style={{ margin: 0, fontFamily: F, fontSize: 13, color: C.mut }}>Salen las unidades del documento. Cuenta lo que ha llegado y cambia lo que no coincida.</p>}
           {manual && <p style={{ margin: 0, fontFamily: F, fontSize: 13, color: C.mut }}>Pon solo lo que ha llegado. El coste sale de la última compra (sin IVA): cámbialo si es otro.</p>}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {lineas.map((l, i) => <Linea key={l.id ?? l.k ?? `n${i}`} l={l} aviso={avisos[i]} manual={manual} marcar={marcar} normal={regaloDe(l) != null ? lineas.find((x) => x !== l && Number(x.orden) === regaloDe(l)) : null} onCambio={(c) => cambiar(i, c)} onAsociar={(modo) => setPanel({ modo, idx: i })}
+            {lineas.map((l, i) => <Linea key={l.id ?? l.k ?? `n${i}`} l={l} abono={abono} aviso={avisos[i]} manual={manual} marcar={marcar} normal={regaloDe(l) != null ? lineas.find((x) => x !== l && Number(x.orden) === regaloDe(l)) : null} onCambio={(c) => cambiar(i, c)} onAsociar={(modo) => setPanel({ modo, idx: i })}
               hijos={l.orden != null ? lineas.filter((x) => x.expositor_de != null && Number(x.expositor_de) === Number(l.orden)).map((x) => ({ k: x.id ?? x.k, nombre: x.nuevo?.nombre || x.producto?.nombre || x.descripcion, q: numero(x.q) })) : []}
               onAnadirExpo={() => setPanel({ modo: "anadir", expo: Number(l.orden) })} onQuitar={(k) => setLineas((ls) => ls.filter((x) => (x.id ?? x.k) !== k))} />)}
           </div>
@@ -1059,6 +1076,19 @@ function Revisar({ datos, onHecho, onVolver }) {
           Suma de las líneas {eur(sumaLineas)} · total de la factura sin IVA {eur(rec.total_base)}{Math.abs(sumaLineas - Number(rec.total_base)) > 0.05 ? ": no cuadra, revisa los precios" : ""}
         </div>
       )}
+      <div style={{ ...card, ...(abono ? { border: "2px solid #2F5C8F" } : {}) }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: F, fontSize: 15, fontWeight: 700, color: C.char, cursor: "pointer" }}>
+          <input type="checkbox" checked={abono} onChange={(e) => cambiarAbono(e.target.checked)} style={{ width: 20, height: 20 }} />
+          Abono / devolución del proveedor
+        </label>
+        <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{abono ? "El proveedor se lleva mercancía y nos devuelve el dinero: las unidades y el importe van en negativo. La factura queda como importe a favor de Recao y no cambia costes ni precios." : "Márcalo solo si el documento es una devolución aparte (unidades e importe en negativo). Si la devolución ya viene descontada dentro de una factura normal, no lo marques."}</div>
+        {abono && <>
+          <div style={{ fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.char }}>Esto resta stock en la caja. ¿Ya lo quitaste a mano (merma)?</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[["restar", "Restar el stock"], ["no", "No tocar el stock"]].map(([v, t]) => { const on = stockAbono === v; return <button key={v} type="button" aria-pressed={on} onClick={() => setStockAbono(v)} style={{ flex: 1, padding: "12px 6px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 14, fontWeight: 700, border: on ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{t}</button>; })}
+          </div>
+        </>}
+      </div>
       <div style={card}>
         <div style={{ fontFamily: F, fontSize: 15, fontWeight: 700, color: C.char }}>Factura y pago</div>
         {!conFactura && <div style={{ fontFamily: F, fontSize: 12.5, color: "#2F5C8F", background: "#EAF0F8", borderRadius: 10, padding: "8px 10px" }}>Hasta el sábado 24 esto es solo de prueba: la factura todavía no se apunta sola, sigue apuntándola en «Facturas».</div>}

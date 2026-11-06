@@ -235,7 +235,7 @@ function Pedidos({ proveedores, onCambio }) {
             <tbody>
               {filas.map((r) => (
                 <tr key={r.id} onClick={() => setAbierto(r.id)} style={{ cursor: "pointer" }}>
-                  <td><button className="btn-txt" style={{ textAlign: "left" }} onClick={(e) => { e.stopPropagation(); setAbierto(r.id); }}><span className="pn">{r.proveedor}</span></button><span className="pf">{[r.doc_tipo === "albaran" ? "Albarán" : r.doc_tipo === "factura" ? "Factura" : null, r.doc_numero].filter(Boolean).join(" ")}{gen.has(r.id) ? " · código interno" : ""}{r.prueba ? " · prueba" : ""}</span>{faltaPdf.has(r.id) && <span className="pf" style={{ color: "var(--warn, #8A5A00)", fontWeight: 700 }}>Falta el PDF de la factura</span>}</td>
+                  <td><button className="btn-txt" style={{ textAlign: "left" }} onClick={(e) => { e.stopPropagation(); setAbierto(r.id); }}><span className="pn">{r.proveedor}</span></button><span className="pf">{[r.doc_tipo === "albaran" ? "Albarán" : r.doc_tipo === "factura" ? "Factura" : null, r.doc_numero].filter(Boolean).join(" ")}{gen.has(r.id) ? " · código interno" : ""}{r.prueba ? " · prueba" : ""}{r.es_abono ? " · abono / devolución" : ""}</span>{faltaPdf.has(r.id) && <span className="pf" style={{ color: "var(--warn, #8A5A00)", fontWeight: 700 }}>Falta el PDF de la factura</span>}</td>
                   <td>{VIA[r.via] || r.via}</td>
                   <td>{ESTADO[r.estado] || r.estado}</td>
                   <td>{r.recepcionado_por || "—"}</td>
