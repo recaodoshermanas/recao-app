@@ -8,6 +8,7 @@ import { TURNOS } from "../../../src/lib/turnos.js";
 import { TURNOS_BOLSA, DIAS_ANTELACION, destinoDe, horarioDe, horasDe, fechaLarga, hoyYmd, plazo, diasHasta, horaCorta, motivo } from "../../../src/lib/bolsa.js";
 import { Panel, Pestanas, Cargando, Avatar, avisar, ir, fechaCorta, useEquipo } from "../ui.jsx";
 import "./bolsa.css";
+import { useCobertura, NotaMes, Desglose } from "./CoberturaNota.jsx";
 
 const corto = (n) => {
   const p = (n || "").trim().split(/\s+/);
@@ -29,7 +30,7 @@ export function Bolsa() {
   const [resp, setResp] = useState({});
   const [tab, setTab] = useState("abiertos");
   const [publicando, setPublicando] = useState(false);
-  const [cobertura, setCobertura] = useState([]);
+  const cob = useCobertura(3);
   const [encargado, setEncargado] = useState("");
 
   const cargar = useCallback(async () => {
@@ -40,8 +41,7 @@ export function Bolsa() {
       ]);
       setOfertas(o || []);
       setResp(Object.fromEntries((r || []).map((x) => [x.id, x])));
-      const [c, e] = await Promise.all([sb.rpc("bolsa_cobertura_meses").catch(() => []), sb.rpc("bolsa_encargado_leer").catch(() => null)]);
-      setCobertura(c || []);
+      const e = await sb.rpc("bolsa_encargado_leer").catch(() => null);
       setEncargado(typeof e === "string" ? e : "");
     } catch (e) { setOfertas((x) => x || []); avisar("No se ha podido cargar la bolsa", "mal"); }
   }, []);
@@ -88,7 +88,7 @@ export function Bolsa() {
 
       <div className="card">
         <div className="head">
-          <div><h2>Cobertura a tiempo</h2><p className="sub">Turnos del mes cubiertos con 10 días o más de antelación. Meta: 90 %. Con pocos turnos un solo hueco mueve mucho el %: mira la tendencia.</p></div>
+          <div><h2>Cobertura de turnos</h2><p className="sub">Cuanto antes se cubre, más suma. Cada turno cuenta una vez, se cubra desde la bolsa, a mano o por la app. Meta: 85 %</p></div>
           <label className="sub">Encargado de la bolsa{" "}
             <select value={encargado} onChange={(e) => e.target.value && elegirEncargado(e.target.value)}>
               {!encargado && <option value="">Elegir…</option>}
@@ -96,16 +96,16 @@ export function Bolsa() {
             </select>
           </label>
         </div>
-        <div className="grid sin-margen">
-          {cobertura.map((c, i) => (
-            <div key={c.mes} className="card c3 fkpi2">
-              <h2>{new Date(c.mes + "T12:00:00").toLocaleDateString("es-ES", { month: "long" })}{i === 0 ? " (este mes)" : ""}</h2>
-              <p className={`num${c.pct != null && c.pct < 90 ? " down" : ""}`}>{c.pct == null ? "—" : `${c.pct} %`}</p>
-              <p className="sub">{c.total ? `${c.a_tiempo} de ${c.total} turnos a tiempo` : "sin turnos"}</p>
+        {cob.cargando ? <Cargando /> : cob.error ? <p className="empty">No se ha podido calcular la cobertura.</p> : (
+          <>
+            <div className="grid sin-margen">
+              {cob.meses.map((m, i) => (
+                <div key={m.mes} className="card c4 fkpi2"><NotaMes m={m} cfg={cob.cfg} titulo={`${new Date(m.mes + "T12:00:00").toLocaleDateString("es-ES", { month: "long" })}${i === 0 ? " (este mes)" : ""}`} /></div>
+              ))}
             </div>
-          ))}
-        </div>
-        <p className="sub">Cuentan todos los turnos de la bolsa del mes (también descansos compensatorios y huecos por cambio de día). Los retirados o cubiertos a mano no cuentan como a tiempo; los que aún tienen más de 10 días por delante se esperan.</p>
+            {cob.meses[0] && <Desglose m={cob.meses[0]} cfg={cob.cfg} turnos={cob.turnos} />}
+          </>
+        )}
       </div>
 
       <AsignadosApp />

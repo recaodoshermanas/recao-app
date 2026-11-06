@@ -7,6 +7,7 @@ import { huecosCobertura, requeridosDe, TURNOS_REQUERIDOS } from "../../src/lib/
 import { BOLSA_ACTIVA, DIAS_URGENTE } from "../../src/lib/bolsa.js";
 import { Cargando } from "./ui.jsx";
 import "./personas/resumen.css";
+import { useCobertura, NotaMes, PorCubrir, colorNota } from "./personas/CoberturaNota.jsx";
 
 const masDias = (n, base) => { const d = base ? new Date(`${base}T12:00:00`) : new Date(); d.setDate(d.getDate() + n); return ymd(d); };
 const diaCorto = (f) => new Date(`${f.slice(0, 10)}T12:00:00`).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
@@ -132,6 +133,7 @@ const TIPO_TXT = { sin_fichaje: "No fichó", sin_salida: "Falta la salida", cero
 
 export function PersonasResumen() {
   const s = useDatos();
+  const cob = useCobertura(1); const cobMes = (cob.meses || [])[0];
   const [ab, setAb] = useAbiertas();
   const movil = useMovil();
   const hoy = ymd(new Date()), manana = masDias(1);
@@ -281,12 +283,11 @@ export function PersonasResumen() {
         <p>{pl(vacSol, "solicitud de vacaciones", "solicitudes de vacaciones")} · {pl(camb, "cambio de turno", "cambios de turno")}</p>
       </Ventana>),
     bolsa: (
-      <Ventana {...P("bolsa")} icono="🔄" nombre="Bolsa de turnos" cargando={L("bolsa")} error={E("bolsa") || !BOLSA_ACTIVA} ruta="personas/bolsa" rutaTxt="Bolsa"
-        clave={`${cub(bMes)} de ${bMes.length} turnos cubiertos`}
-        etiquetas={[<Etiqueta key="a" c={(pct(cub(bMes), bMes.length) || 0) >= 80 ? "ok" : "gris"}>{pct(cub(bMes), bMes.length) ?? 0} % cubiertos</Etiqueta>, urg.length > 0 && <Etiqueta key="b" c="rojo">{urg.length} urgente{urg.length > 1 ? "s" : ""}</Etiqueta>]}>
-        <Anillo valor={pct(cub(bMes), bMes.length)} texto="cubiertos este mes" sub={`Tiempo medio en cubrirse: ${fmtTiempo(tiempoMedio(bMes))} (mes anterior: ${fmtTiempo(tiempoMedio(bPrev))})`} />
-        <Barra etiqueta="Apoyos (eventuales)" valor={pct(cub(apoyos), apoyos.length) || 0} texto={`${cub(apoyos)} / ${apoyos.length}`} />
-        <Barra etiqueta="Mañana y Tarde (plantilla)" valor={pct(cub(plant), plant.length) || 0} texto={`${cub(plant)} / ${plant.length}`} />
+      <Ventana {...P("bolsa")} icono="🔄" nombre="Cobertura de turnos" cargando={cob.cargando} error={!!cob.error || !BOLSA_ACTIVA} ruta="personas/bolsa" rutaTxt="Bolsa"
+        clave={cobMes ? `${cobMes.pct == null ? "—" : cobMes.pct + " %"} este mes · meta ${cob.cfg.meta} %` : "sin datos"}
+        etiquetas={[cobMes && <Etiqueta key="a" c={{ verde: "ok", ambar: "ama", rojo: "rojo", gris: "gris" }[colorNota(cobMes.pct, cob.cfg)]}>{cobMes.pct ?? "—"} %</Etiqueta>, urg.length > 0 && <Etiqueta key="b" c="rojo">{urg.length} urgente{urg.length > 1 ? "s" : ""}</Etiqueta>]}>
+        {cobMes && <NotaMes m={cobMes} cfg={cob.cfg} titulo={nomMes(cobMes.mes)} />}
+        <PorCubrir turnos={cob.turnos} />
         <Cifras items={[{ n: bolsaAbierta.length, t: "abiertos" }, { n: urg.length, t: `a ${DIAS_URGENTE} días o menos` }, { n: cubSem, t: "cubiertos esta semana" }]} />
       </Ventana>),
     equipo: (
