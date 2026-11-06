@@ -935,9 +935,8 @@ function Revisar({ datos, onHecho, onVolver }) {
     const ls = (datos.lineas || []).map((l) => Number(l.uds_confirmadas ?? l.uds_doc ?? 0)).filter((n) => n !== 0);
     return (rec.total != null && Number(rec.total) < 0) || (ls.length > 0 && ls.every((n) => n < 0));
   });
-  const [stockAbono, setStockAbono] = useState(null); // 'restar' | 'no'
   const cambiarAbono = (on) => {
-    setAbono(on); setStockAbono(null);
+    setAbono(on);
     setLineas((ls) => ls.map((l) => { const n = numero(l.q); return n === 0 ? l : { ...l, q: fmt(on ? -Math.abs(n) : Math.abs(n)) }; }));
     setFacImporte((f) => { const n = importeNum(f); return Number.isFinite(n) && n !== 0 ? dinero(on ? -Math.abs(n) : Math.abs(n)) : f; });
   };
@@ -972,7 +971,6 @@ function Revisar({ datos, onHecho, onVolver }) {
     if (listaAviso.length) { setMsg(`Falta contestar si son correctas las unidades de: ${listaAviso.map((l) => l.producto?.nombre || l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     if (!lineas.some((l) => (abono ? numero(l.q) < 0 : numero(l.q) > 0))) { setMsg(abono ? "No hay nada que devolver: pon las unidades en negativo" : "No hay nada que recepcionar"); return; }
     if (abono && lineas.some((l) => numero(l.q) > 0)) { setMsg("En un abono todas las cantidades van en negativo"); return; }
-    if (abono && !stockAbono) { setMsg("Elige si hay que restar el stock de la devolución o no tocarlo"); return; }
     if (!abono && lineas.some((l) => numero(l.q) < 0)) { setMsg("Hay cantidades en negativo: marca el documento como «Abono / devolución»"); return; }
     if (abono && Number.isFinite(facImporteN) && facImporteN > 0 && !sinImporte) { setMsg("El importe de un abono va en negativo (dinero a favor de Recao)"); return; }
     if (conFactura && !pago) { setMsg("Elige cómo se ha pagado la factura"); return; }
@@ -996,7 +994,7 @@ function Revisar({ datos, onHecho, onVolver }) {
       // #24: importe y forma de pago se guardan antes; al confirmar, la factura se crea sola en «Facturas»
       if (conFactura) await sb.rpc("recepcion_factura_preparar", { p_id: rec.id, p_pago: pago, p_importe: sinImporte ? null : Math.round(facImporteN * 100) / 100, p_sin_importe: sinImporte, p_numero: numEsAuto ? null : numFac.trim() || null });
       // #164: un abono se confirma en su propia función (no da de alta productos ni toca costes); resta stock solo si se ha dicho
-      const r = abono ? await sb.fn("recepcion-abono", { id: rec.id, restar_stock: stockAbono === "restar", lineas: lineas.map((l) => ({ id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, descripcion: l.descripcion })) }) : await fn("confirmar", {
+      const r = abono ? await sb.fn("recepcion-abono", { id: rec.id, restar_stock: true, lineas: lineas.map((l) => ({ id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, descripcion: l.descripcion })) }) : await fn("confirmar", {
         id: rec.id,
         lineas: lineas.map((l) => { const ce = costeExpo.get(l.id ?? l.k); return { id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, no_producto_motivo: l.tipo !== "venta" ? (l.no_producto_motivo || "otro") : null, no_producto_texto: l.tipo !== "venta" ? l.no_producto_texto || null : null, expositor_de: l.expositor_de ?? undefined, unidades_por: l.unidades_por, descripcion: l.descripcion, nuevo: l.emparejado === "nuevo" && !l.product_id ? (ce != null ? { ...l.nuevo, coste: ce } : l.nuevo) : undefined, coste_sin_iva: ce != null && l.emparejado !== "nuevo" ? ce : l.emparejado === "nuevo" ? undefined : l.coste_txt ? subeCent(numero(l.coste_txt)) : manual && l.coste_ref != null ? l.coste_ref : undefined }; }),
       });
@@ -1082,12 +1080,7 @@ function Revisar({ datos, onHecho, onVolver }) {
           Abono / devolución del proveedor
         </label>
         <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{abono ? "El proveedor se lleva mercancía y nos devuelve el dinero: las unidades y el importe van en negativo. La factura queda como importe a favor de Recao y no cambia costes ni precios." : "Márcalo solo si el documento es una devolución aparte (unidades e importe en negativo). Si la devolución ya viene descontada dentro de una factura normal, no lo marques."}</div>
-        {abono && <>
-          <div style={{ fontFamily: F, fontSize: 13.5, fontWeight: 600, color: C.char }}>Esto resta stock en la caja. ¿Ya lo quitaste a mano (merma)?</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {[["restar", "Restar el stock"], ["no", "No tocar el stock"]].map(([v, t]) => { const on = stockAbono === v; return <button key={v} type="button" aria-pressed={on} onClick={() => setStockAbono(v)} style={{ flex: 1, padding: "12px 6px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 14, fontWeight: 700, border: on ? `2px solid ${C.char}` : `1.5px solid ${C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut }}>{t}</button>; })}
-          </div>
-        </>}
+        {abono && <div style={{ fontFamily: F, fontSize: 12.5, color: C.char }}>Al confirmar se resta de la caja el stock de estos productos (el proveedor se los lleva).</div>}
       </div>
       <div style={card}>
         <div style={{ fontFamily: F, fontSize: 15, fontWeight: 700, color: C.char }}>Factura y pago</div>
