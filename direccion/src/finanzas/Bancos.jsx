@@ -101,6 +101,8 @@ export function Bancos() {
   const [editEtq, setEditEtq] = useState(null);
   const [manual, setManual] = useState(null);
   const [nota, setNota] = useState("");
+  const [ventaTr, setVentaTr] = useState(null); // #172: movimiento que se está marcando como venta cobrada por transferencia
+  const [diaTr, setDiaTr] = useState("");
   const [volviendo, setVolviendo] = useState(false);
   const [prop, setProp] = useState({}); // #98: posibles facturas de los cargos domiciliados que no cuadran solos
 
@@ -164,6 +166,29 @@ export function Bancos() {
     catch (e) { avisar(msg(e), "mal"); }
     setBusy(null);
   };
+  // #172: marcar una transferencia recibida como venta cobrada por transferencia de un día (cuenta en el cuadre de tarjeta)
+  const marcarVentaTr = async (m) => {
+    if (!diaTr) { avisar("Elige el día de la venta", "mal"); return; }
+    if (conc[m.id]?.tipo === "manual" && !window.confirm("Este movimiento está explicado a mano. Al marcarlo como venta por transferencia se sustituye esa explicación. ¿Seguir?")) return;
+    setBusy(`v-${m.id}`);
+    try { await sb.rpc("banco_marcar_venta_transferencia", { p_movimiento: m.id, p_dia: diaTr }); avisar("Marcada: ya cuenta en el cuadre de tarjeta de ese día", "ok"); setVentaTr(null); setDiaTr(""); await cargar(); }
+    catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  const quitarVentaTr = async (id) => {
+    setBusy(`v-${id}`);
+    try { await sb.rpc("banco_quitar_venta_transferencia", { p_movimiento: id }); avisar("Marca quitada: el cuadre de tarjeta de ese día vuelve a como estaba", "ok"); await cargar(); }
+    catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  const puedeVentaTr = (m) => C[m.cuenta_id]?.banco === "BBVA" && m.importe > 0 && String(m.concepto || "").toUpperCase().includes("TRANSFERENCIA");
+  const formVentaTr = (m) => (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
+      <label className="pf">Día de la venta <input type="date" autoFocus value={diaTr} min="2026-10-01" max={String(m.fecha_operacion).slice(0, 10)} onChange={(e) => setDiaTr(e.target.value)} /></label>
+      <button className="btn-p" disabled={!!busy} onClick={() => marcarVentaTr(m)}>{busy === `v-${m.id}` ? "Guardando…" : "Guardar"}</button>
+      <button className="btn-txt" onClick={() => { setVentaTr(null); setDiaTr(""); }}>Cancelar</button>
+    </div>
+  );
   // #98: confirmar o descartar la propuesta de facturas de un cargo domiciliado
   const domic = async (m, confirmar) => {
     const p = prop[m.id]; if (!p) return;
@@ -314,6 +339,8 @@ export function Bancos() {
                         <>
                           {conc[m.id].ir ? <a className="enlace" href={conc[m.id].ir}>{conc[m.id].texto}</a> : conc[m.id].texto}
                           {conc[m.id].tipo === "manual" && <span className="pf">{conc[m.id].nota} · {conc[m.id].quien}, {fechaHora(conc[m.id].cuando)} · <button className="btn-txt" disabled={!!busy} onClick={() => quitarMano(m.id)}>Quitar</button></span>}
+                          {conc[m.id].tipo === "venta_transferencia" && <span className="pf"><button className="btn-txt" disabled={!!busy} onClick={() => quitarVentaTr(m.id)}>{busy === `v-${m.id}` ? "Quitando…" : "Quitar marca"}</button></span>}
+                          {conc[m.id].tipo === "manual" && puedeVentaTr(m) && (ventaTr === m.id ? formVentaTr(m) : <span className="pf"><button className="btn-l" disabled={!!busy} onClick={() => { setVentaTr(m.id); setDiaTr(""); }}>Es una venta cobrada por transferencia</button></span>)}
                         </>
                       ) : manual === m.id ? (
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -323,6 +350,7 @@ export function Bancos() {
                         </div>
                       ) : (
                         <><b style={{ color: "#c2570c" }}>Sin explicar</b> <button className="btn-l" onClick={() => { setManual(m.id); setNota(""); }}>Explicar a mano</button>
+                          {puedeVentaTr(m) && (ventaTr === m.id ? formVentaTr(m) : <> <button className="btn-l" disabled={!!busy} onClick={() => { setVentaTr(m.id); setDiaTr(""); }}>Venta cobrada por transferencia</button></>)}
                           {propDom(m)}</>
                       )}
                     </td>
