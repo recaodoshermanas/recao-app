@@ -78,6 +78,8 @@ function Proveedor({ p: p0, onVolver }) {
   const [hecho, setHecho] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [edit, setEdit] = useState({});
+  const [cajaBusy, setCajaBusy] = useState(null);
 
   const calcular = useCallback(async () => {
     setD(null); setErr("");
@@ -90,11 +92,30 @@ function Proveedor({ p: p0, onVolver }) {
 
   const paso = (l) => l.unidades_caja || 1;
   const cambiar = (l, dir) => setCant(c => ({ ...c, [l.product_id]: Math.max(0, (c[l.product_id] || 0) + dir * paso(l)) }));
+  // #175 «Viene por cajas»: se guarda en la ficha del producto y vale para los siguientes pedidos.
+  const guardarCaja = async (l, porCajas, txt) => {
+    const n = parseInt(txt, 10);
+    if (porCajas && !(Number.isInteger(n) && n >= 2 && n <= 999)) { setErr("Pon las unidades por caja: un número entero entre 2 y 999."); return; }
+    setCajaBusy(l.product_id); setErr("");
+    try {
+      await sb.rpc("pedido_caja_guardar", { p_product: l.product_id, p_por_cajas: porCajas, p_unidades: porCajas ? n : null });
+      let nl = null;
+      try { const r = await sb.rpc("pedido_calcular", { p_supplier: p.supplier_id }); nl = (r.lineas || []).find(x => x.product_id === l.product_id) || null; } catch { /* se ajusta en local */ }
+      const viejo = cant[l.product_id] || 0;
+      const uc = porCajas ? n : null;
+      const nuevaCant = nl ? Number(nl.cantidad) : porCajas ? Math.ceil(viejo / n) * n : (viejo > 0 ? Math.max(viejo, 3) : 0);
+      setD(prev => ({ ...prev, lineas: prev.lineas.map(x => x.product_id !== l.product_id ? x : { ...x, unidades_caja: uc, ...(nl ? { motivo: nl.motivo } : {}) }) }));
+      setCant(c => ({ ...c, [l.product_id]: nuevaCant }));
+      setEdit(e => { const { [l.product_id]: _, ...resto } = e; return resto; });
+    } catch (e) { setErr(e.message || "No se ha podido guardar"); }
+    setCajaBusy(null);
+  };
   const lineas = d ? (d.lineas || []).filter(l => (cant[l.product_id] || 0) > 0) : [];
   const textoLinea = (l) => {
     const q = cant[l.product_id]; const nom = l.nombre_proveedor || l.nombre;
-    const cajas = l.unidades_caja ? `${q / l.unidades_caja} ${q / l.unidades_caja === 1 ? "caja" : "cajas"} (${q} ud)` : `${q} ud`;
-    return `${cajas} — ${nom}${l.ref ? ` (ref ${l.ref})` : ""}`;
+    const ref = l.ref ? ` (ref ${l.ref})` : "";
+    if (l.unidades_caja) return `${q / l.unidades_caja} ${q / l.unidades_caja === 1 ? "caja" : "cajas"} de ${nom} (${q} ud)${ref}`;
+    return `${q} ud de ${nom}${ref}`;
   };
   const mensaje = `Hola, os paso el pedido:\n${lineas.map(textoLinea).join("\n")}\nGracias`;
   const tel = (p.telefono || "").replace(/\D/g, "");
@@ -160,6 +181,23 @@ function Proveedor({ p: p0, onVolver }) {
                 </div>
                 <button type="button" aria-label="Más" onClick={() => cambiar(l, 1)} style={{ ...btnGhost, width: 40, height: 40, padding: 0 }}>+</button>
               </div>
+              {(() => {
+                const ed = edit[l.product_id]; const on = ed ? ed.on : !!l.unidades_caja;
+                const txt = ed && ed.txt != null ? ed.txt : (l.unidades_caja ? String(l.unidades_caja) : "");
+                const ocupado = cajaBusy === l.product_id;
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", borderTop: `1px solid ${C.brdL}`, paddingTop: 8 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: F, fontSize: 13, fontWeight: 600 }}>
+                      <input type="checkbox" checked={on} disabled={ocupado} onChange={e => { if (e.target.checked) setEdit(x => ({ ...x, [l.product_id]: { on: true, txt } })); else if (l.unidades_caja) guardarCaja(l, false); else setEdit(x => ({ ...x, [l.product_id]: { on: false, txt } })); }} />
+                      Viene por cajas
+                    </label>
+                    {on && <>
+                      <input value={txt} inputMode="numeric" placeholder="Unidades por caja" aria-label="Unidades por caja" onChange={e => setEdit(x => ({ ...x, [l.product_id]: { on: true, txt: e.target.value.replace(/\D/g, "") } }))} style={{ ...inp, width: 130, padding: "6px 10px" }} />
+                      {String(l.unidades_caja || "") !== txt && <button type="button" disabled={ocupado} onClick={() => guardarCaja(l, true, txt)} style={{ ...btnDark, padding: "6px 12px" }}>{ocupado ? "Guardando…" : "Guardar"}</button>}
+                    </>}
+                  </div>
+                );
+              })()}
             </div>
           ))}
           {bloque("Esperando a dirección", d.esperando_direccion)}
