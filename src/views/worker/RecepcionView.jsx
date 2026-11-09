@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { F, SF, C, SHADOW, inp, btnDark, btnGhost, lbl } from "../../lib/styles.js";
 import { IcoRight, IcoCheck } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
+import { crearLector, abrirCamara, mensajeErrorCamara, MSG_SIN_LECTOR } from "../../lib/lectorCamara.js";
 import { Instrucciones } from "../../components/Instrucciones.jsx";
 
 // Recepción de pedidos: la trabajadora confirma lo que ha llegado. El stock sube con lo que ella confirma.
@@ -107,16 +108,17 @@ function Escaner({ onCodigo, onCerrar }) {
     let stream, parar = false;
     (async () => {
       try {
-        if (!("BarcodeDetector" in window)) { setMsg("Este móvil no lee códigos con la cámara: usa la pistola o escribe el nombre."); return; }
-        const det = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        stream = await abrirCamara();
+        if (parar) { stream.getTracks().forEach((t) => t.stop()); return; }
         if (video.current) { video.current.srcObject = stream; await video.current.play(); }
+        const det = await crearLector();
+        if (!det) { setMsg(MSG_SIN_LECTOR); return; }
         while (!parar) {
           const r = await det.detect(video.current).catch(() => []);
           if (r?.[0]?.rawValue) { parar = true; onCodigo(String(r[0].rawValue).replace(/\D/g, "")); break; }
           await new Promise((s) => setTimeout(s, 250));
         }
-      } catch (_) { setMsg("No he podido abrir la cámara."); }
+      } catch (e) { setMsg(mensajeErrorCamara(e)); }
     })();
     return () => { parar = true; stream?.getTracks().forEach((t) => t.stop()); };
   }, []);
@@ -214,16 +216,17 @@ function CampoCodigo({ id, codigo, setCodigo, sinCodigo, setSinCodigo, estado })
     let stream, parar = false;
     (async () => {
       try {
-        if (!("BarcodeDetector" in window)) { setMsg("Este móvil no lee códigos con la cámara: usa la pistola o escríbelo."); setCamara(false); return; }
-        const det = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        stream = await abrirCamara();
+        if (parar) { stream.getTracks().forEach((t) => t.stop()); return; }
         if (video.current) { video.current.srcObject = stream; await video.current.play(); }
+        const det = await crearLector();
+        if (!det) { setMsg(MSG_SIN_LECTOR); setCamara(false); return; }
         while (!parar) {
           const r = await det.detect(video.current).catch(() => []);
           if (r?.[0]?.rawValue) { setCodigo(String(r[0].rawValue).replace(/\D/g, "")); setSinCodigo(false); setCamara(false); break; }
           await new Promise((s) => setTimeout(s, 250));
         }
-      } catch (_) { setMsg("No he podido abrir la cámara."); setCamara(false); }
+      } catch (e) { setMsg(mensajeErrorCamara(e)); setCamara(false); }
     })();
     return () => { parar = true; stream?.getTracks().forEach((t) => t.stop()); };
   }, [camara, setCodigo, setSinCodigo]);

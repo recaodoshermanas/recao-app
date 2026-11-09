@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { F, SF, C, SHADOW, inp, btnDark, btnGhost } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
+import { crearLector } from "../../lib/lectorCamara.js";
 
 // Caja de emergencia (caída de Epos, 20/10/2026).
 // Escanea con la cámara (siempre abierta) o con la pistola, arma el ticket y cobra en efectivo o tarjeta.
@@ -35,19 +36,6 @@ function pitar(ok = true) {
     o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + (ok ? 0.08 : 0.25));
   } catch (_) {}
   try { navigator.vibrate && navigator.vibrate(ok ? 40 : [80, 60, 80]); } catch (_) {}
-}
-
-// Lector: el del navegador (Android/Chrome) o, si no lo hay (iPhone/iPad), uno que se carga de internet
-async function crearLector() {
-  const formats = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39"];
-  if ("BarcodeDetector" in window) {
-    try { const sup = await window.BarcodeDetector.getSupportedFormats(); if (sup?.length) return new window.BarcodeDetector({ formats: formats.filter((f) => sup.includes(f)) }); } catch (_) {}
-  }
-  const urls = ["https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es/pure.min.js", "https://esm.sh/barcode-detector@2/pure", "https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/es/ponyfill.min.js"];
-  for (const u of urls) {
-    try { const m = await import(/* @vite-ignore */ u); const BD = m.BarcodeDetector || m.default; if (BD) return new BD({ formats }); } catch (_) {}
-  }
-  return null;
 }
 
 // ---------- cámara siempre abierta ----------

@@ -3,6 +3,7 @@ import { F, SF, C, SHADOW, inp, btnDark, btnGhost, lbl } from "../../lib/styles.
 import { IcoRight, IcoCheck } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
 import { prepararFoto } from "./RecepcionView.jsx";
+import { crearLector, abrirCamara, mensajeErrorCamara, MSG_SIN_LECTOR } from "../../lib/lectorCamara.js";
 import { Instrucciones } from "../../components/Instrucciones.jsx";
 
 // #35 · Bloque «Producto» de la app de trabajadoras: «Escanear producto» (es este / no es este / cambiar precio)
@@ -32,16 +33,17 @@ function LectorCodigo({ onCodigo }) {
     let stream, parar = false;
     (async () => {
       try {
-        if (!("BarcodeDetector" in window)) { setMsg("Este móvil no lee códigos con la cámara: usa la pistola o escríbelo."); setCamara(false); return; }
-        const det = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        stream = await abrirCamara();
+        if (parar) { stream.getTracks().forEach((t) => t.stop()); return; }
         if (video.current) { video.current.srcObject = stream; await video.current.play(); }
+        const det = await crearLector();
+        if (!det) { setMsg(MSG_SIN_LECTOR); setCamara(false); return; }
         while (!parar) {
           const r = await det.detect(video.current).catch(() => []);
           if (r?.[0]?.rawValue) { const c = String(r[0].rawValue).replace(/\D/g, ""); setCodigo(c); setCamara(false); aviso.current(c); break; }
           await new Promise((s) => setTimeout(s, 250));
         }
-      } catch (_) { setMsg("No he podido abrir la cámara."); setCamara(false); }
+      } catch (e) { setMsg(mensajeErrorCamara(e)); setCamara(false); }
     })();
     return () => { parar = true; stream?.getTracks().forEach((t) => t.stop()); };
   }, [camara]);
