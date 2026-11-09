@@ -551,7 +551,7 @@ function FilaSinCodigo({ p, onHecho }) {
     </div>
   );
 }
-export function SinCodigo({ productos: iniciales, onTerminar }) {
+export function SinCodigo({ productos: iniciales, onTerminar, onCorregir }) {
   const [lista, setLista] = useState(iniciales || null);
   const [hechos, setHechos] = useState(0);
   useEffect(() => { if (!iniciales) fn("sin_codigo").then((r) => setLista(r.productos || [])).catch(() => setLista([])); }, [iniciales]);
@@ -559,6 +559,7 @@ export function SinCodigo({ productos: iniciales, onTerminar }) {
   return (
     <div style={{ padding: "16px 16px 28px", display: "flex", flexDirection: "column", gap: 12, maxWidth: 540, margin: "0 auto" }}>
       <Instrucciones pantalla="sin_codigo" sinMargen />
+      {onCorregir && <button type="button" onClick={onCorregir} style={{ ...btnGhost, minHeight: 48 }}>Corregir productos marcados</button>}
       <div style={{ background: C.char, borderRadius: 16, padding: "16px 18px" }}>
         <div style={{ fontFamily: SF, fontSize: 21, color: C.gold }}>{lista.length} producto{lista.length === 1 ? "" : "s"} nuevo{lista.length === 1 ? "" : "s"}</div>
         <div style={{ fontFamily: F, fontSize: 13, color: "#E9DFC6" }}>Solo falta su código de barras: pásales la pistola</div>

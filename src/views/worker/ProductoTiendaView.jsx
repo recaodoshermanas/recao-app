@@ -258,6 +258,92 @@ function CambiarPrecio({ p, onVolver, onListo }) {
   );
 }
 
+// ---------- #178 · Corregir productos marcados: escanear, escribir el precio del envase y ponerlo en la caja ----------
+export function CorregirMarcadosView({ onTerminar }) {
+  const [prod, setProd] = useState(null);
+  const [precio, setPrecio] = useState("");
+  const [q, setQ] = useState("");
+  const [lista, setLista] = useState(null);
+  const [buscando, setBuscando] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [hecho, setHecho] = useState(null);
+  const [hechos, setHechos] = useState(0);
+  const [clave, setClave] = useState(0);
+  const ultimo = useRef("");
+  const porNombre = q.trim().length >= 2;
+  useEffect(() => {
+    if (!porNombre) { setLista(null); return; }
+    let vivo = true;
+    const t = setTimeout(() => fn("buscar", { q }).then((r) => vivo && setLista(r.productos || [])).catch(() => vivo && setLista([])), 300);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [q, porNombre]);
+  const leerCodigo = async (codigo) => {
+    if (!codigo || ultimo.current === codigo) return;
+    ultimo.current = codigo; setMsg(""); setHecho(null); setBuscando(true);
+    try {
+      const r = await fn("buscar", { codigo });
+      const ps = r.productos || [];
+      if (!ps.length) { setMsg("Ese código no está en la tienda. Búscalo por su nombre."); ultimo.current = ""; }
+      else { setProd(ps[0]); setPrecio(""); }
+    } catch (e) { setMsg(e.message || "No he podido buscarlo"); ultimo.current = ""; }
+    setBuscando(false);
+  };
+  const siguiente = () => { setProd(null); setPrecio(""); setQ(""); setLista(null); setMsg(""); ultimo.current = ""; setClave((k) => k + 1); };
+  const valor = numero(precio);
+  const igual = prod && valor > 0 && Math.abs(valor - prod.pvp) < 0.005;
+  const lejos = prod && valor > 0 && prod.pvp > 0 && Math.abs(valor - prod.pvp) / prod.pvp > 0.3;
+  const guardar = async () => {
+    if (!(valor > 0)) { setMsg("Escribe el precio que trae el envase"); return; }
+    if (lejos && !window.confirm(`El precio marcado (${eur(valor)}) es muy distinto del de la caja (${eur(prod.pvp)}). ¿Lo has escrito bien?`)) return;
+    setBusy(true); setMsg("");
+    try {
+      const r = await fn("corregir_marcado", { product_id: prod.id, precio: valor });
+      setHecho(Math.abs(r.pvp - r.antes) < 0.005 ? `${r.nombre}: ya estaba a ${eur(r.pvp)}; queda guardado como precio marcado.` : `${r.nombre}: de ${eur(r.antes)} a ${eur(r.pvp)}. Ya está en la caja y dirección lo sabe.`);
+      setHechos((n) => n + 1); siguiente();
+    } catch (e) { setMsg(e.message || "No se ha podido guardar"); }
+    setBusy(false);
+  };
+  if (prod) return (
+    <div style={caja}>
+      <div style={card}>
+        <div style={{ fontFamily: F, fontSize: 18, fontWeight: 700, color: C.char }}>{prod.nombre}</div>
+        <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{[prod.barcode || "sin código", prod.proveedor].filter(Boolean).join(" · ")}</div>
+        <div style={{ fontFamily: F, fontSize: 13.5, color: C.char }}>Precio ahora en la caja: <b>{eur(prod.pvp)}</b>{prod.precio_marcado != null && " (ya marcado)"}</div>
+      </div>
+      <label style={lbl} htmlFor="cm-precio">Precio marcado en el envase (€)</label>
+      <input id="cm-precio" autoFocus inputMode="decimal" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="0,00" style={{ ...inp, marginTop: -6, fontSize: 20, fontWeight: 700 }} />
+      {valor > 0 && <div style={{ fontFamily: F, fontSize: 13.5, color: lejos ? "#A3362B" : C.char }}>{igual ? "Es el mismo precio que la caja: solo queda guardado como precio marcado." : <>En la caja pasa de <b>{eur(prod.pvp)}</b> a <b>{eur(valor)}</b>.{lejos ? " Ojo: es muy distinto, revisa que esté bien escrito." : ""}</>}</div>}
+      <Aviso msg={msg} />
+      <button type="button" disabled={busy || !(valor > 0)} onClick={guardar} style={{ ...btnDark, opacity: busy || !(valor > 0) ? 0.5 : 1 }}>{busy ? "Guardando en la caja…" : igual ? "Guardar como precio marcado" : "Poner este precio en la caja"}</button>
+      <button type="button" onClick={siguiente} style={{ ...btnGhost, minHeight: 48 }}>Cancelar</button>
+    </div>
+  );
+  return (
+    <div style={caja}>
+      <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut }}>Escanea un producto que traiga el precio marcado en el envase, escribe ese precio y se pone en la caja.</div>
+      <Aviso msg={hecho} tipo="bien" />
+      <LectorCodigo key={clave} onCodigo={leerCodigo} />
+      {buscando && <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>Buscando…</div>}
+      <Aviso msg={msg} />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0" }}><span style={{ flex: 1, height: 1, background: C.brdL }} /><span style={{ fontFamily: F, fontSize: 12, color: C.mutL }}>o búscalo por su nombre</span><span style={{ flex: 1, height: 1, background: C.brdL }} /></div>
+      <label style={{ position: "absolute", left: -9999 }} htmlFor="cm-nombre">Buscar por nombre</label>
+      <input id="cm-nombre" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre del producto" style={inp} />
+      {porNombre && (lista === null ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>Buscando…</div> : lista.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>No encuentro nada con ese nombre.</div> : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {lista.map((p) => (
+            <button key={p.id} type="button" onClick={() => { setHecho(null); setProd(p); setPrecio(""); }} style={{ textAlign: "left", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 14, padding: "10px 12px", minHeight: 48, fontFamily: F, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: 14, fontWeight: 600, color: C.char }}>{p.nombre}</span><span style={{ display: "block", fontSize: 11.5, color: C.mut }}>{[eur(p.pvp), p.proveedor, p.barcode ? null : "sin código"].filter(Boolean).join(" · ")}</span></span>
+              <IcoRight size={16} color={C.mut} />
+            </button>
+          ))}
+        </div>
+      ))}
+      <button type="button" onClick={onTerminar} style={{ ...btnGhost, minHeight: 48 }}>{hechos ? `Terminar (${hechos} corregido${hechos === 1 ? "" : "s"})` : "Volver"}</button>
+    </div>
+  );
+}
+
 // ---------- #72 · Comprobar precio marcado: dirección manda productos a mirar en tienda ----------
 export function ComprobarMarcadoView({ onTerminar }) {
   const [lista, setLista] = useState(null);

@@ -14,7 +14,7 @@ import { MiSeguimientoView } from "./MiSeguimientoView.jsx";
 import { MisAvisosView } from "./MisAvisosView.jsx";
 import { CubrirTurnosView } from "./CubrirTurnosView.jsx"; // BOLSA
 import { RecepcionView, AnadirProductoView, SinCodigo } from "./RecepcionView.jsx"; // RECEPCION
-import { EscanearProductoView, ComprobarMarcadoView } from "./ProductoTiendaView.jsx"; // #35 · #72
+import { EscanearProductoView, ComprobarMarcadoView, CorregirMarcadosView } from "./ProductoTiendaView.jsx"; // #35 · #72
 import { CajaView } from "./CajaView.jsx"; // CAJA (caída de Epos)
 import { MisFichajesView } from "./MisFichajesView.jsx"; // FICHAJES
 import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
@@ -64,7 +64,7 @@ const LO_TUYO = [
   { id: "seguimiento", label: "Mi seguimiento", sub: "Avisos, plus y faltas", Ico: (p) => <IcoBars size={20} color={TOSTADO} sw={1.9} {...p} /> },
   { id: "formacion", label: "Formación", Ico: IcoFormacion }, // #101 (el subtítulo depende de los vídeos que le faltan)
 ];
-const TITULOS = { pedido: "Hacer pedido", caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", marcado: "Comprobar precio marcado", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", formacion: "Formación", cambio: "Cambiar turno", horasextra: "Horas extra", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { pedido: "Hacer pedido", caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", marcado: "Comprobar precio marcado", corregir: "Corregir productos marcados", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", formacion: "Formación", cambio: "Cambiar turno", horasextra: "Horas extra", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 // A dónde lleva cada destino de la campana o del correo (?ir=…) en la organización nueva: [pantalla, pestaña]
 const DESTINOS = {
@@ -230,7 +230,8 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       {screen === "recepcion" && <RecepcionView />}
       {screen === "anadir" && <AnadirProductoView codigoInicial={codigoNuevo} onFin={() => { setCodigoNuevo(""); setScreen("home"); }} />}
       {screen === "escanear" && <EscanearProductoView onAnadir={(c) => { setCodigoNuevo(c || ""); setScreen("anadir"); }} onFin={() => setScreen("home")} />}
-      {screen === "sincodigo" && <SinCodigo onTerminar={() => setScreen("home")} />}
+      {screen === "sincodigo" && <SinCodigo onTerminar={() => setScreen("home")} onCorregir={() => setScreen("corregir")} />}
+      {screen === "corregir" && <CorregirMarcadosView onTerminar={() => setScreen("sincodigo")} />}
       {screen === "marcado" && <ComprobarMarcadoView onTerminar={() => setScreen("home")} />}
       {screen === "horarios" && <HorariosYFichajes user={user} pestana={pestana} mesFichajes={mesFichajes} />}
       {screen === "documentos" && <MisDocumentosView />}
