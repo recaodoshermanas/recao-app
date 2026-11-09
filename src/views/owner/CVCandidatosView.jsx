@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C, SHADOW, avatar } from "../../lib/styles.js";
-import { sb } from "../../lib/supabase.js";
+import { sb, supabase } from "../../lib/supabase.js";
 import { EvaluacionSheet } from "./EvaluacionSheet.jsx";
 import { RankingView } from "./RankingView.jsx";
 import { calcularEvaluacion } from "../../lib/evaluacionCandidatas.js";
@@ -29,6 +29,29 @@ function Crit({ c }) {
         const fg = v === "Sí" ? "#1E7A46" : v === "No" ? "#B23A2C" : C.mut;
         return <span key={k} style={{ fontFamily: F, fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: bg, color: fg }}>{sh}{v === "Sí" ? " ✓" : v === "No" ? " ✕" : " ?"}</span>;
       })}
+    </div>
+  );
+}
+
+function CvArchivo({ c }) {
+  const [url, setUrl] = useState(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    setUrl(null); setErr(false);
+    if (!c.cv_ruta) return;
+    let vivo = true;
+    supabase.storage.from("curriculums").createSignedUrl(c.cv_ruta, 600).then(({ data, error }) => { if (!vivo) return; if (error || !data?.signedUrl) setErr(true); else setUrl(data.signedUrl); });
+    return () => { vivo = false; };
+  }, [c.id, c.cv_ruta]);
+  if (!c.cv_ruta) return null;
+  if (err) return <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 8 }}>No se ha podido abrir el archivo del currículum.</div>;
+  if (!url) return <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 8 }}>Cargando currículum…</div>;
+  const esImg = (c.cv_mime || "").startsWith("image/");
+  return (
+    <div style={{ marginTop: 10 }}>
+      {esImg ? <img src={url} alt="Currículum" style={{ width: "100%", borderRadius: 12, border: `1px solid ${C.brdL}` }} />
+        : <iframe src={url} title="Currículum" style={{ width: "100%", height: "60vh", border: `1px solid ${C.brdL}`, borderRadius: 12, background: "#fff" }} />}
+      <a href={url} target="_blank" rel="noopener" style={{ display: "inline-block", marginTop: 6, color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Abrir a pantalla completa / descargar ↗</a>
     </div>
   );
 }
@@ -235,6 +258,7 @@ export function CVCandidatosView({ currentUser }) {
             ) : (
               <div style={{ fontFamily: F, fontSize: 13, color: C.mut, lineHeight: 1.5, background: "#F5F0E6", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "12px 14px" }}>No hay texto del CV guardado para esta candidata. Puedes ver el original en el correo.</div>
             )}
+            <CvArchivo c={abierto} />
             {abierto.cv_archivo && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 6 }}>📎 {abierto.cv_archivo}</div>}
             <a href={gmailUrl(abierto.gmail_id)} target="_blank" rel="noopener" style={{ display: "inline-block", marginTop: 10, color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Ver original en Gmail ↗</a>
 
