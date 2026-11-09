@@ -80,6 +80,11 @@ function Proveedor({ p: p0, onVolver }) {
   const [copiado, setCopiado] = useState(false);
   const [edit, setEdit] = useState({});
   const [cajaBusy, setCajaBusy] = useState(null);
+  const [quitados, setQuitados] = useState([]);
+  const [buscando, setBuscando] = useState(false);
+  const [q, setQ] = useState("");
+  const [res, setRes] = useState([]);
+  const [aviso, setAviso] = useState("");
 
   const calcular = useCallback(async () => {
     setD(null); setErr("");
@@ -110,7 +115,36 @@ function Proveedor({ p: p0, onVolver }) {
     } catch (e) { setErr(e.message || "No se ha podido guardar"); }
     setCajaBusy(null);
   };
-  const lineas = d ? (d.lineas || []).filter(l => (cant[l.product_id] || 0) > 0) : [];
+  // #176 Escribir la cantidad con el teclado (en cajas si el producto va por cajas).
+  const escribir = (l, txt) => { const v = parseInt(String(txt).replace(/\D/g, ""), 10) || 0; setCant(c => ({ ...c, [l.product_id]: Math.min(v, 9999) * paso(l) })); };
+  // #176 «No se pide aquí»: quita la línea solo de este pedido (se puede deshacer hasta enviarlo).
+  const quitar = (l) => setQuitados(x => [...x, l.product_id]);
+  const deshacerQuitar = (id) => setQuitados(x => x.filter(i => i !== id));
+  // #176 Añadir un producto de otro proveedor: se recuerda para los siguientes pedidos de este proveedor.
+  useEffect(() => {
+    if (!buscando || q.trim().length < 2) { setRes([]); return undefined; }
+    let vivo = true;
+    const t = setTimeout(async () => { try { const r = await sb.rpc("pedido_buscar_producto", { p_q: q.trim(), p_supplier: p.supplier_id }); if (vivo) setRes(r || []); } catch (e) { if (vivo) setErr(e.message || "No se ha podido buscar"); } }, 300);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [q, buscando, p.supplier_id]);
+  const anadir = async (x) => {
+    setErr(""); setAviso("");
+    if (quitados.includes(x.product_id)) { deshacerQuitar(x.product_id); setBuscando(false); setQ(""); return; }
+    if ((d.lineas || []).some(l => l.product_id === x.product_id)) { setAviso(`«${x.nombre}» ya está en este pedido.`); return; }
+    if (x.pendiente && !window.confirm(`Ojo: ${x.nombre} está ${x.pendiente}. ¿Lo añades igualmente?`)) return;
+    try {
+      if (!x.ya_en_este) await sb.rpc("pedido_extra_anadir", { p_supplier: p.supplier_id, p_product: x.product_id });
+      const r = await sb.rpc("pedido_calcular", { p_supplier: p.supplier_id });
+      const nl = (r.lineas || []).find(l => l.product_id === x.product_id);
+      const linea = nl || { product_id: x.product_id, nombre: x.nombre, clase: "–", unidades_caja: x.unidades_caja, coste: x.coste, cantidad: 0, motivo: "Añadido a mano: escribe la cantidad que quieres pedir." };
+      setD(prev => ({ ...prev, lineas: [...(prev.lineas || []), linea] }));
+      setCant(c => ({ ...c, [x.product_id]: Number(linea.cantidad) || 0 }));
+      setAviso(nl ? `«${x.nombre}» añadido con la cantidad sugerida.` : `«${x.nombre}» añadido: escribe la cantidad.`);
+      setBuscando(false); setQ("");
+    } catch (e) { setErr(e.message || "No se ha podido añadir el producto"); }
+  };
+  const visibles = d ? (d.lineas || []).filter(l => !quitados.includes(l.product_id)) : [];
+  const lineas = visibles.filter(l => (cant[l.product_id] || 0) > 0);
   const textoLinea = (l) => {
     const q = cant[l.product_id]; const nom = l.nombre_proveedor || l.nombre;
     const ref = l.ref ? ` (ref ${l.ref})` : "";
@@ -168,7 +202,22 @@ function Proveedor({ p: p0, onVolver }) {
             Se pide {p.veces_semana === 1 ? "una vez" : `${p.veces_semana} veces`} por semana. Stock según la foto de la noche del {d.foto_stock ? fechaCorta(d.foto_stock) : "–"} menos lo vendido después. Las cantidades se pueden cambiar con + y −.
           </div>
           {lineas.length === 0 && <div style={{ ...card, fontFamily: F, fontSize: 14 }}>Hoy no hace falta pedir nada a este proveedor.</div>}
-          {(d.lineas || []).map(l => (
+          {aviso && <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{aviso}</div>}
+          <button type="button" onClick={() => { setBuscando(b => !b); setQ(""); setRes([]); setAviso(""); }} style={btnGhost}>{buscando ? "Cerrar búsqueda" : "+ Añadir producto"}</button>
+          {buscando && (
+            <div style={{ ...card, display: "flex", flexDirection: "column", gap: 8 }}>
+              <input value={q} autoFocus placeholder="Nombre o código de barras" onChange={e => setQ(e.target.value)} style={inp} />
+              {q.trim().length >= 2 && res.length === 0 && <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>Sin resultados.</div>}
+              {res.map(x => (
+                <button key={x.product_id} type="button" onClick={() => anadir(x)} style={{ ...btnGhost, textAlign: "left", display: "flex", flexDirection: "column", gap: 2, padding: "8px 12px" }}>
+                  <span style={{ fontFamily: F, fontSize: 13.5, fontWeight: 700 }}>{x.nombre}</span>
+                  <span style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{x.proveedor || "Sin proveedor"}{x.ya_en_este ? " · ya es de este proveedor" : ""}</span>
+                  {x.pendiente && <span style={{ fontFamily: F, fontSize: 12, color: C.red }}>⚠ {x.pendiente}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          {visibles.map(l => (
             <div key={l.product_id} style={{ ...card, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ fontFamily: F, fontSize: 14.5, fontWeight: 700, color: C.char }}>{l.nombre} <span style={{ fontWeight: 600, fontSize: 11.5, color: C.mut }}>· clase {l.clase}</span></div>
               {(l.nombre_proveedor || l.ref) && <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{l.nombre_proveedor}{l.ref ? ` · ref ${l.ref}` : ""}</div>}
@@ -176,10 +225,11 @@ function Proveedor({ p: p0, onVolver }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button type="button" aria-label="Menos" onClick={() => cambiar(l, -1)} style={{ ...btnGhost, width: 40, height: 40, padding: 0 }}>−</button>
                 <div style={{ minWidth: 90, textAlign: "center", fontFamily: F, fontSize: 15, fontWeight: 700 }}>
-                  {l.unidades_caja ? `${(cant[l.product_id] || 0) / l.unidades_caja} caja${(cant[l.product_id] || 0) / l.unidades_caja === 1 ? "" : "s"}` : `${cant[l.product_id] || 0} ud`}
-                  {l.unidades_caja && <div style={{ fontSize: 11.5, fontWeight: 500, color: C.mut }}>{cant[l.product_id] || 0} ud</div>}
+                  <input value={String(l.unidades_caja ? Math.round((cant[l.product_id] || 0) / l.unidades_caja) : (cant[l.product_id] || 0))} inputMode="numeric" aria-label="Cantidad" onFocus={e => e.target.select()} onChange={e => escribir(l, e.target.value)} style={{ ...inp, width: 64, textAlign: "center", padding: "6px 4px", fontWeight: 700 }} />
+                  <div style={{ fontSize: 11.5, fontWeight: 500, color: C.mut }}>{l.unidades_caja ? `${(cant[l.product_id] || 0) / l.unidades_caja === 1 ? "caja" : "cajas"} · ${cant[l.product_id] || 0} ud` : "ud"}</div>
                 </div>
                 <button type="button" aria-label="Más" onClick={() => cambiar(l, 1)} style={{ ...btnGhost, width: 40, height: 40, padding: 0 }}>+</button>
+                <button type="button" onClick={() => quitar(l)} style={{ ...btnGhost, marginLeft: "auto", padding: "6px 10px", fontSize: 12.5 }}>No se pide aquí</button>
               </div>
               {(() => {
                 const ed = edit[l.product_id]; const on = ed ? ed.on : !!l.unidades_caja;
@@ -200,6 +250,16 @@ function Proveedor({ p: p0, onVolver }) {
               })()}
             </div>
           ))}
+          {quitados.length > 0 && (
+            <div style={card}>
+              <div style={{ fontFamily: F, fontSize: 14, fontWeight: 700 }}>Quitados de este pedido ({quitados.length})</div>
+              {quitados.map(id => { const l = (d.lineas || []).find(x => x.product_id === id); return l && (
+                <div key={id} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontFamily: F, fontSize: 12.5 }}>
+                  <span style={{ flex: 1 }}>{l.nombre}</span>
+                  <button type="button" onClick={() => deshacerQuitar(id)} style={{ ...btnGhost, padding: "4px 10px", fontSize: 12.5 }}>Deshacer</button>
+                </div>); })}
+            </div>
+          )}
           {bloque("Esperando a dirección", d.esperando_direccion)}
           {bloque("En observación", d.en_observacion)}
           {bloque("No hace falta todavía", d.no_hace_falta)}
