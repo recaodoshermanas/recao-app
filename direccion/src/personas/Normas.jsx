@@ -69,20 +69,43 @@ function Detalle({ norma, d, resumen, abrir, onClose, onCambio }) {
   const [desde, setDesde] = useState(hoy());
   const [archivo, setArchivo] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [drive, setDrive] = useState(null); // { cargando, carpeta, archivos } al abrir «Traer desde Drive»
+  const [deDrive, setDeDrive] = useState(null); // archivo elegido en Drive
   const input = useRef(null);
+  const abrirDrive = async () => {
+    setDrive({ cargando: true, archivos: [] });
+    try { const r = await fn("drive_listar"); setDrive({ cargando: false, carpeta: r.carpeta, archivos: r.archivos || [] }); }
+    catch (e) { setDrive(null); avisar(e.message || "No se ha podido leer Drive", "mal"); }
+  };
+  const elegirDrive = (f) => {
+    setDeDrive(f); setArchivo(null); if (input.current) input.current.value = "";
+    setVer(f.version || ""); setDesde(f.vigente_desde || hoy()); setDrive(null);
+    if (!f.version) avisar("El nombre no sigue el formato: escribe la versión y la fecha a mano", "mal");
+    else if (vs.some((v) => v.version === f.version)) avisar(`«${norma.titulo}» ya tiene una versión ${f.version}; no se duplicará`, "mal");
+  };
   const subir = async () => {
     if (!ver.trim()) { avisar("Escribe la versión (por ejemplo 2.1)", "mal"); return; }
-    if (!archivo) { avisar("Elige el PDF", "mal"); return; }
-    if (archivo.type && archivo.type !== "application/pdf") { avisar("Tiene que ser un PDF", "mal"); return; }
-    if (archivo.size > 15 * 1024 * 1024) { avisar("El PDF pesa más de 15 MB", "mal"); return; }
+    if (!archivo && !deDrive) { avisar("Elige el PDF", "mal"); return; }
+    if (archivo) {
+      if (archivo.type && archivo.type !== "application/pdf") { avisar("Tiene que ser un PDF", "mal"); return; }
+      if (archivo.size > 15 * 1024 * 1024) { avisar("El PDF pesa más de 15 MB", "mal"); return; }
+    }
+    if (vs.some((v) => v.version === ver.trim())) { avisar(`«${norma.titulo}» ya tiene una versión ${ver.trim()}. Escribe otra versión.`, "mal"); return; }
     setBusy(true);
     try {
-      const s = await fn("subida");
-      const { error } = await supabase.storage.from("personal").uploadToSignedUrl(s.ruta, s.token, archivo, { contentType: "application/pdf" });
-      if (error) throw new Error("No se ha podido subir el PDF");
-      const r = await fn("registrar", { norma_id: norma.id, version: ver.trim(), vigente_desde: desde, ruta: s.ruta, nombre_archivo: archivo.name });
+      let ruta, nombre;
+      if (deDrive && !archivo) {
+        const t = await fn("drive_traer", { file_id: deDrive.id });
+        ruta = t.ruta; nombre = t.nombre_archivo;
+      } else {
+        const s = await fn("subida");
+        const { error } = await supabase.storage.from("personal").uploadToSignedUrl(s.ruta, s.token, archivo, { contentType: "application/pdf" });
+        if (error) throw new Error("No se ha podido subir el PDF");
+        ruta = s.ruta; nombre = archivo.name;
+      }
+      const r = await fn("registrar", { norma_id: norma.id, version: ver.trim(), vigente_desde: desde, ruta, nombre_archivo: nombre });
       avisar(`Subida. Avisadas ${r.avisadas} personas de la plantilla`);
-      setVer(""); setArchivo(null); if (input.current) input.current.value = "";
+      setVer(""); setArchivo(null); setDeDrive(null); if (input.current) input.current.value = "";
       onCambio();
     } catch (e) { avisar(e.message || "No se ha podido subir", "mal"); }
     setBusy(false);
@@ -108,7 +131,30 @@ function Detalle({ norma, d, resumen, abrir, onClose, onCambio }) {
         <label className="campo">Versión<input value={ver} onChange={(e) => setVer(e.target.value)} placeholder="2.1" /></label>
         <label className="campo">En vigor desde<input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></label>
       </div>
-      <label className="campo" style={{ maxWidth: 640 }}>PDF<input ref={input} type="file" accept="application/pdf,.pdf" onChange={(e) => setArchivo(e.target.files?.[0] || null)} /></label>
+      <label className="campo" style={{ maxWidth: 640 }}>PDF<input ref={input} type="file" accept="application/pdf,.pdf" onChange={(e) => { setArchivo(e.target.files?.[0] || null); setDeDrive(null); }} /></label>
+      <div style={{ maxWidth: 640, margin: "0 0 12px" }}>
+        <button className="btn-l" disabled={busy} onClick={abrirDrive}>Traer desde Drive</button>
+        {deDrive && !archivo && <span className="pf" style={{ marginLeft: 10 }}>Elegido de Drive: <b>{deDrive.nombre}</b></span>}
+        {drive && (
+          <div className="card" style={{ marginTop: 8, border: "1px solid var(--line)" }}>
+            {drive.cargando ? <Cargando texto="Leyendo la carpeta de Drive…" /> : !drive.carpeta ? (
+              <p className="pf" style={{ margin: 0 }}>No encuentro la carpeta «Vigentes» (TIENDA - Recao → Recursos Humanos → Normas y protocolos → Vigentes). Hay que dar permiso de lectura sobre esa carpeta a la cuenta claude@recao-direccion.iam.gserviceaccount.com.</p>
+            ) : drive.archivos.length === 0 ? (
+              <p className="pf" style={{ margin: 0 }}>La carpeta «Vigentes» no tiene ningún PDF.</p>
+            ) : (
+              <div style={{ display: "grid", gap: 6 }}>
+                {drive.archivos.map((f) => (
+                  <div key={f.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
+                    <span style={{ flex: 1, minWidth: 200 }}><b>{f.nombre}</b>{f.version ? <span className="pf"> · v{f.version} · en vigor {dia(f.vigente_desde)}</span> : <span className="pf"> · nombre sin el formato esperado</span>}</span>
+                    <button className="btn-l" onClick={() => elegirDrive(f)}>Elegir</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="btn-txt" style={{ marginTop: 6 }} onClick={() => setDrive(null)}>Cerrar</button>
+          </div>
+        )}
+      </div>
       <button className="btn-p" disabled={busy} onClick={subir}>{busy ? "Subiendo…" : "Subir y pedir el recibí"}</button>
       {vs.length > 0 && <h4 style={{ margin: "20px 0 4px", fontSize: 14 }}>Versiones y seguimiento</h4>}
       {vs.map((v) => {
