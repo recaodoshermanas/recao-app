@@ -5,6 +5,7 @@ import { sb } from "../../lib/supabase.js";
 // Mis documentos: nóminas, contratos y demás papeles que sube dirección (los hace la gestoría).
 // Nómina: se abre y se confirma «La he recibido». Contrato/anexo: se firma con un código que llega a su correo.
 const fn = (accion, datos = {}) => sb.fn("documentos", { accion, ...datos });
+const fnN = (accion, datos = {}) => sb.fn("normas", { accion, ...datos }); // #179 normas y protocolos de la plantilla
 const TIPO = { nomina: "Nómina", contrato: "Contrato", anexo: "Anexo al contrato", finiquito: "Finiquito", certificado: "Certificado", otro: "Documento" };
 const DECLARACION = "He leído el documento completo y lo firmo electrónicamente. Sé que esta firma tiene la misma validez que mi firma en papel.";
 const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 14, boxShadow: SHADOW.card };
@@ -16,6 +17,9 @@ export function MisDocumentosView() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(null);
   const [firmando, setFirmando] = useState(null);
+  const [ventana, setVentana] = useState(null); // null = elegir · "personales" · "normas" (#179)
+  const [normas, setNormas] = useState(null); // resumen: { plantilla, pendientes }
+  useEffect(() => { fnN("normas_resumen").then(setNormas).catch(() => setNormas({ plantilla: false, pendientes: 0 })); }, [ventana]);
   const cargar = useCallback(async () => { try { setD(await fn("mis_documentos")); } catch (e) { setMsg(e.message || "No se han podido cargar tus documentos"); setD({ documentos: [], aceptado_electronico: null }); } }, []);
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -43,6 +47,21 @@ export function MisDocumentosView() {
       </div>
     </div>
   );
+
+  if (normas === null) return <div style={{ padding: 30, textAlign: "center", fontFamily: F, color: C.mut }}>Cargando…</div>;
+  if (normas.plantilla && ventana === null) return (
+    <div style={wrap}>
+      <button type="button" onClick={() => setVentana("personales")} style={{ ...card, textAlign: "left", cursor: "pointer", display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontFamily: SF, fontSize: 19 }}>Nóminas y contratos</span>
+        <span style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{d.documentos.filter(pendiente).length > 0 ? `${d.documentos.filter(pendiente).length} pendiente${d.documentos.filter(pendiente).length === 1 ? "" : "s"}` : "Tus nóminas, tu contrato y otros papeles"}</span>
+      </button>
+      <button type="button" onClick={() => setVentana("normas")} style={{ ...card, textAlign: "left", cursor: "pointer", display: "flex", flexDirection: "column", gap: 4, border: normas.pendientes > 0 ? "1.5px solid #E0B94A" : card.border }}>
+        <span style={{ fontFamily: SF, fontSize: 19 }}>Normas y protocolos {normas.pendientes > 0 && <span style={{ fontFamily: F, fontSize: 13, fontWeight: 700, background: "#E0B94A", color: "#fff", borderRadius: 999, padding: "2px 9px", marginLeft: 6 }}>{normas.pendientes}</span>}</span>
+        <span style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{normas.pendientes > 0 ? `${normas.pendientes} por confirmar que las has recibido` : "Las normas internas vigentes"}</span>
+      </button>
+    </div>
+  );
+  if (ventana === "normas") return <NormasView onVolver={() => setVentana(null)} />;
 
   const docs = d.documentos;
   const pend = docs.filter(pendiente);
@@ -72,6 +91,7 @@ export function MisDocumentosView() {
 
   return (
     <div style={wrap}>
+      {normas.plantilla && <button type="button" onClick={() => setVentana(null)} style={{ background: "none", border: "none", fontFamily: F, fontSize: 13, color: C.mut, textDecoration: "underline", cursor: "pointer", alignSelf: "flex-start", padding: 0 }}>← Volver</button>}
       {msg && <div role="status" style={{ fontFamily: F, fontSize: 13, borderRadius: 12, padding: "10px 12px", background: msg.includes("✓") ? "#EAF4EE" : "#FBEAE7", color: msg.includes("✓") ? "#1E6B3C" : "#A3362B" }}>{msg}</div>}
       {docs.length === 0 && <div style={{ ...card, fontFamily: F, fontSize: 14, color: C.mut, textAlign: "center" }}>Todavía no tienes documentos. Cuando dirección suba tu nómina o tu contrato te llegará un aviso.</div>}
       {pend.length > 0 && <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: C.mut, textTransform: "uppercase", letterSpacing: 0.4 }}>Pendientes</div>}
@@ -133,6 +153,55 @@ function Firmar({ x, abrir, onCerrar }) {
         </>
       )}
       <button type="button" onClick={() => onCerrar(false)} style={{ background: "none", border: "none", fontFamily: F, fontSize: 13, color: C.mut, textDecoration: "underline", cursor: "pointer" }}>Ahora no</button>
+    </div>
+  );
+}
+
+// Normas y protocolos (#179): solo plantilla. Se abre, se lee y se confirma «La he recibido». Solo la versión vigente.
+function NormasView({ onVolver }) {
+  const [d, setD] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(null);
+  const cargar = useCallback(async () => { try { setD(await fnN("mis_normas")); } catch (e) { setMsg(e.message || "No se han podido cargar las normas"); setD({ normas: [] }); } }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+  const abrir = async (x) => {
+    setMsg(""); const w = window.open("", "_blank");
+    try { const r = await fnN("abrir", { id: x.id }); if (w) w.location.href = r.url; else window.location.href = r.url; await cargar(); }
+    catch (e) { if (w) w.close(); setMsg(e.message || "No se ha podido abrir"); }
+  };
+  const recibido = async (x) => { setBusy(x.id); try { await fnN("recibido", { id: x.id }); setMsg("Confirmado ✓"); await cargar(); } catch (e) { setMsg(e.message); } setBusy(null); };
+  const wrap = { padding: "16px 16px 28px", maxWidth: 540, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 };
+  if (!d) return <div style={{ padding: 30, textAlign: "center", fontFamily: F, color: C.mut }}>Cargando…</div>;
+  const pend = d.normas.filter((x) => !x.recibido_en);
+  const vig = d.normas.filter((x) => x.recibido_en);
+  const lab = { fontFamily: F, fontSize: 12, fontWeight: 700, color: C.mut, textTransform: "uppercase", letterSpacing: 0.4 };
+  const Tarjeta = ({ x }) => {
+    const p = !x.recibido_en;
+    return (
+      <div style={{ ...card, display: "flex", flexDirection: "column", gap: 8, border: p ? "1.5px solid #E0B94A" : card.border }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ fontFamily: F, fontSize: 15, fontWeight: 700, flex: 1 }}>{x.titulo}</span>
+          <span style={{ fontFamily: F, fontSize: 12, color: C.mut }}>versión {x.version}</span>
+        </div>
+        <div style={{ fontFamily: F, fontSize: 12.5, color: p ? "#8A5A0B" : "#1E6B3C", fontWeight: 600 }}>
+          {x.recibido_en ? `Recibida el ${fecha(x.recibido_en)}` : x.visto_en ? "Ábrela y confirma que la has recibido" : "Sin abrir"}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" onClick={() => abrir(x)} style={{ ...btnGhost, padding: "9px 14px" }}>Abrir PDF</button>
+          {p && x.visto_en && <button type="button" disabled={busy === x.id} onClick={() => recibido(x)} style={{ ...btnDark, padding: "9px 14px", opacity: busy === x.id ? 0.6 : 1 }}>La he recibido</button>}
+        </div>
+      </div>
+    );
+  };
+  return (
+    <div style={wrap}>
+      <button type="button" onClick={onVolver} style={{ background: "none", border: "none", fontFamily: F, fontSize: 13, color: C.mut, textDecoration: "underline", cursor: "pointer", alignSelf: "flex-start", padding: 0 }}>← Volver</button>
+      {msg && <div role="status" style={{ fontFamily: F, fontSize: 13, borderRadius: 12, padding: "10px 12px", background: msg.includes("✓") ? "#EAF4EE" : "#FBEAE7", color: msg.includes("✓") ? "#1E6B3C" : "#A3362B" }}>{msg}</div>}
+      {d.normas.length === 0 && <div style={{ ...card, fontFamily: F, fontSize: 14, color: C.mut, textAlign: "center" }}>Todavía no hay normas publicadas. Cuando dirección suba una te llegará un aviso.</div>}
+      {pend.length > 0 && <div style={lab}>Pendientes</div>}
+      {pend.map((x) => <Tarjeta key={x.id} x={x} />)}
+      {vig.length > 0 && <div style={{ ...lab, marginTop: 6 }}>Vigentes</div>}
+      {vig.map((x) => <Tarjeta key={x.id} x={x} />)}
     </div>
   );
 }

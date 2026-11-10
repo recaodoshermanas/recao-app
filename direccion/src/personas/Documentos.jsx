@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sb, supabase } from "../../../src/lib/supabase.js";
 import { Panel, Pestanas, Cargando, avisar, hace } from "../ui.jsx";
 import { NominasGestoria } from "./NominasGestoria.jsx";
+import { Normas } from "./Normas.jsx";
 
 const fn = (accion, datos = {}) => sb.fn("documentos", { accion, ...datos });
 const TIPOS = [
@@ -55,6 +56,7 @@ export function Documentos() {
     { id: "pendientes", label: "Pendientes", n: pend.length },
     { id: "todos", label: "Todos" },
     { id: "subir", label: "Subir documento" },
+    { id: "normas", label: "Normas y protocolos" },
     { id: "gestoria", label: "Nóminas de la gestoría" },
     { id: "firma", label: "Firma" },
   ];
@@ -68,7 +70,7 @@ export function Documentos() {
       {sinAceptar.length > 0 && <p className="b-nota">Aún no han aceptado recibir documentos en la app: {sinAceptar.map((u) => u.nombre).join(", ")}. Se les pide la primera vez que entran en «Mis documentos».</p>}
       <Pestanas valor={tab} opciones={opciones} onChange={setTab} etiqueta="Secciones de documentos" />
       <div className="card mt">
-        {tab === "gestoria" ? <NominasGestoria trabajadoras={d.trabajadoras} /> : tab === "firma" ? <Firma onCambio={cargar} /> : tab === "subir" ? <Subir trabajadoras={activas} onHecho={() => { cargar(); }} /> : (
+        {tab === "normas" ? <Normas /> : tab === "gestoria" ? <NominasGestoria trabajadoras={d.trabajadoras} /> : tab === "firma" ? <Firma onCambio={cargar} /> : tab === "subir" ? <Subir trabajadoras={activas} onHecho={() => { cargar(); }} /> : (
           <>
             <div className="head">
               <div><h2>{tab === "pendientes" ? "Pendientes de recibir o firmar" : "Todos los documentos"}</h2></div>
