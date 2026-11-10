@@ -100,6 +100,13 @@ function AperturaSobresTurnos({ mes, datos, setDatos }) {
             </div>
           )}
           {fila("Sobres revisados", `${datos.revisados} de ${datos.cierres}${datos.incorrectos ? ` · ${datos.incorrectos} incorrecto${datos.incorrectos === 1 ? "" : "s"}` : ""}`)}
+          {Number(datos.compensado) > 0 && (
+            <div style={{ fontFamily: F, fontSize: 12.5, color: AMBAR, background: "#FBF0DA", borderRadius: 10, padding: "9px 12px", margin: "6px 0" }}>
+              <b>Cuadrados por cobro cambiado (efectivo ↔ tarjeta): {datos.compensados} sobre{datos.compensados === 1 ? "" : "s"} · {dinero(datos.compensado)}</b>
+              <div style={{ marginTop: 3 }}>{(datos.sobres || []).filter((s) => Number(s.compensado) > 0).map((s) => `${dia(s.fecha)} ${s.dos_turnos ? "mañana y tarde" : s.turno} caja ${s.caja}: ${dinero(s.compensado)}`).join(" · ")}</div>
+              <div style={{ marginTop: 3, color: C.mut }}>En ese cierre faltaba en efectivo lo que sobraba en tarjeta (o al revés): se compensa la parte que coincide. Solo informativo; no cambia la Cuenta de resultados.</div>
+            </div>
+          )}
           <a href={`#/finanzas/efectivo/caja?mes=${mes}`} style={{ display: "inline-block", marginTop: 8, fontFamily: F, fontSize: 13.5, fontWeight: 700, color: C.char }}>Revisar en Caja →</a>
           <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 2 }}>Cada sobre se confirma en Finanzas → Efectivo → Caja («Cuadre por turno»).</div>
           {(datos.historial || []).length > 0 && (

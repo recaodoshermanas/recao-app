@@ -66,6 +66,13 @@ function EposCierresTurnos({ mes }) {
             </div>
           ))}
           <div style={{ display: "flex", justifyContent: "space-between", fontFamily: F, fontSize: 14, fontWeight: 700, color: C.char, padding: "6px 0", borderTop: `2px solid ${C.char}` }}><span>Neto del mes{(d.emergencia || []).length ? " (sin los turnos con ventas de emergencia)" : ""}</span>{dif(d.neto, true)}</div>
+          {Number(d.compensado) > 0 && (
+            <div style={{ fontFamily: F, fontSize: 12.5, color: AMBAR, background: "#FBF0DA", borderRadius: 10, padding: "9px 12px", margin: "4px 0 8px" }}>
+              <b>Cuadrado por cobro cambiado (efectivo ↔ tarjeta): {dinero(d.compensado)} en {d.compensados} cierre{d.compensados === 1 ? "" : "s"}</b>
+              <div style={{ marginTop: 3 }}>{filas.filter((r) => Number(r.compensado) > 0).map((r) => `${dia(r.fecha)} ${turnoTxt(r).toLowerCase()} caja ${r.caja}: ${dinero(r.compensado)} (queda ${conSigno(r.neto)})`).join(" · ")}</div>
+              <div style={{ marginTop: 3, color: C.mut }}>Lo que falta en uno y sobra en el otro en el mismo cierre y la misma caja se compensa; el neto de cada cierre ya es lo que queda.</div>
+            </div>
+          )}
           <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>{filas.length} cierre{filas.length === 1 ? "" : "s"}{malo ? ` · ${d.marcados} con más de 5 €` : ""}{filas.filter((r) => r.cruce).length ? ` · ${filas.filter((r) => r.cruce).length} con cruce de forma de pago` : ""}</div>
           <a href={`#/finanzas/efectivo/caja?mes=${mes}`} style={{ display: "inline-block", marginTop: 8, fontFamily: F, fontSize: 13.5, fontWeight: 700, color: C.char }}>Revisar en Caja →</a>
           {ult && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 8 }}>Cierres traídos de Epos el {new Date(ult.en).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}. Se actualiza solo a las 00:20 y a las 7:20.</div>}

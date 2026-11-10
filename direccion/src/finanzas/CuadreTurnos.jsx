@@ -159,8 +159,10 @@ function Linea({ s, banco, umbral, setSobres, setTarjeta, onEdit }) {
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <span style={pill(ef[1])}>{ef[0]}</span>
           {tj && <span style={pill(tj[1])}>{tj[0]}</span>}
+          {n(s.compensado) > 0 && <span style={pill("aviso")}>Cuadrado por cobro cambiado: {e2(s.compensado)}</span>}
         </div>
       </div>
+      {n(s.compensado) > 0 && <div style={{ ...S.mut, marginTop: 6 }}>En este cierre falta en {n(s.ef_dif) < 0 ? "efectivo" : "tarjeta"} y sobra en {n(s.ef_dif) < 0 ? "tarjeta" : "efectivo"}: se da por cobro marcado con el tipo de pago cambiado (efectivo ↔ tarjeta) y se compensan {e2(s.compensado)}. Queda de diferencia {signo(Math.round((n(s.ef_dif) + n(s.ta_dif)) * 100) / 100)}.</div>}
       <div style={S.bloques}>
         <Efectivo key={`${s.eod_id}-${s.estado}-${s.billetes}`} s={s} umbral={umbral} setSobres={setSobres} onEdit={onEdit} />
         <div style={S.bloque}>
