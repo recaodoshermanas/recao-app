@@ -88,7 +88,7 @@ export function EfectivoSobres() {
           </div>
         )}
         <div style={{ border: "1px solid var(--line, #EBE3D5)", borderRadius: 14, padding: "14px 16px", margin: "10px 0 14px" }}><ExtrasSobres mes={d.mes_sobres} onCambio={refrescar} /></div>
-        {d.salidas.length === 0 ? <p className="empty">Sin salidas este mes.</p> : (
+        {d.salidas.length === 0 && !(d.salidas_previas || []).length ? <p className="empty">Sin salidas este mes.</p> : (
           <div className="tabla-scroll">
             <table className="ranking es-tabla">
               <thead><tr><th>Día</th><th>Tipo</th><th>Concepto</th><th>Apuntado por</th><th className="r">Importe</th><th></th></tr></thead>
@@ -101,6 +101,16 @@ export function EfectivoSobres() {
                     <td>{s.quien || "—"}</td>
                     <td className="r b">−{eur(s.importe, 2)}</td>
                     <td className="r" style={{ whiteSpace: "nowrap" }}>{s.origen === "factura" ? <span className="pf">Se corrige en la factura</span> : s.origen === "extras" ? <span className="pf">Se cambia en «Extras de trabajadoras»</span> : s.origen === "inversion" ? <span className="pf">Se cambia en «Inversiones»</span> : s.origen === "mantenimiento" ? <span className="pf">Se cambia en «Mantenimiento»</span> : s.origen === "recarga" ? <span className="pf">Se cambia en Caja</span> : s.origen === "marketing" ? <button className="btn-l" onClick={() => setPanel({ marketing: true })}>Cambiar importe</button> : <button className="btn-l" onClick={() => setPanel({ editar: s })}>Corregir</button>}</td>
+                  </tr>
+                ))}
+                {(d.salidas_previas || []).map((s) => (
+                  <tr key={s.id} style={{ opacity: 0.75 }}>
+                    <td>{fechaCorta(s.fecha)}</td>
+                    <td><span className={`es-chip ${TIPOS[s.tipo]?.chip || ""}`}>{TIPOS[s.tipo]?.label || s.tipo}</span></td>
+                    <td>{s.concepto || "—"}<span className="pf">Pagado antes del recuento (ya incluido en el saldo de partida): no resta{s.nota ? ` · ${s.nota}` : ""}</span></td>
+                    <td>{s.quien || "—"}</td>
+                    <td className="r" style={{ textDecoration: "line-through" }}>{eur(s.importe, 2)}</td>
+                    <td className="r"><span className="pf">No resta</span></td>
                   </tr>
                 ))}
               </tbody>
