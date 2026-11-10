@@ -63,6 +63,7 @@ export const AREAS = [
       { id: "captacion", label: "Captación" },
       { id: "campanas", label: "Campañas y calendario" },
       { id: "reputacion", label: "Reputación" },
+      { id: "redes", label: "Redes sociales" },
     ],
   },
   {

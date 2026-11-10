@@ -34,6 +34,7 @@ import { Lab, AvisosLab } from "./producto/Lab.jsx";
 import { Radar, AvisosRadar } from "./producto/Radar.jsx";
 import { Inventario } from "./producto/Inventario.jsx";
 import { MarketingResumen, MarketingClientes, MarketingCaptacion, MarketingCampanas, MarketingReputacion } from "./marketing/Marketing.jsx";
+import { MarketingRedes } from "./marketing/Redes.jsx";
 import { TecSolicitudes } from "./tecnologia/Solicitudes.jsx";
 import { TecGuia } from "./tecnologia/Guia.jsx";
 import { Avisos, Pestanas } from "./ui.jsx";
@@ -234,6 +235,7 @@ export default function App() {
   else if (area.id === "marketing" && sub.id === "captacion") contenido = <MarketingCaptacion />;
   else if (area.id === "marketing" && sub.id === "campanas") contenido = <MarketingCampanas />;
   else if (area.id === "marketing" && sub.id === "reputacion") contenido = <MarketingReputacion />;
+  else if (area.id === "marketing" && sub.id === "redes") contenido = <MarketingRedes />;
   else if (area.id === "plan" && sub.id === "resumen") contenido = <PlanResumen user={user} />;
   else if (area.id === "plan" && sub.id === "proyectos") contenido = <Proyectos user={user} extra={extra} />;
   else if (area.id === "plan" && sub.id === "tareas") contenido = <PlanTareas user={user} />;
