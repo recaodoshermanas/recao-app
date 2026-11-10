@@ -95,6 +95,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [dudosos, setDudosos] = useState([]); // FICHAJES: fichajes dudosos de los últimos 14 días
   const [turnoHoy, setTurnoHoy] = useState(null);
   const [videos, setVideos] = useState(null); // #101 formacion_mis_videos()
+  const [docsNuevos, setDocsNuevos] = useState(0); // #185 documentos sin abrir en «Mis documentos»
   const [videoAbrir, setVideoAbrir] = useState(null);
   const cargarVideos = () => { sb.rpc("formacion_mis_videos").then(setVideos).catch(() => {}); };
   const [mesFichajes, setMesFichajes] = useState(null); // FICHAJES: mes que abre «Fichajes» desde «Pendiente»
@@ -116,6 +117,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
     sb.fn("producto-tienda", { accion: "marcado_lista" }).then(r => setMarcadoN((r.productos || []).length)).catch(() => {}); // #72
     sb.fn("disciplina", { action: "mis_avisos" }).then(r => setAvisos((r.avisos || []).filter(a => a.estado === "emitido" && !a.alegacion_en && a.plazo_alegacion && new Date(a.plazo_alegacion) > new Date()))).catch(() => {});
     cargarVideos(); // #101
+    sb.rpc("mis_documentos_sin_abrir").then(r => setDocsNuevos(Number(r) || 0)).catch(() => {}); // #185
     sb.rpc("mis_fichajes_dudosos").then(r => setDudosos(Array.isArray(r) ? r : [])).catch(() => {}); // FICHAJES
     sb.select("horarios", `select=turno&usuario_id=eq.${user.id}&fecha=eq.${ymd(new Date())}`).then(r => setTurnoHoy((r && r[0] && r[0].turno) || null)).catch(() => {});
   }, [screen, user.id]);
@@ -209,8 +211,10 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
                 {t.id === "formacion" && videos && (() => { const r = resumenFormacion(videos); return r.pendientes > 0
                   ? <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: C.red, marginTop: 1 }}>{r.pendientes === 1 ? "1 vídeo nuevo" : `${r.pendientes} vídeos nuevos`}</span>
                   : <span style={{ display: "block", fontSize: 11.5, color: C.mutL, marginTop: 1 }}>{r.total ? `Al día · ${r.completos} de ${r.total}` : "Todavía no hay vídeos"}</span>; })()}
+                {t.id === "documentos" && docsNuevos > 0 && <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: C.red, marginTop: 1 }}>{docsNuevos === 1 ? "1 documento nuevo" : `${docsNuevos} documentos nuevos`}</span>}
               </span>
               {t.id === "formacion" && videos && resumenFormacion(videos).pendientes > 0 && <span style={{ minWidth: 22, height: 22, padding: "0 6px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{resumenFormacion(videos).pendientes}</span>}
+              {t.id === "documentos" && docsNuevos > 0 && <span style={{ minWidth: 22, height: 22, padding: "0 6px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{docsNuevos > 99 ? "99+" : docsNuevos}</span>}
               <IcoRight size={17} color={C.mutL} sw={2.4} />
             </button>
           ))}
