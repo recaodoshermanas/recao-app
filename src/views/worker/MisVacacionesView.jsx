@@ -4,6 +4,7 @@ import { sb } from "../../lib/supabase.js";
 import { resumenCalendario, agruparRangos } from "../../lib/vacaciones.js";
 import { VacacionesPicker } from "../../components/VacacionesPicker.jsx";
 import { VacacionesNormas } from "../../components/VacacionesNormas.jsx";
+import { VacacionesVentana } from "../../components/VacacionesVentana.jsx";
 
 const ANIO = 2026;
 function fmtF(s) { if (!s) return ""; const p = s.split("-"); return `${p[2]}/${p[1]}`; }
@@ -22,6 +23,7 @@ export function MisVacacionesView({ user }) {
   const [errs, setErrs] = useState([]);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [ventanas, setVentanas] = useState(null);
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3200); };
   const load = useCallback(async () => {
@@ -33,6 +35,7 @@ export function MisVacacionesView({ user }) {
       setVacDias(h.filter(x => x.turno === "Vacaciones").map(x => x.fecha));
       setDescansos(h.filter(x => x.turno === "Descanso").map(x => x.fecha));
       try { const rc = await sb.fn("vacaciones", { action: "conflictos" }); setConf(rc.conflictos || {}); } catch (e) { setConf({}); }
+      try { setVentanas(await sb.rpc("vac_mis_ventanas")); } catch (e) { setVentanas(null); }
     } catch (e) { /* noop */ }
   }, [user.id]);
   useEffect(() => { load(); }, [load]);
@@ -63,6 +66,7 @@ export function MisVacacionesView({ user }) {
 
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
+      <VacacionesVentana datos={ventanas} onHecho={async (m) => { flash(m); await load(); }} />
       <div style={{ background: "linear-gradient(135deg, #6ddadb, #48c7c9)", borderRadius: 20, padding: 22, textAlign: "center", boxShadow: "0 12px 28px -14px rgba(30,160,160,.7)" }}>
         <div style={{ fontFamily: SF, fontSize: 60, color: "#073B3B", lineHeight: 0.9 }}>{r.restantes}</div>
         <div style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: "#0A3B3B", marginTop: 6 }}>días disponibles de {r.total}</div>
@@ -78,7 +82,7 @@ export function MisVacacionesView({ user }) {
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: C.gold, padding: "8px 12px", borderRadius: 10, marginTop: 12, textAlign: "center" }}>{msg}</div>}
 
       {!abierto ? (
-        <button onClick={() => { setErrs([]); setAbierto(true); }} style={{ ...btnDark, fontSize: 15, padding: 14, marginTop: 12 }}>+ Solicitar vacaciones</button>
+        <button onClick={() => { setErrs([]); setAbierto(true); }} style={{ ...btnDark, fontSize: 15, padding: 14, marginTop: 12 }}>{hoy >= "2027-01-01" ? "+ Pedir días sueltos" : "+ Solicitar vacaciones"}</button>
       ) : (
         <div style={{ marginTop: 12 }}>
           {errs.length > 0 && (

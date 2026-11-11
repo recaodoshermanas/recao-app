@@ -6,6 +6,7 @@ import { resumenCalendario, rangoFechas, diasQueGastan, agruparRangos } from "..
 import { VacacionesPicker } from "../../../src/components/VacacionesPicker.jsx";
 import { FechasCerradas } from "../../../src/components/FechasCerradas.jsx";
 import { VacacionesNormas } from "../../../src/components/VacacionesNormas.jsx";
+import { VentanasVacaciones } from "./VentanasVacaciones.jsx";
 import { Panel, Pestanas, useEquipo, avisar, hoyStr, fechaCorta, fechaDia, Cargando, Avatar, hace } from "../ui.jsx";
 
 const ESTADOS = { pendiente: "Pendiente", aceptado: "Aceptada", rechazado: "Rechazada" };
@@ -131,6 +132,7 @@ export function Solicitudes() {
         <Pestanas valor={vista} onChange={setVista} etiqueta="Solicitudes" opciones={[
           { id: "pendientes", label: "Por decidir", n: vacPend.length + cambPend.length },
           { id: "vacaciones", label: "Vacaciones" },
+          { id: "ventanas", label: "Ventanas" },
           { id: "saldos", label: `Saldos ${ANIO}` },
           { id: "cambios", label: "Cambios de turno" },
         ]} />
@@ -154,6 +156,8 @@ export function Solicitudes() {
 
       {vista === "vacaciones" && <ListaVacaciones sols={sols} nombreDe={nombreDe} conf={conf} resumen={resumen} trabReg={trabReg} busy={busy}
         onEstado={resolverVac} onConflicto={aceptarConflicto} onEliminar={eliminarVac} onCobertura={guardarCobertura} hoy={hoy} />}
+
+      {vista === "ventanas" && <VentanasVacaciones />}
 
       {vista === "saldos" && (
         <>
@@ -240,7 +244,7 @@ function TarjetaVac({ s, nombre, conf, resumen, busy, onEstado, onConflicto, onE
       <div className="sol-cab">
         <Avatar nombre={nombre} size={36} />
         <div className="sol-t">
-          <h3>{nombre || "—"} <small>· vacaciones</small></h3>
+          <h3>{nombre || "—"} <small>· {s.clase === "semana" ? `semana de ventana${s.fuera_plazo ? " · fuera de plazo, sin prioridad" : ""}` : s.clase === "suelto" ? "día suelto" : "vacaciones"}</small></h3>
           <p>{rango(s)} · <b>{s.dias || "?"} días</b>{resumen && <> · le quedan {resumen.restantes}</>}</p>
         </div>
         <Estado e={s.estado} />
