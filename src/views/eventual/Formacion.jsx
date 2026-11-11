@@ -84,7 +84,8 @@ export function FormacionView({ videos, abrirId, onCambio, onVolver }) {
   );
 }
 
-function Reproductor({ video, portada, onCambio, onSalir }) {
+// #187: también lo usan las normas y protocolos (cargarUrl / guardarProgreso / volverTxt); por defecto, Formación.
+export function Reproductor({ video, portada: portadaIni, onCambio, onSalir, cargarUrl, guardarProgreso, volverTxt = "Formación" }) {
   const completo = !!video.completo_en;
   const libre = LIBRE_TRAS_VERLO && completo;
   const dur = Number(video.duracion_seg) || 0;
@@ -94,6 +95,8 @@ function Reproductor({ video, portada, onCambio, onSalir }) {
   const guardadoRef = useRef(maxRef.current);
   const enVuelo = useRef(false);
   const [url, setUrl] = useState(null);
+  const [portadaUrl, setPortadaUrl] = useState(null);
+  const portada = portadaIni || portadaUrl;
   const [error, setError] = useState("");
   const [jugando, setJugando] = useState(false);
   const [cur, setCur] = useState(0);
@@ -103,7 +106,7 @@ function Reproductor({ video, portada, onCambio, onSalir }) {
 
   useEffect(() => {
     let vivo = true;
-    sb.fn("formacion", { accion: "url", video_id: video.id }).then((r) => { if (vivo) setUrl(r.url); }).catch((e) => { if (vivo) setError(e.message || "No se ha podido abrir el vídeo"); });
+    (cargarUrl ? cargarUrl() : sb.fn("formacion", { accion: "url", video_id: video.id })).then((r) => { if (vivo) { setUrl(r.url); if (r.portada) setPortadaUrl(r.portada); } }).catch((e) => { if (vivo) setError(e.message || "No se ha podido abrir el vídeo"); });
     return () => { vivo = false; };
   }, [video.id]);
 
@@ -112,11 +115,11 @@ function Reproductor({ video, portada, onCambio, onSalir }) {
     if (seg <= guardadoRef.current && seg < dur) return;
     enVuelo.current = true;
     try {
-      const r = await sb.rpc("formacion_guardar_progreso", { p_video: video.id, p_seg: seg });
+      const r = guardarProgreso ? await guardarProgreso(seg) : await sb.rpc("formacion_guardar_progreso", { p_video: video.id, p_seg: seg });
       if (r && r.ok) { guardadoRef.current = Number(r.max_seg); if (r.completo && !completo) setFin(true); onCambio && onCambio(); }
     } catch (e) { /* se reintenta en el siguiente guardado */ }
     enVuelo.current = false;
-  }, [video.id, dur, completo, onCambio]);
+  }, [video.id, dur, completo, onCambio, guardarProgreso]);
 
   // guardado cada 10 s, al pausar, al ocultar la pestaña y al salir
   useEffect(() => {
@@ -191,7 +194,7 @@ function Reproductor({ video, portada, onCambio, onSalir }) {
 
   return (
     <div style={{ padding: pantalla ? 0 : "18px 16px 40px", maxWidth: 540, margin: "0 auto" }}>
-      {!pantalla && <button onClick={() => { guardar(maxRef.current); onSalir(); }} style={{ display: "flex", alignItems: "center", gap: 4, minHeight: 40, padding: 0, border: "none", background: "transparent", fontFamily: F, fontSize: 14, fontWeight: 600, color: C.goldSub, cursor: "pointer" }}><IcoLeft size={18} /> Formación</button>}
+      {!pantalla && <button onClick={() => { guardar(maxRef.current); onSalir(); }} style={{ display: "flex", alignItems: "center", gap: 4, minHeight: 40, padding: 0, border: "none", background: "transparent", fontFamily: F, fontSize: 14, fontWeight: 600, color: C.goldSub, cursor: "pointer" }}><IcoLeft size={18} /> {volverTxt}</button>}
       {!pantalla && <div style={{ fontFamily: SF, fontSize: 24, color: C.char, margin: "4px 0 12px" }}>{video.titulo}</div>}
       <div ref={caja} style={caja_estilo}>
         {error ? <div style={{ padding: 30, color: "#fff", fontFamily: F, fontSize: 14, textAlign: "center" }}>{error}</div>

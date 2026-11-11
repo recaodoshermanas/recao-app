@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { F, SF, C, SHADOW, btnDark, btnGhost, inp } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
+import { Reproductor } from "../eventual/Formacion.jsx"; // #187 mismo reproductor que Formación (no deja adelantar)
+import { duracionTxt } from "../../lib/formacion.js";
 
 // Mis documentos: nóminas, contratos y demás papeles que sube dirección (los hace la gestoría).
 // Nómina: se abre y se confirma «La he recibido». Contrato/anexo: se firma con un código que llega a su correo.
@@ -158,6 +160,7 @@ function Firmar({ x, abrir, onCerrar }) {
 }
 
 // Normas y protocolos (#179): solo plantilla. Se abre, se lee y se confirma «La he recibido». Solo la versión vigente.
+// #187: si la versión tiene vídeo, «Ver explicación»; para el recibí basta con el PDF abierto o el vídeo visto entero.
 function NormasView({ onVolver }) {
   const [d, setD] = useState(null);
   const [msg, setMsg] = useState("");
@@ -170,13 +173,21 @@ function NormasView({ onVolver }) {
     catch (e) { if (w) w.close(); setMsg(e.message || "No se ha podido abrir"); }
   };
   const recibido = async (x) => { setBusy(x.id); try { await fnN("recibido", { id: x.id }); setMsg("Confirmado ✓"); await cargar(); } catch (e) { setMsg(e.message); } setBusy(null); };
+  const [viendo, setViendo] = useState(null); // #187 norma cuyo vídeo se está viendo
+  const cargarUrl = useCallback(() => fnN("video_url", { id: viendo?.id }), [viendo?.id]);
+  const guardarProgreso = useCallback((seg) => fnN("video_progreso", { id: viendo?.id, seg }), [viendo?.id]);
   const wrap = { padding: "16px 16px 28px", maxWidth: 540, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 };
   if (!d) return <div style={{ padding: 30, textAlign: "center", fontFamily: F, color: C.mut }}>Cargando…</div>;
+  if (viendo) {
+    const vid = { id: viendo.id, titulo: viendo.titulo, duracion_seg: viendo.video.duracion_seg, max_seg: viendo.video.max_seg, completo_en: viendo.video.completo_en };
+    return <Reproductor key={viendo.id} video={vid} cargarUrl={cargarUrl} guardarProgreso={guardarProgreso} volverTxt="Normas y protocolos" onCambio={cargar} onSalir={() => { setViendo(null); cargar(); }} />;
+  }
   const pend = d.normas.filter((x) => !x.recibido_en);
   const vig = d.normas.filter((x) => x.recibido_en);
   const lab = { fontFamily: F, fontSize: 12, fontWeight: 700, color: C.mut, textTransform: "uppercase", letterSpacing: 0.4 };
   const Tarjeta = ({ x }) => {
     const p = !x.recibido_en;
+    const listo = !!x.visto_en || !!x.video?.completo_en; // #187: vale el PDF abierto o el vídeo visto entero
     return (
       <div style={{ ...card, display: "flex", flexDirection: "column", gap: 8, border: p ? "1.5px solid #E0B94A" : card.border }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -184,12 +195,17 @@ function NormasView({ onVolver }) {
           <span style={{ fontFamily: F, fontSize: 12, color: C.mut }}>versión {x.version}</span>
         </div>
         <div style={{ fontFamily: F, fontSize: 12.5, color: p ? "#8A5A0B" : "#1E6B3C", fontWeight: 600 }}>
-          {x.recibido_en ? `Recibida el ${fecha(x.recibido_en)}` : x.visto_en ? "Ábrela y confirma que la has recibido" : "Sin abrir"}
+          {x.recibido_en ? `Recibida el ${fecha(x.recibido_en)}` : listo ? "Confirma que la has recibido" : x.video ? "Abre el PDF o mira la explicación entera" : "Sin abrir"}
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <button type="button" onClick={() => abrir(x)} style={{ ...btnGhost, padding: "9px 14px" }}>Abrir PDF</button>
-          {p && x.visto_en && <button type="button" disabled={busy === x.id} onClick={() => recibido(x)} style={{ ...btnDark, padding: "9px 14px", opacity: busy === x.id ? 0.6 : 1 }}>La he recibido</button>}
+          {x.video && <button type="button" onClick={() => { setMsg(""); setViendo(x); }} style={{ ...btnGhost, padding: "9px 14px" }}>Ver explicación · {Math.max(1, Math.round(x.video.duracion_seg / 60))} min</button>}
+          {x.video?.completo_en && <span style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: "#1E6B3C" }}>✓ Visto</span>}
+          {x.video && !x.video.completo_en && x.video.max_seg > 0 && <span style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>Visto hasta {duracionTxt(x.video.max_seg)}</span>}
         </div>
+        {p && listo && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" disabled={busy === x.id} onClick={() => recibido(x)} style={{ ...btnDark, padding: "9px 14px", opacity: busy === x.id ? 0.6 : 1 }}>La he recibido</button>
+        </div>}
       </div>
     );
   };

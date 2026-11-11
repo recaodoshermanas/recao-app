@@ -22,7 +22,7 @@ export function Normas() {
   const resumen = (v) => {
     const rs = d.recibos.filter((r) => r.version_id === v.id);
     const por = new Map(rs.map((r) => [r.usuario_id, r]));
-    return { total: d.plantilla.length, ok: d.plantilla.filter((u) => por.get(u.id)?.recibido_en).length, por };
+    return { total: d.plantilla.length, ok: d.plantilla.filter((u) => por.get(u.id)?.recibido_en).length, pdf: d.plantilla.filter((u) => por.get(u.id)?.visto_en).length, video: d.plantilla.filter((u) => por.get(u.id)?.video_completo_en).length, por };
   };
   const crear = async () => {
     try { await fn("nueva_norma", { titulo: nueva }); setNueva(""); avisar("Documento creado"); cargar(); } catch (e) { avisar(e.message, "mal"); }
@@ -111,14 +111,30 @@ function Detalle({ norma, d, resumen, abrir, onClose, onCambio }) {
     setBusy(false);
   };
   const Seguimiento = ({ v }) => {
-    const { por } = resumen(v);
+    const { por, total, ok, pdf, video } = resumen(v);
+    const dur = Number(v.video_duracion_seg) || 0;
+    const vidTxt = (r) => r?.video_completo_en ? `Visto entero ${fecha(r.video_completo_en)}` : Number(r?.video_max_seg) > 0 && dur > 0 ? `A medias · ${Math.min(99, Math.floor((Number(r.video_max_seg) / dur) * 100))} %` : "Sin ver";
     return (
-      <div style={{ display: "grid", gap: 4, margin: "8px 0 12px" }}>
-        {d.plantilla.map((u) => {
-          const r = por.get(u.id);
-          const t = r?.recibido_en ? `Recibida el ${fecha(r.recibido_en)}` : r?.visto_en ? `La abrió el ${fecha(r.visto_en)}, sin confirmar` : !u.documentos_electronicos_en ? "Aún no ha aceptado recibir documentos en la app" : "No la ha abierto";
-          return <div key={u.id} style={{ fontSize: 13, display: "flex", gap: 8 }}><span style={{ color: r?.recibido_en ? "var(--up)" : "#8A5A0B", fontWeight: 700 }}>{r?.recibido_en ? "✓" : "•"}</span><span><b>{u.nombre}</b> · {t}</span></div>;
-        })}
+      <div style={{ margin: "8px 0 12px" }}>
+        <p className="pf" style={{ margin: "0 0 6px", color: "inherit" }}><b>Recibí {ok} de {total}</b> · PDF {pdf} de {total}{v.video_ruta ? ` · Vídeo ${video} de ${total}` : ""}</p>
+        <div className="tabla-scroll">
+          <table className="ranking">
+            <thead><tr><th>Persona</th><th>PDF</th>{v.video_ruta && <th>Vídeo</th>}<th>Recibí</th></tr></thead>
+            <tbody>
+              {d.plantilla.map((u) => {
+                const r = por.get(u.id);
+                return (
+                  <tr key={u.id}>
+                    <td><b>{u.nombre}</b>{!u.documentos_electronicos_en && <span className="pf">Aún no ha aceptado recibir documentos en la app</span>}</td>
+                    <td>{r?.visto_en ? `Abierto ${fecha(r.visto_en)}` : <span style={{ color: "#8A5A0B" }}>Sin abrir</span>}</td>
+                    {v.video_ruta && <td>{r?.video_completo_en ? vidTxt(r) : <span style={{ color: "#8A5A0B" }}>{vidTxt(r)}</span>}</td>}
+                    <td>{r?.recibido_en ? <b style={{ color: "var(--up)" }}>Confirmado {fecha(r.recibido_en)}</b> : <span style={{ color: "#8A5A0B" }}>Pendiente</span>}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
@@ -167,11 +183,63 @@ function Detalle({ norma, d, resumen, abrir, onClose, onCambio }) {
               <b style={{ marginLeft: "auto" }}>{r.ok} de {r.total}</b>
               <button className="btn-l" onClick={() => abrir(v)}>Abrir PDF</button>
             </div>
+            <VideoNorma v={v} onCambio={onCambio} />
             <Seguimiento v={v} />
             {!v.vigente && <p className="pf" style={{ margin: 0 }}>Solo se muestran quienes siguen en plantilla; los recibís de quien ya no lo está siguen guardados.</p>}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// #187: vídeo de explicación de una versión (MP4). Se sube directo al almacén de vídeos y se guarda su duración.
+function VideoNorma({ v, onCambio }) {
+  const [busy, setBusy] = useState(false);
+  const input = useRef(null);
+  const duracion = (file) => new Promise((res) => {
+    const el = document.createElement("video"); el.preload = "metadata";
+    const u = URL.createObjectURL(file);
+    el.onloadedmetadata = () => { const t = el.duration; URL.revokeObjectURL(u); res(Number.isFinite(t) ? t : 0); };
+    el.onerror = () => { URL.revokeObjectURL(u); res(0); };
+    el.src = u;
+  });
+  const subir = async (file) => {
+    if (!file) return;
+    if (file.type && file.type !== "video/mp4") { avisar("Tiene que ser un vídeo MP4", "mal"); return; }
+    if (file.size > 500 * 1024 * 1024) { avisar("El vídeo pesa más de 500 MB", "mal"); return; }
+    setBusy(true);
+    try {
+      const dur = await duracion(file);
+      if (!dur) throw new Error("No se ha podido leer la duración del vídeo");
+      const s = await fn("video_subida");
+      const { error } = await supabase.storage.from("formacion-videos").uploadToSignedUrl(s.ruta, s.token, file, { contentType: "video/mp4" });
+      if (error) throw new Error("No se ha podido subir el vídeo");
+      await fn("video_registrar", { version_id: v.id, ruta: s.ruta, duracion_seg: dur });
+      avisar(v.video_ruta ? "Vídeo cambiado. El seguimiento del vídeo empieza de cero; los recibís no cambian." : "Vídeo añadido. Ya sale «Ver explicación» en la app.");
+      onCambio();
+    } catch (e) { avisar(e.message || "No se ha podido subir el vídeo", "mal"); }
+    if (input.current) input.current.value = "";
+    setBusy(false);
+  };
+  const quitar = async () => {
+    if (!window.confirm("¿Quitar el vídeo de explicación de esta versión? Dejará de verse en la app. Lo ya visto queda guardado.")) return;
+    setBusy(true);
+    try { await fn("video_quitar", { version_id: v.id }); avisar("Vídeo quitado"); onCambio(); } catch (e) { avisar(e.message, "mal"); }
+    setBusy(false);
+  };
+  const ver = async () => {
+    const w = window.open("", "_blank");
+    try { const r = await fn("video_url", { id: v.id }); if (w) w.location.href = r.url; else window.location.href = r.url; } catch (e) { if (w) w.close(); avisar(e.message, "mal"); }
+  };
+  const m = Math.floor((Number(v.video_duracion_seg) || 0) / 60), sg = Math.round((Number(v.video_duracion_seg) || 0) % 60);
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "6px 0 0", fontSize: 13 }}>
+      <span className="pf" style={{ color: "inherit" }}>{v.video_ruta ? <>Vídeo de explicación: <b>{m}:{String(sg).padStart(2, "0")} min</b>{v.video_subido_en ? ` · puesto ${fecha(v.video_subido_en)}` : ""}</> : "Sin vídeo de explicación"}</span>
+      <input ref={input} type="file" accept="video/mp4,.mp4" style={{ display: "none" }} onChange={(e) => subir(e.target.files?.[0])} />
+      <button className="btn-l" disabled={busy} onClick={() => input.current?.click()}>{busy ? "Subiendo…" : v.video_ruta ? "Cambiar vídeo de explicación" : "Vídeo de explicación"}</button>
+      {v.video_ruta && <button className="btn-l" disabled={busy} onClick={ver}>Ver</button>}
+      {v.video_ruta && <button className="btn-txt" disabled={busy} onClick={quitar}>Quitar</button>}
     </div>
   );
 }
