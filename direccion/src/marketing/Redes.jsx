@@ -14,7 +14,7 @@ const x = (v) => (v == null ? "–" : `${String(Math.round(Number(v) * 10) / 10)
 const chip = (t, fondo = "var(--grid)", color = "var(--text)") => <span style={{ display: "inline-block", fontSize: 12, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: fondo, color }}>{t}</span>;
 
 const FORMATOS = { reaccion_probando: "Reacción probando", elige_uno: "Elige uno", pov_humor: "POV / humor", cliente_tienda: "Cliente en tienda", proceso_obrador: "Proceso de obrador", asmr_relleno: "ASMR / relleno", novedad_producto: "Novedad de producto", ranking_comparativa: "Ranking / comparativa", reto_precio: "Reto de precio", ruta_visita: "Ruta / visita", detras_de_camaras: "Detrás de cámaras", tendencia_audio: "Tendencia / audio", otro: "Otro" };
-const PUNTOS = [["ratio", "veces su cuenta"], ["compartidos", "compartidos"], ["guardados", "guardados"], ["replicable", "replicable"], ["cuenta", "es un negocio"], ["repetido", "formato en varias cuentas"], ["vosotros", "lo que habéis probado"], ["reciente", "reciente"], ["publi", "publicidad"], ["fuera", "fuera de España"]];
+const PUNTOS = [["ratio", "veces su cuenta"], ["compartidos", "compartidos"], ["guardados", "guardados"], ["replicable", "replicable"], ["cuenta", "es un negocio"], ["repetido", "formato en varias cuentas"], ["vosotros", "lo que habéis probado"], ["reciente", "reciente"], ["publi", "publicidad"], ["resena", "reseña de súper"], ["fuera", "fuera de España"]];
 const explica = (d) => (d ? PUNTOS.filter(([k]) => d[k]).map(([k, t]) => `${d[k] > 0 ? "+" : ""}${d[k]} ${t}`).join(" · ") : "");
 
 const ESTADOS = [
