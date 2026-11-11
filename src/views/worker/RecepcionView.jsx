@@ -791,7 +791,9 @@ function NoEsProducto({ l, onCambio, onAnadirExpo, hijos, onQuitar }) {
 function Linea({ l, abono, manual, aviso, onCambio, onAsociar, marcar, normal, hijos = [], onAnadirExpo, onQuitar }) {
   const dif = l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-3;
   const titulo = l.nuevo?.nombre || l.producto?.nombre || l.descripcion;
-  const sinProducto = l.tipo === "venta" && !l.producto && l.emparejado !== "nuevo";
+  // #164: una línea en negativo es una devolución: resta stock y siempre va a un producto que ya existe (nunca se da de alta)
+  const devol = l.tipo === "venta" && (numero(l.q) < 0 || Number(l.uds_doc) < 0);
+  const sinProducto = l.tipo === "venta" && !l.producto && (l.emparejado !== "nuevo" || (devol && !l.product_id));
   const borde = sinProducto && marcar ? `2.5px solid ${C.red}` : dif || (alPeso(l) && importeNoCuadra(l)) ? `1.5px solid ${C.red}` : sinProducto ? "1.5px solid #E0B94A" : `1px solid ${C.brdL}`;
   const regalo = regaloDe(l) != null;
   const u = Number(l.unidades_por || 1);
@@ -810,11 +812,12 @@ function Linea({ l, abono, manual, aviso, onCambio, onAsociar, marcar, normal, h
           <div style={{ fontFamily: F, fontSize: 14, fontWeight: 600, color: C.char }}>{titulo}{regalo ? <span style={{ ...chip("#EAF4EE", "#1E6B3C"), marginLeft: 6 }}>REGALO</span> : l.emparejado === "nuevo" && <span style={{ ...chip("#FBF0DA", "#7A5410"), marginLeft: 6 }}>NUEVO</span>}</div>
           {sinProducto && marcar && <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: "#A3362B" }}>Falta decir qué producto es</div>}
           {regalo && <div style={{ fontFamily: F, fontSize: 12, color: "#1E6B3C" }}>Regalo: va al mismo producto{normal ? ` que «${normal.nuevo?.nombre || normal.producto?.nombre || normal.descripcion}»` : ""}, con coste 0.</div>}
-          {!regalo && l.emparejado === "nuevo" && !l.product_id && l.nuevo?.auto && <div style={{ fontFamily: F, fontSize: 12, color: "#6B4A0C" }}>No lo tenemos: se da de alta solo al confirmar{l.precio_marcado != null ? ` (precio marcado ${eur(l.precio_marcado)})` : ""}. <button type="button" onClick={() => onAsociar("buscar")} style={{ ...btnDark, height: 48, marginTop: 8 }}>Ya existe</button></div>}
+          {!regalo && !devol && l.emparejado === "nuevo" && !l.product_id && l.nuevo?.auto && <div style={{ fontFamily: F, fontSize: 12, color: "#6B4A0C" }}>No lo tenemos: se da de alta solo al confirmar{l.precio_marcado != null ? ` (precio marcado ${eur(l.precio_marcado)})` : ""}. <button type="button" onClick={() => onAsociar("buscar")} style={{ ...btnDark, height: 48, marginTop: 8 }}>Ya existe</button></div>}
           {!regalo && l.emparejado === "nuevo" && !l.product_id && !l.nuevo?.auto && l.nuevo && <div style={{ fontFamily: F, fontSize: 12, color: "#6B4A0C" }}>PVP {eur(l.nuevo.pvp)}{l.nuevo.sin_codigo ? " · sin código" : l.nuevo.codigo ? ` · ${l.nuevo.codigo}` : ""} · se da de alta al confirmar. <button type="button" onClick={() => onAsociar("editar")} style={{ background: "none", border: "none", padding: 0, fontFamily: F, fontSize: 12, color: "#6B4A0C", textDecoration: "underline", cursor: "pointer" }}>Cambiar</button></div>}
           {l.descripcion && l.descripcion !== titulo && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>{l.via === "foto" ? "Leído: «" + l.descripcion + "»" : l.descripcion}</div>}
           {l.cant_doc != null && !alPeso(l) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Factura: {fmt(l.cant_doc)}{u > 1 ? ` × ${fmt(u)} uds` : ""}{pack ? ` piezas = ${fmt(udsDoc(l.cant_doc, u))} packs de ${packDe(u)}` : ""}{l.base_unit != null ? ` · ${eur(l.base_unit)}/${pack ? "pack" : "ud"} sin IVA` : ""}</div>}
           {l.expositor_de != null && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Viene dentro de un expositor</div>}
+          {devol && !abono && <div style={{ fontFamily: F, fontSize: 11.5, color: "#2F5C8F", fontWeight: 600 }}>Devolución dentro de esta factura: al confirmar se resta del stock</div>}
           {dif && <div style={{ fontFamily: F, fontSize: 11.5, color: "#A3362B", fontWeight: 600 }}>El documento dice {fmt(l.uds_doc)}{alPeso(l) ? " kg" : ""}</div>}
         </div>
         {l.tipo === "venta" && (alPeso(l) ? (
@@ -826,7 +829,7 @@ function Linea({ l, abono, manual, aviso, onCambio, onAsociar, marcar, normal, h
             </span>
             kilos recibidos
           </label>
-        ) : <Cantidad valor={l.q} etiqueta={titulo} neg={!!abono} onCambio={(v) => onCambio({ q: v })} />)}
+        ) : <Cantidad valor={l.q} etiqueta={titulo} neg={!!abono || devol} onCambio={(v) => onCambio({ q: v })} />)}
       </div>
       {l.tipo === "venta" && alPeso(l) && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, alignItems: "end", background: importeNoCuadra(l) ? "#FBEAE7" : "#F7F2E9", borderRadius: 12, padding: "8px 10px" }}>
@@ -863,7 +866,7 @@ function Linea({ l, abono, manual, aviso, onCambio, onAsociar, marcar, normal, h
           ))}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <button type="button" onClick={() => onAsociar("buscar")} style={btnPeq}>Buscar otro</button>
-            <button type="button" onClick={() => onAsociar("nuevo")} style={btnPeq}>Es nuevo</button>
+            {!devol && !abono && <button type="button" onClick={() => onAsociar("nuevo")} style={btnPeq}>Es nuevo</button>}
           </div>
         </div>
       )}
@@ -939,7 +942,11 @@ function Revisar({ datos, onHecho, onVolver }) {
     const ls = (datos.lineas || []).map((l) => Number(l.uds_confirmadas ?? l.uds_doc ?? 0)).filter((n) => n !== 0);
     return (rec.total != null && Number(rec.total) < 0) || (ls.length > 0 && ls.every((n) => n < 0));
   });
+  // #164: un documento con total positivo o con líneas que entran NO es un abono aparte (la devolución va dentro de la factura)
+  const docPositivo = () => (rec.total != null && Number(rec.total) > 0) || (datos.lineas || []).some((l) => Number(l.uds_doc ?? 0) > 0);
+  const AVISO_ABONO = "Este documento tiene total positivo o trae productos que entran.\n\nSi la devolución viene dentro de la misma factura, NO es un abono: déjalo sin marcar. Lo que entra suma stock y las líneas en negativo (devolución) lo restan.\n\nMárcalo como abono solo si es un documento aparte en el que TODO se devuelve. Al marcarlo, todas las cantidades y el importe pasan a negativo.\n\n¿Seguro que es un abono aparte?";
   const cambiarAbono = (on) => {
+    if (on && docPositivo() && !window.confirm(AVISO_ABONO)) return;
     setAbono(on);
     setLineas((ls) => ls.map((l) => { const n = numero(l.q); return n === 0 ? l : { ...l, q: fmt(on ? -Math.abs(n) : Math.abs(n)) }; }));
     setFacImporte((f) => { const n = importeNum(f); return Number.isFinite(n) && n !== 0 ? dinero(on ? -Math.abs(n) : Math.abs(n)) : f; });
@@ -958,7 +965,7 @@ function Revisar({ datos, onHecho, onVolver }) {
   }, [idsClave]);
   const avisos = lineas.map((l) => avisoCoste(l, costes));
   const listaAviso = lineas.filter((l, i) => avisos[i]);
-  const listaPend = lineas.filter((l) => l.tipo === "venta" && !l.producto && (l.emparejado !== "nuevo" || abono) && (abono ? numero(l.q) !== 0 : numero(l.q) > 0));
+  const listaPend = lineas.filter((l) => l.tipo === "venta" && !l.producto && (abono || numero(l.q) < 0 ? numero(l.q) !== 0 && !l.product_id : l.emparejado !== "nuevo" && numero(l.q) > 0));
   const pendientes = listaPend.length;
   const difs = lineas.filter((l) => l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-3).length;
   const total = lineas.filter((l) => l.tipo === "venta").reduce((s, l) => s + numero(l.q), 0);
@@ -975,7 +982,9 @@ function Revisar({ datos, onHecho, onVolver }) {
     if (listaAviso.length) { setMsg(`Falta contestar si son correctas las unidades de: ${listaAviso.map((l) => l.producto?.nombre || l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     if (!lineas.some((l) => (abono ? numero(l.q) < 0 : numero(l.q) > 0))) { setMsg(abono ? "No hay nada que devolver: pon las unidades en negativo" : "No hay nada que recepcionar"); return; }
     if (abono && lineas.some((l) => numero(l.q) > 0)) { setMsg("En un abono todas las cantidades van en negativo"); return; }
-    if (!abono && lineas.some((l) => numero(l.q) < 0)) { setMsg("Hay cantidades en negativo: marca el documento como «Abono / devolución»"); return; }
+    // #164: líneas positivas y negativas mezcladas = factura normal (las negativas restan stock); solo si TODO va en negativo es un abono aparte
+    if (!abono && !lineas.some((l) => l.tipo === "venta" && numero(l.q) > 0) && lineas.some((l) => numero(l.q) < 0)) { setMsg("Todas las cantidades van en negativo: marca el documento como «Abono / devolución»"); return; }
+    if (abono && docPositivo() && !window.confirm("Has marcado «Abono / devolución», pero el documento tiene total positivo o trae productos que entran. Si confirmas así, se RESTA el stock de todas las líneas y la factura queda en negativo.\n\n¿Seguro que es un abono aparte?")) return;
     if (abono && Number.isFinite(facImporteN) && facImporteN > 0 && !sinImporte) { setMsg("El importe de un abono va en negativo (dinero a favor de Recao)"); return; }
     if (conFactura && !pago) { setMsg("Elige cómo se ha pagado la factura"); return; }
     if (conFactura && !sinImporte && !(Number.isFinite(facImporteN) && facImporteN !== 0)) { setMsg("Pon el importe total de la factura o marca «No sé el importe»"); return; }
@@ -1002,6 +1011,13 @@ function Revisar({ datos, onHecho, onVolver }) {
         id: rec.id,
         lineas: lineas.map((l) => { const ce = costeExpo.get(l.id ?? l.k); return { id: l.id || undefined, product_id: l.product_id ?? l.producto?.id ?? null, uds_confirmadas: numero(l.q), tipo: l.tipo, no_producto_motivo: l.tipo !== "venta" ? (l.no_producto_motivo || "otro") : null, no_producto_texto: l.tipo !== "venta" ? l.no_producto_texto || null : null, expositor_de: l.expositor_de ?? undefined, unidades_por: l.unidades_por, descripcion: l.descripcion, nuevo: l.emparejado === "nuevo" && !l.product_id ? (ce != null ? { ...l.nuevo, coste: ce } : l.nuevo) : undefined, coste_sin_iva: ce != null && l.emparejado !== "nuevo" ? ce : l.emparejado === "nuevo" ? undefined : l.coste_txt ? subeCent(numero(l.coste_txt)) : manual && l.coste_ref != null ? l.coste_ref : undefined }; }),
       });
+      // #164: devolución dentro de una factura normal (líneas en negativo): después de confirmar se resta su stock
+      if (!abono && lineas.some((l) => l.tipo === "venta" && numero(l.q) < 0)) {
+        try {
+          const d = await sb.fn("recepcion-abono", { accion: "devoluciones", id: rec.id });
+          if (d?.errores?.length && r?.stock) r.stock = { ...r.stock, aplicado: false, errores: [...(r.stock.errores || []), ...d.errores] };
+        } catch (e) { if (r?.stock) r.stock = { ...r.stock, aplicado: false, errores: [...(r.stock.errores || []), `Devoluciones: ${e.message || "no se ha podido restar el stock"}`] }; }
+      }
       if (conFactura) { try { const fs = await sb.select("facturas_proveedores", `select=id,importe,tipo_pago&recepcion_id=eq.${rec.id}`); r.factura = fs[0] || { error: true }; } catch { /* la factura se ve en «Facturas» */ } }
       onHecho(r);
     } catch (e) { setMsg((e.message || "No se ha podido confirmar").replace(/^RPC \S+: \d+ /, "").replace(/^.*"message":"([^"]+)".*$/, "$1")); }
