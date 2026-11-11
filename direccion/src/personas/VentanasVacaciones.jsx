@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { avisar, fechaCorta, Cargando, Avatar, Panel } from "../ui.jsx";
+import { SorteoVerano } from "./SorteoVerano.jsx"; // #184
 
 const NOMBRE = { verano: "Verano · dos bloques", primavera: "Primavera · una semana", otono: "Otoño · una semana" };
 const ESTADO = { futura: "Aún no abre", abierta: "Abierta", cerrada: "Cerrada" };
@@ -81,7 +82,7 @@ export function VentanasVacaciones() {
               </table>
             </div>
             {v.tipo !== "verano" && <p className="sub" style={{ marginTop: 8 }}>Las semanas se aprueban o rechazan en «Por decidir», como cualquier solicitud. Si dos coinciden en plazo, resuélvelo al cerrar la ventana (sorteo).</p>}
-            {v.tipo === "verano" && <p className="sub" style={{ marginTop: 8 }}>El sorteo y el reparto de verano todavía se hacen a mano (va en la solicitud #184). Cuando esté resuelto, añade los bloques con «+ Añadir vacaciones».</p>}
+            {v.tipo === "verano" && <SorteoVerano ventanaId={v.id} onCambio={cargar} />}
           </div>
         );
       })}

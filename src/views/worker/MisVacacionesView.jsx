@@ -5,6 +5,7 @@ import { resumenCalendario, agruparRangos, totalDefecto } from "../../lib/vacaci
 import { VacacionesPicker } from "../../components/VacacionesPicker.jsx";
 import { VacacionesNormas } from "../../components/VacacionesNormas.jsx";
 import { VacacionesVentana } from "../../components/VacacionesVentana.jsx";
+import { VeranoSorteo } from "../../components/VeranoSorteo.jsx"; // #184
 
 function fmtF(s) { if (!s) return ""; const p = s.split("-"); return `${p[2]}/${p[1]}`; }
 function ymd(d) { const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0"); return `${y}-${m}-${day}`; }
@@ -79,6 +80,7 @@ export function MisVacacionesView({ user }) {
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
       <VacacionesVentana datos={ventanas} onHecho={async (m) => { flash(m); await load(); }} />
+      <VeranoSorteo />
       {hoy >= "2026-12-01" && hoy <= "2026-12-31" && (
         <div role="note" style={{ background: "#FBF3E2", border: "1px solid #F0DEB0", borderRadius: 14, padding: "12px 14px", marginBottom: 10, fontFamily: F, fontSize: 13, color: "#7A5A12", lineHeight: 1.45 }}>
           Desde el 1 de enero de 2027 las vacaciones se cuentan en días naturales: 31 al año, en semanas completas de lunes a domingo (2 en verano, 1 en primavera, 1 en otoño) y 3 días sueltos. Tus días de 2026 no cambian.
