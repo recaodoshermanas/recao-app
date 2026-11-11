@@ -16,6 +16,8 @@ const dineroSube = (x) => dinero(subeCent(x));
 const fmt = (x) => (x == null ? "" : Number.isInteger(Number(x)) ? String(Number(x)) : String(Math.round(Number(x) * 100) / 100).replace(".", ","));
 // Productos al peso (#19): kilos, €/kg sin IVA editable e importe; sin bultos ni unidades
 const alPeso = (l) => !!l.producto?.al_peso && l.emparejado !== "nuevo";
+// #188: Epos no acepta decimales en el stock de un producto por unidades (solo los «al peso», que van en gramos)
+const decimalSinPeso = (l) => { const n = numero(l.q); return l.tipo === "venta" && Number.isFinite(n) && Math.abs(n - Math.round(n)) > 1e-9 && (l.emparejado === "nuevo" ? !l.product_id : l.producto?.al_peso === false); };
 const precioKg = (l) => (l.coste_txt != null && l.coste_txt !== "" ? numero(l.coste_txt) : l.base_unit != null ? Number(l.base_unit) : null);
 const kgFactura = (l) => (l.cant_doc != null ? Number(l.cant_doc) : numero(l.q));
 const importeLinea = (l) => { const p = precioKg(l); return p == null ? null : Math.round(kgFactura(l) * p * 100) / 100; };
@@ -818,6 +820,7 @@ function Linea({ l, abono, manual, aviso, onCambio, onAsociar, marcar, normal, h
           {l.cant_doc != null && !alPeso(l) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Factura: {fmt(l.cant_doc)}{u > 1 ? ` × ${fmt(u)} uds` : ""}{pack ? ` piezas = ${fmt(udsDoc(l.cant_doc, u))} packs de ${packDe(u)}` : ""}{l.base_unit != null ? ` · ${eur(l.base_unit)}/${pack ? "pack" : "ud"} sin IVA` : ""}</div>}
           {l.expositor_de != null && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Viene dentro de un expositor</div>}
           {devol && !abono && <div style={{ fontFamily: F, fontSize: 11.5, color: "#2F5C8F", fontWeight: 600 }}>Devolución dentro de esta factura: al confirmar se resta del stock</div>}
+          {decimalSinPeso(l) && <div style={{ fontFamily: F, fontSize: 11.5, color: "#A3362B", fontWeight: 600 }}>Este producto va por unidades en la caja: no admite decimales. Pon unidades enteras o avisa a dirección para que lo pase a «al peso».</div>}
           {dif && <div style={{ fontFamily: F, fontSize: 11.5, color: "#A3362B", fontWeight: 600 }}>El documento dice {fmt(l.uds_doc)}{alPeso(l) ? " kg" : ""}</div>}
         </div>
         {l.tipo === "venta" && (alPeso(l) ? (
@@ -980,6 +983,8 @@ function Revisar({ datos, onHecho, onVolver }) {
   const confirmar = async () => {
     if (pendientes) { setMsg(`Falta decir qué producto es: ${listaPend.map((l) => l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     if (listaAviso.length) { setMsg(`Falta contestar si son correctas las unidades de: ${listaAviso.map((l) => l.producto?.nombre || l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
+    const conDecimales = lineas.filter(decimalSinPeso);
+    if (conDecimales.length) { setMsg(`Van por unidades en la caja y no admiten decimales: ${conDecimales.map((l) => `${l.nuevo?.nombre || l.producto?.nombre || l.descripcion} (${l.q})`).join(", ")}. Pon unidades enteras o avisa a dirección para que lo pase a «al peso»`); setMarcar(true); setDetalleAbierto(true); return; }
     if (!lineas.some((l) => (abono ? numero(l.q) < 0 : numero(l.q) > 0))) { setMsg(abono ? "No hay nada que devolver: pon las unidades en negativo" : "No hay nada que recepcionar"); return; }
     if (abono && lineas.some((l) => numero(l.q) > 0)) { setMsg("En un abono todas las cantidades van en negativo"); return; }
     // #164: líneas positivas y negativas mezcladas = factura normal (las negativas restan stock); solo si TODO va en negativo es un abono aparte
