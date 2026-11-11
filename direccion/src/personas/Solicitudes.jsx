@@ -2,7 +2,7 @@
 // La lógica de aceptar/rechazar vacaciones es la misma que en la app (guarda y restaura los turnos).
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
-import { resumenCalendario, rangoFechas, diasQueGastan, agruparRangos } from "../../../src/lib/vacaciones.js";
+import { resumenCalendario, rangoFechas, diasQueGastan, agruparRangos, totalDefecto } from "../../../src/lib/vacaciones.js";
 import { VacacionesPicker } from "../../../src/components/VacacionesPicker.jsx";
 import { FechasCerradas } from "../../../src/components/FechasCerradas.jsx";
 import { VacacionesNormas } from "../../../src/components/VacacionesNormas.jsx";
@@ -13,8 +13,15 @@ const ESTADOS = { pendiente: "Pendiente", aceptado: "Aceptada", rechazado: "Rech
 const rango = (s) => (s.fecha_inicio === s.fecha_fin ? fechaCorta(s.fecha_inicio) : `${fechaCorta(s.fecha_inicio)} → ${fechaCorta(s.fecha_fin)}`);
 
 export function Solicitudes() {
-  const ANIO = new Date().getFullYear();
   const hoy = hoyStr();
+  // #183: selector de año; por defecto, el año al que corresponde la ventana de elección abierta (en diciembre, 2027)
+  const [ANIO, setAnio] = useState(Number(hoy.slice(0, 4)));
+  const [anioFijado, setAnioFijado] = useState(false);
+  const [notas, setNotas] = useState({});
+  useEffect(() => {
+    if (anioFijado) return;
+    sb.select("vacaciones_ventanas", `select=anio&abre=lte.${hoy}&cierra=gte.${hoy}&order=abre.desc&limit=1`).then((r) => { if (r && r[0] && !anioFijado) setAnio(Number(r[0].anio)); }).catch(() => {});
+  }, [hoy, anioFijado]);
   const { equipo } = useEquipo();
   const [vista, setVista] = useState("pendientes");
   const [sols, setSols] = useState(null);
@@ -36,13 +43,13 @@ export function Solicitudes() {
     try {
       const [s, sal, h, rc, cb] = await Promise.all([
         sb.select("vacaciones_solicitudes", "select=*&order=fecha_inicio.desc"),
-        sb.select("vacaciones_saldo", `select=usuario_id,dias_totales&anio=eq.${ANIO}`),
+        sb.select("vacaciones_saldo", `select=usuario_id,dias_totales,nota&anio=eq.${ANIO}`),
         sb.select("horarios", `select=usuario_id,fecha,turno&turno=in.(Vacaciones,Descanso)&fecha=gte.${ANIO}-01-01&fecha=lte.${ANIO}-12-31`),
         sb.fn("vacaciones", { action: "conflictos" }).catch(() => ({})),
         sb.fn("cambios-turno", { action: "pendientes" }).catch(() => ({ cambios: [] })),
       ]);
       setSols(s);
-      const sm = {}; sal.forEach((x) => { sm[x.usuario_id] = x.dias_totales; }); setSaldos(sm);
+      const sm = {}, nm = {}; sal.forEach((x) => { sm[x.usuario_id] = x.dias_totales; nm[x.usuario_id] = x.nota || ""; }); setSaldos(sm); setNotas(nm);
       const vm = {}, dm = {};
       h.forEach((x) => { const dest = x.turno === "Vacaciones" ? vm : dm; (dest[x.usuario_id] ||= []).push(x.fecha); });
       setVacDias(vm); setDescansos(dm);
@@ -119,12 +126,20 @@ export function Solicitudes() {
       if (!r || !r.length) await sb.insert("vacaciones_saldo", { usuario_id: uid, anio: ANIO, dias_totales: v });
     }, "Saldo actualizado");
   };
+  // #183: nota corta de por qué el total no es el de siempre (p. ej. «alta 12-03-2027»)
+  const guardarNota = async (uid, nota) => {
+    const t = String(nota || "").trim().slice(0, 120);
+    await accion(`s${uid}`, async () => {
+      const r = await sb.update("vacaciones_saldo", `usuario_id=eq.${uid}&anio=eq.${ANIO}`, { nota: t || null });
+      if (!r || !r.length) await sb.insert("vacaciones_saldo", { usuario_id: uid, anio: ANIO, dias_totales: saldos[uid] ?? totalDefecto(ANIO), nota: t || null });
+    }, "Nota guardada");
+  };
 
   if (!sols || !cambios || !equipo) return <Cargando />;
 
   const vacPend = sols.filter((s) => s.estado === "pendiente");
   const cambPend = cambios.filter((c) => c.estado === "pendiente");
-  const resumen = Object.fromEntries(trabReg.map((t) => [t.id, resumenCalendario(saldos[t.id] ?? 22, vacDias[t.id] || [], sols.filter((s) => s.usuario_id === t.id), hoy)]));
+  const resumen = Object.fromEntries(trabReg.map((t) => [t.id, resumenCalendario(saldos[t.id] ?? totalDefecto(ANIO), vacDias[t.id] || [], sols.filter((s) => s.usuario_id === t.id && Number(String(s.fecha_inicio).slice(0, 4)) === ANIO), hoy)]));
 
   return (
     <>
@@ -162,22 +177,30 @@ export function Solicitudes() {
       {vista === "saldos" && (
         <>
           <div className="card">
-            <h2>Saldos de vacaciones · {ANIO}</h2>
-            <p className="sub">Días cogidos según el calendario (lo que manda) y solicitudes pendientes. Pulsa una fila para ver el histórico.</p>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <h2 style={{ margin: 0 }}>Saldos de vacaciones · {ANIO}</h2>
+              <span style={{ display: "inline-flex", gap: 6 }}>
+                {[Number(hoy.slice(0, 4)) - 1, Number(hoy.slice(0, 4)), Number(hoy.slice(0, 4)) + 1].map((a) => (
+                  <button key={a} className={a === ANIO ? "btn-p" : "btn-l"} onClick={() => { setAnioFijado(true); setAnio(a); }}>{a}</button>
+                ))}
+              </span>
+            </div>
+            <p className="sub">Días cogidos según el calendario (lo que manda) y solicitudes pendientes. Pulsa una fila para ver el histórico.{ANIO >= 2027 ? ` Desde 2027 se cuentan días naturales: ${totalDefecto(ANIO)} al año. Si a alguien le pones otro total (un alta o una baja a mitad de año), escribe en la nota por qué.` : ""}</p>
             <div className="tabla-scroll">
               <table className="ranking saldos">
-                <thead><tr><th>Persona</th><th className="r">Total</th><th className="r">Cogidos</th><th className="r">Pendientes</th><th className="r">Quedan</th><th /></tr></thead>
+                <thead><tr><th>Persona</th><th className="r">Total</th><th className="r">Cogidos</th><th className="r">Pendientes</th><th className="r">Quedan</th><th />{ANIO >= 2027 && <th>Nota</th>}</tr></thead>
                 <tbody>
                   {trabReg.map((t) => {
                     const r = resumen[t.id];
                     return (
                       <tr key={t.id}>
                         <td><button className="link-persona" onClick={() => setHist(t)}><Avatar nombre={t.nombre} size={26} />{t.nombre}</button></td>
-                        <td className="r"><SaldoEditable valor={saldos[t.id] ?? 22} onGuardar={(v) => guardarSaldo(t.id, v)} /></td>
+                        <td className="r"><SaldoEditable valor={saldos[t.id] ?? totalDefecto(ANIO)} onGuardar={(v) => guardarSaldo(t.id, v)} /></td>
                         <td className="r">{r.cogidos}</td>
                         <td className="r">{r.pendientes || "–"}</td>
                         <td className={`r b ${r.restantes < 0 ? "down" : ""}`}>{r.restantes}</td>
-                        <td><span className="barra-saldo"><i style={{ width: `${Math.min(100, (r.cogidos / (saldos[t.id] ?? 22)) * 100)}%` }} /></span></td>
+                        <td><span className="barra-saldo"><i style={{ width: `${Math.min(100, (r.cogidos / (saldos[t.id] ?? totalDefecto(ANIO))) * 100)}%` }} /></span></td>
+                        {ANIO >= 2027 && <td><NotaSaldo valor={notas[t.id] || ""} falta={(saldos[t.id] ?? totalDefecto(ANIO)) !== totalDefecto(ANIO)} onGuardar={(v) => guardarNota(t.id, v)} /></td>}
                       </tr>
                     );
                   })}
@@ -219,6 +242,19 @@ export function Solicitudes() {
       )}
       {normas && <VacacionesNormas onClose={() => setNormas(false)} />}
     </>
+  );
+}
+
+// #183: nota corta junto al total (sale resaltada si el total no es el de siempre y no tiene nota)
+function NotaSaldo({ valor, falta, onGuardar }) {
+  const [ed, setEd] = useState(false);
+  const [v, setV] = useState(valor);
+  if (!ed) return <button className="btn-txt" onClick={() => { setV(valor); setEd(true); }} title="Escribir nota" style={{ textAlign: "left", color: !valor && falta ? "#8A5A0B" : undefined, fontWeight: !valor && falta ? 700 : undefined }}>{valor || (falta ? "Falta la nota" : "+ nota")}</button>;
+  return (
+    <span className="num-ed-f">
+      <input value={v} maxLength={120} placeholder="alta 12-03-2027" onChange={(e) => setV(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === "Enter") { onGuardar(v); setEd(false); } if (e.key === "Escape") setEd(false); }} style={{ minWidth: 160 }} />
+      <button className="btn-l" onClick={() => { onGuardar(v); setEd(false); }}>OK</button>
+    </span>
   );
 }
 

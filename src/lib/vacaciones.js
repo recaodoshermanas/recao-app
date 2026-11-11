@@ -15,9 +15,12 @@ export function rangoFechas(ini, fin) {
 
 // De un rango, solo gastan vacaciones los dias que le tocaba trabajar.
 // Sin dato de horario se asume dia de trabajo.
+// #183: desde 2027 (protocolo v2.0) se cuentan días naturales: gastan todos los días del periodo, también los descansos.
 export function diasQueGastan(fechas, mapaTurnos) {
-  return fechas.filter(f => { const t = mapaTurnos[f]; return t === undefined || esTrabajo(t); });
+  return fechas.filter(f => { if (f >= "2027-01-01") return true; const t = mapaTurnos[f]; return t === undefined || esTrabajo(t); });
 }
+// Días de vacaciones al año por defecto: 31 naturales desde 2027, 22 laborables hasta 2026 (#183)
+export function totalDefecto(anio) { return Number(anio) >= 2027 ? 31 : 22; }
 
 // Agrupa fechas sueltas en bloques. "saltables" (p.ej. descansos) no rompen el bloque,
 // asi que dos semanas de vacaciones salen como un unico periodo.

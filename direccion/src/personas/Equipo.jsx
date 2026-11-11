@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { TURNOS, horasTurno } from "../../../src/lib/turnos.js";
-import { resumenCalendario } from "../../../src/lib/vacaciones.js";
+import { resumenCalendario, totalDefecto } from "../../../src/lib/vacaciones.js";
 import { Panel, Pestanas, useEquipo, avisar, hoyStr, masDias, fechaCorta, Cargando, Avatar, n0, ir } from "../ui.jsx";
 import { eur } from "../fmt.js";
 import { telNormalizado, TEL_AYUDA } from "../../../src/views/owner/UsuariosView.jsx";
@@ -158,7 +158,7 @@ function Ficha({ persona, yo, onClose, onCambio }) {
       persona.eventual || persona.rol === "admin" ? null : sb.rpc("disc_falsedades_90", { p_uid: uid }).catch(() => null),
       persona.eventual || persona.rol === "admin" ? null : sb.rpc("plus_calculo", { p_uid: uid, p_anio: anio, p_mes: mes }).catch(() => null),
     ]);
-    setD({ hor, vac: resumenCalendario(sal[0]?.dias_totales ?? 22, vac.map((x) => x.fecha), sols, hoy), horas, f30, s90, plus: Array.isArray(plus) ? plus[0] : plus, proxVac: sols.filter((s) => s.estado === "aceptado" && s.fecha_fin >= hoy).sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))[0] });
+    setD({ hor, vac: resumenCalendario(sal[0]?.dias_totales ?? totalDefecto(anio), vac.map((x) => x.fecha), sols, hoy), horas, f30, s90, plus: Array.isArray(plus) ? plus[0] : plus, proxVac: sols.filter((s) => s.estado === "aceptado" && s.fecha_fin >= hoy).sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))[0] });
   }, [persona, hoy, anio, mes]);
   useEffect(() => { setD(null); cargar(); }, [cargar]);
   if (!persona) return null;

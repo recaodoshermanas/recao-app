@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { F, SF, C, btnDark, chipStyle, CHIP } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
-import { resumenCalendario, agruparRangos } from "../../lib/vacaciones.js";
+import { resumenCalendario, agruparRangos, totalDefecto } from "../../lib/vacaciones.js";
 import { VacacionesPicker } from "../../components/VacacionesPicker.jsx";
 import { VacacionesNormas } from "../../components/VacacionesNormas.jsx";
 import { VacacionesVentana } from "../../components/VacacionesVentana.jsx";
 
-const ANIO = 2026;
 function fmtF(s) { if (!s) return ""; const p = s.split("-"); return `${p[2]}/${p[1]}`; }
 function ymd(d) { const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0"); return `${y}-${m}-${day}`; }
 const pill = { background: "rgba(255,255,255,.55)", borderRadius: "999px", padding: "4px 10px", fontFamily: F, fontSize: 11, fontWeight: 600, color: "#073B3B" };
@@ -15,7 +14,11 @@ const secLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0
 export function MisVacacionesView({ user }) {
   const [sols, setSols] = useState([]);
   const [conf, setConf] = useState({});
-  const [total, setTotal] = useState(22);
+  const hoy0 = ymd(new Date());
+  const [anio, setAnio] = useState(Number(hoy0.slice(0, 4))); // #183 selector de año
+  const [anioFijado, setAnioFijado] = useState(false); // si ella lo cambia a mano, ya no se mueve solo
+  const ANIO = anio;
+  const [total, setTotal] = useState(totalDefecto(anio));
   const [vacDias, setVacDias] = useState([]);
   const [descansos, setDescansos] = useState([]);
   const [abierto, setAbierto] = useState(false);
@@ -30,18 +33,27 @@ export function MisVacacionesView({ user }) {
     try {
       setSols(await sb.select("vacaciones_solicitudes", `select=*&usuario_id=eq.${user.id}&order=fecha_inicio.desc`));
       const sal = await sb.select("vacaciones_saldo", `select=dias_totales&usuario_id=eq.${user.id}&anio=eq.${ANIO}`);
-      setTotal(sal[0] ? sal[0].dias_totales : 22);
+      setTotal(sal[0] ? sal[0].dias_totales : totalDefecto(ANIO));
       const h = await sb.select("horarios", `select=fecha,turno&usuario_id=eq.${user.id}&turno=in.(Vacaciones,Descanso)&fecha=gte.${ANIO}-01-01&fecha=lte.${ANIO}-12-31`);
       setVacDias(h.filter(x => x.turno === "Vacaciones").map(x => x.fecha));
       setDescansos(h.filter(x => x.turno === "Descanso").map(x => x.fecha));
       try { const rc = await sb.fn("vacaciones", { action: "conflictos" }); setConf(rc.conflictos || {}); } catch (e) { setConf({}); }
       try { setVentanas(await sb.rpc("vac_mis_ventanas")); } catch (e) { setVentanas(null); }
     } catch (e) { /* noop */ }
-  }, [user.id]);
+  }, [user.id, ANIO]);
   useEffect(() => { load(); }, [load]);
+  // #183: por defecto se abre en el año al que corresponde la ventana abierta (en diciembre, 2027)
+  useEffect(() => {
+    if (anioFijado || !ventanas || !Array.isArray(ventanas.ventanas)) return;
+    const ab = ventanas.ventanas.find((v) => v.estado === "abierta");
+    if (ab && Number(ab.anio) !== anio) setAnio(Number(ab.anio));
+  }, [ventanas, anioFijado, anio]);
 
   const hoy = ymd(new Date());
-  const r = resumenCalendario(total, vacDias, sols, hoy);
+  const solsAnio = sols.filter((s) => Number(String(s.fecha_inicio).slice(0, 4)) === ANIO);
+  const r = resumenCalendario(total, vacDias, solsAnio, hoy);
+  const anioHoy = Number(hoy.slice(0, 4));
+  const anios = [...new Set([anioHoy, ...(anioHoy >= 2026 ? [anioHoy + 1] : []), ...sols.map((s) => Number(String(s.fecha_inicio).slice(0, 4))).filter((a) => a >= anioHoy)])].sort();
   const bloques = agruparRangos(vacDias, descansos);
 
   const solicitar = async (fechas) => {
@@ -67,9 +79,22 @@ export function MisVacacionesView({ user }) {
   return (
     <div style={{ padding: "16px", maxWidth: 540, margin: "0 auto" }}>
       <VacacionesVentana datos={ventanas} onHecho={async (m) => { flash(m); await load(); }} />
+      {hoy >= "2026-12-01" && hoy <= "2026-12-31" && (
+        <div role="note" style={{ background: "#FBF3E2", border: "1px solid #F0DEB0", borderRadius: 14, padding: "12px 14px", marginBottom: 10, fontFamily: F, fontSize: 13, color: "#7A5A12", lineHeight: 1.45 }}>
+          Desde el 1 de enero de 2027 las vacaciones se cuentan en días naturales: 31 al año, en semanas completas de lunes a domingo (2 en verano, 1 en primavera, 1 en otoño) y 3 días sueltos. Tus días de 2026 no cambian.
+        </div>
+      )}
+      {anios.length > 1 && (
+        <div role="tablist" aria-label="Año" style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10 }}>
+          {anios.map((a) => (
+            <button key={a} role="tab" aria-selected={a === ANIO} onClick={() => { setAnioFijado(true); setAnio(a); }}
+              style={{ border: `1.5px solid ${a === ANIO ? C.char : C.brd}`, background: a === ANIO ? C.char : "#fff", color: a === ANIO ? "#fff" : C.char, borderRadius: 999, padding: "6px 16px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{a}</button>
+          ))}
+        </div>
+      )}
       <div style={{ background: "linear-gradient(135deg, #6ddadb, #48c7c9)", borderRadius: 20, padding: 22, textAlign: "center", boxShadow: "0 12px 28px -14px rgba(30,160,160,.7)" }}>
         <div style={{ fontFamily: SF, fontSize: 60, color: "#073B3B", lineHeight: 0.9 }}>{r.restantes}</div>
-        <div style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: "#0A3B3B", marginTop: 6 }}>días disponibles de {r.total}</div>
+        <div style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: "#0A3B3B", marginTop: 6 }}>días disponibles de {r.total} en {ANIO}{ANIO >= 2027 ? " (días naturales)" : ""}</div>
         <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
           <span style={pill}>{r.disfrutados} disfrutados</span>
           <span style={pill}>{r.planificados} planificados</span>
@@ -95,10 +120,10 @@ export function MisVacacionesView({ user }) {
         </div>
       )}
 
-      <div style={secLbl}>Mis solicitudes</div>
-      {sols.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>Aún no has solicitado vacaciones</div>
+      <div style={secLbl}>Mis solicitudes {ANIO}</div>
+      {solsAnio.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>Aún no has solicitado vacaciones</div>
         : <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-          {sols.map(s => {
+          {solsAnio.map(s => {
             const c = conf[s.id];
             const nombres = c ? [...new Set(c.con.map(x => x.nombre))].join(", ") : "";
             return (
@@ -116,7 +141,7 @@ export function MisVacacionesView({ user }) {
                 {c && (
                   <div style={{ marginTop: 11, background: "#FBF3E2", border: "1px solid #F0DEB0", borderRadius: 11, padding: "10px 12px" }}>
                     <div style={{ fontFamily: F, fontSize: 12.5, color: "#7A5A12", lineHeight: 1.45 }}>
-                      Se solapa con <b>{nombres}</b> (tu mismo rol). Poneos de acuerdo entre vosotras: dirección no podrá aprobar ninguna hasta resolverlo.
+                      Se solapa con <b>{nombres}</b>{s.fecha_fin < "2027-01-01" ? " (tu mismo rol)" : ""}. Poneos de acuerdo entre vosotras: dirección no podrá aprobar ninguna hasta resolverlo.
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 9, flexWrap: "wrap" }}>
                       {c.sin_acuerdo
@@ -131,7 +156,7 @@ export function MisVacacionesView({ user }) {
         </div>}
 
       <div style={secLbl}>Histórico {ANIO}</div>
-      {bloques.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>Todavía no has disfrutado vacaciones este año</div>
+      {bloques.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>Todavía no tienes vacaciones en el calendario de este año</div>
         : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {bloques.slice().reverse().map((b, i) => {
             const pasado = b.fin <= hoy;
