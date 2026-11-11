@@ -1,7 +1,7 @@
 // Resumen de Finanzas → «Informe para la reunión» (solicitud #65): cifras del mes + comentarios de Claude, en pantalla y en PDF.
 import "../informe.css";
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "../../../src/lib/supabase.js";
+import { sb } from "../../../src/lib/supabase.js";
 import { eur, pct, num, mesAnio } from "../fmt.js";
 
 const n0 = (v) => Number(v) || 0;
@@ -569,25 +569,25 @@ export function InformeMensual() {
   useEffect(() => {
     let vivo = true;
     setCierre(null);
-    supabase.rpc("cierre_mes_estado", { p_mes: mes }).then((r) => { if (vivo) setCierre(r); }).catch(() => { if (vivo) setCierre(false); });
+    sb.rpc("cierre_mes_estado", { p_mes: mes }).then((r) => { if (vivo) setCierre(r); }).catch(() => { if (vivo) setCierre(false); });
     return () => { vivo = false; };
   }, [mes]);
   const cerrado = cierre ? !!cierre.cerrado : null;
 
   const cargarLista = useCallback(async () => {
-    try { setLista((await supabase.rpc("fin_informe_lista")) || []); } catch (e) { /* la lista es opcional */ }
+    try { setLista((await sb.rpc("fin_informe_lista")) || []); } catch (e) { /* la lista es opcional */ }
   }, []);
   useEffect(() => { cargarLista(); }, [cargarLista]);
 
   const abrir = async (id) => {
     setError("");
-    try { setAbierto(await supabase.rpc("fin_informe_ver", { p_id: id })); }
+    try { setAbierto(await sb.rpc("fin_informe_ver", { p_id: id })); }
     catch (e) { setError("No se ha podido abrir el informe."); }
   };
   const generar = async () => {
     setGenerando(true); setError("");
     try {
-      const r = await supabase.fn("informe-finanzas", { mes });
+      const r = await sb.fn("informe-finanzas", { mes });
       await cargarLista();
       await abrir(r.id);
     } catch (e) { setError(e.message || "No se ha podido generar el informe."); }
