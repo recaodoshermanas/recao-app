@@ -62,3 +62,11 @@ begin
     execute nuevo;
   end loop;
 end $$;
+
+-- (2ª migración) Las personas sin puesto en tienda (rol colaborador) no son plantilla: no leen facturas, proveedores, config ni datos del mes.
+create or replace function public.es_plantilla()
+returns boolean language sql stable security definer set search_path to 'public' as $function$
+  select exists (select 1 from public.usuarios
+                  where auth_id = auth.uid() and activo = true and coalesce(eventual, false) = false
+                    and rol in ('admin', 'trabajadora'));
+$function$;
