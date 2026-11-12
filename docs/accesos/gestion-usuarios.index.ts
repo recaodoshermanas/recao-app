@@ -1,4 +1,4 @@
-// gestion-usuarios · v8 (accesos): al crear o editar una persona se elige si entra en la app de tienda
+// gestion-usuarios · v9 (accesos + Producto «solo ver»): al crear o editar una persona se elige si entra en la app de tienda
 // y a qué áreas del panel de dirección (todas = rol admin; algunas = areas_direccion).
 // Nuevo tipo «oficina» (rol colaborador): persona sin puesto en tienda, solo panel.
 // Sobre la v7 (#49). Cambios marcados con "ACCESOS".
@@ -41,7 +41,14 @@ const EMAIL_YA = "Ese email ya tiene una cuenta en la app"; // #49
 
 // ACCESOS: áreas del panel que ya se pueden dar por separado (su base de datos comprueba el área).
 // Personas, Finanzas y Producto de momento solo con dirección completa.
-const AREAS_SUELTAS = ["pulso", "marketing", "plan", "tecnologia"];
+const AREAS_SUELTAS = ["pulso", "marketing", "plan", "tecnologia", "producto"];
+// ACCESOS: estas se dan en modo «solo ver» (areas_lectura): ve todo, no cambia nada
+const AREAS_LECTURA = ["producto"];
+const separar = (a: string[] | null) => ({
+  areas_direccion: a ? (a.filter((x) => !AREAS_LECTURA.includes(x)).length ? a.filter((x) => !AREAS_LECTURA.includes(x)) : null) : null,
+  areas_lectura: a ? (a.filter((x) => AREAS_LECTURA.includes(x)).length ? a.filter((x) => AREAS_LECTURA.includes(x)) : null) : null,
+});
+const juntar = (u: { areas_direccion?: string[] | null; areas_lectura?: string[] | null }) => [...(u.areas_direccion || []), ...(u.areas_lectura || [])];
 const SIN_AREAS = "Elige al menos un área del panel de dirección";
 
 async function sbRest(path: string, init: RequestInit = {}) {
@@ -58,8 +65,8 @@ async function sbRest(path: string, init: RequestInit = {}) {
 
 // BIENVENIDA: aviso al crear la cuenta; sale por correo y por WhatsApp con el enlace que toca
 // ACCESOS: si entra en el panel (todo o algunas áreas) se le manda al panel; si además tiene app, se le dicen los dos.
-async function bienvenida(u: { id: string; rol?: string; email?: string; areas_direccion?: string[] | null; acceso_app?: boolean }) {
-  const panel = u.rol === "admin" || (u.areas_direccion || []).length > 0;
+async function bienvenida(u: { id: string; rol?: string; email?: string; areas_direccion?: string[] | null; areas_lectura?: string[] | null; acceso_app?: boolean }) {
+  const panel = u.rol === "admin" || juntar(u).length > 0;
   const app = u.acceso_app !== false && u.rol !== "colaborador";
   const enlaces = panel && app
     ? "el panel de dirección (https://direccion.elrecao.com) y la app de Recao (https://app.elrecao.com)"
@@ -176,7 +183,7 @@ Deno.serve(async (req) => {
     const action = body.action;
 
     if (action === "listar") {
-      const r = await sbRest("usuarios?select=id,email,nombre,rol,activo,auth_id,eventual,telefono,whatsapp_avisos,acceso_app,areas_direccion,created_at&order=nombre.asc");
+      const r = await sbRest("usuarios?select=id,email,nombre,rol,activo,auth_id,eventual,telefono,whatsapp_avisos,acceso_app,areas_direccion,areas_lectura,created_at&order=nombre.asc");
       return json({ ok: true, usuarios: await r.json() });
     }
 
@@ -214,7 +221,7 @@ Deno.serve(async (req) => {
       const ir = await sbRest("usuarios", {
         method: "POST",
         headers: { Prefer: "return=representation" },
-        body: JSON.stringify({ email, nombre, rol, activo: true, auth_id: authUser.id, telefono, acceso_app, areas_direccion: areas, ...(tp || {}) }),
+        body: JSON.stringify({ email, nombre, rol, activo: true, auth_id: authUser.id, telefono, acceso_app, ...separar(areas), ...(tp || {}) }),
       });
       if (!ir.ok) {
         await authAdmin(`admin/users/${authUser.id}`, { method: "DELETE" });
@@ -316,7 +323,7 @@ Deno.serve(async (req) => {
     if (action === "actualizar") {
       const id = body.id;
       if (!id) return json({ ok: false, error: "Falta id" }, 400);
-      const tr = await sbRest(`usuarios?select=id,rol,eventual,auth_id,email,tipo_turno,acceso_app,areas_direccion&id=eq.${id}`);
+      const tr = await sbRest(`usuarios?select=id,rol,eventual,auth_id,email,tipo_turno,acceso_app,areas_direccion,areas_lectura&id=eq.${id}`);
       const destino = (await tr.json())?.[0];
       if (!destino) return json({ ok: false, error: "Persona no encontrada" }, 404);
       const esYo = id === admin.id;
@@ -339,14 +346,14 @@ Deno.serve(async (req) => {
       // ACCESOS: panel de dirección (no | algunas | todas) y app de tienda
       const tieneTienda = (tipo: unknown) => tipo === "principal" || tipo === "apoyo" || tipo === "eventual";
       if (body.direccion !== undefined) {
-        if (body.direccion === "todas") { patch.rol = "admin"; patch.areas_direccion = null; }
+        if (body.direccion === "todas") { patch.rol = "admin"; patch.areas_direccion = null; patch.areas_lectura = null; }
         else if (body.direccion === "algunas" || body.direccion === "no") {
           if (body.direccion === "algunas") {
             const a = leerAreas(body.areas);
             if (a === "invalido") return json({ ok: false, error: "Área del panel no válida" }, 400);
             if (!a.length) return json({ ok: false, error: SIN_AREAS }, 400);
-            patch.areas_direccion = a;
-          } else patch.areas_direccion = null;
+            Object.assign(patch, separar(a));
+          } else { patch.areas_direccion = null; patch.areas_lectura = null; }
           // deja de ser dirección completa: vuelve a su puesto (si no tiene, sin puesto en tienda)
           if (destino.rol === "admin") patch.rol = tieneTienda(body.tipo) || destino.tipo_turno || destino.eventual ? "trabajadora" : "colaborador";
         } else return json({ ok: false, error: "Acceso al panel no válido" }, 400);
@@ -365,8 +372,8 @@ Deno.serve(async (req) => {
 
       // ACCESOS: comprobaciones del resultado final
       const rolFinal = (patch.rol ?? destino.rol) as string;
-      const areasFinal = (patch.areas_direccion !== undefined ? patch.areas_direccion : destino.areas_direccion) as string[] | null;
-      if (rolFinal === "admin" && patch.areas_direccion === undefined && destino.areas_direccion) patch.areas_direccion = null;
+      const areasFinal = patch.areas_direccion !== undefined ? juntar(patch as any) : juntar(destino);
+      if (rolFinal === "admin" && patch.areas_direccion === undefined && areasFinal.length) { patch.areas_direccion = null; patch.areas_lectura = null; }
       if (rolFinal === "colaborador") {
         patch.acceso_app = false;
         if (!(areasFinal || []).length) return json({ ok: false, error: "Sin puesto en tienda solo puede entrar en el panel: " + SIN_AREAS.toLowerCase() }, 400);

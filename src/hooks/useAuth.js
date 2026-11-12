@@ -11,14 +11,14 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 async function loadPerfil(authId, token) {
   try {
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/usuarios?select=id,email,nombre,rol,activo,eventual,jornada,es_socio,acceso_app,areas_direccion&auth_id=eq.${authId}`,
+      `${SUPABASE_URL}/rest/v1/usuarios?select=id,email,nombre,rol,activo,eventual,jornada,es_socio,acceso_app,areas_direccion,areas_lectura&auth_id=eq.${authId}`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token || SUPABASE_KEY}` } }
     );
     if (!r.ok) return null;
     const rows = await r.json();
     const u = rows?.[0];
     if (!u || !u.activo) return null;
-    return { id: u.id, email: u.email, nombre: u.nombre, rol: u.rol, eventual: !!u.eventual, jornada: u.jornada || null, es_socio: !!u.es_socio, acceso_app: u.acceso_app !== false, areas_direccion: u.areas_direccion || [] }; // ACCESOS
+    return { id: u.id, email: u.email, nombre: u.nombre, rol: u.rol, eventual: !!u.eventual, jornada: u.jornada || null, es_socio: !!u.es_socio, acceso_app: u.acceso_app !== false, areas_direccion: u.areas_direccion || [], areas_lectura: u.areas_lectura || [] }; // ACCESOS
   } catch (_) {
     return null;
   }

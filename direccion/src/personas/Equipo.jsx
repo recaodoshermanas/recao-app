@@ -10,7 +10,7 @@ import { Novedades } from "./Novedades.jsx";
 import { PlusFestivo } from "./PlusFestivo.jsx";
 import { HorasPorConfirmar, usePorConfirmar } from "./HorasPorConfirmar.jsx"; // #39
 import { Formacion } from "./Formacion.jsx"; // #79
-import { AREAS_ACCESO, areasDe, modoDireccion, entraEnApp, resumenAccesos } from "../../../src/lib/accesos.js"; // ACCESOS
+import { AREAS_ACCESO, areasDe, modoDireccion, entraEnApp, resumenAccesos, soloVe } from "../../../src/lib/accesos.js"; // ACCESOS
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 // ACCESOS: «colaborador» = sin puesto en tienda (solo panel). sinTienda = no hace turnos (dirección o sin puesto)
@@ -354,7 +354,7 @@ function ElegirAccesos({ app, setApp, dir, setDir, areas, setAreas, sinPuesto, b
           <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-2)", marginBottom: 4 }}>Áreas a las que entra</div>
           {AREAS_ACCESO.map((a) => (
             <label key={a.id} className="chk" style={{ display: "flex", marginTop: 8, opacity: a.suelta ? 1 : 0.55 }} title={a.suelta ? undefined : "De momento esta área solo se puede dar con dirección completa"}>
-              <input type="checkbox" style={{ width: 16, height: 16, margin: 0 }} checked={areas.includes(a.id)} disabled={!a.suelta} onChange={() => cambiarArea(a.id)} /> {a.label}{!a.suelta && <small style={{ fontWeight: 500 }}> · de momento solo con dirección completa</small>}
+              <input type="checkbox" style={{ width: 16, height: 16, margin: 0 }} checked={areas.includes(a.id)} disabled={!a.suelta} onChange={() => cambiarArea(a.id)} /> {a.label}{a.soloVer && <small style={{ fontWeight: 500 }}> · solo ver, sin cambiar nada</small>}{!a.suelta && <small style={{ fontWeight: 500 }}> · de momento solo con dirección completa</small>}
             </label>
           ))}
         </div>
@@ -374,7 +374,7 @@ function Accesos({ persona, esYo, busy, onGuardar }) {
   const base = () => ({ app: entraEnApp(persona), dir: modoDireccion(persona), areas: areasDe(persona).filter((a) => AREAS_ACCESO.find((x) => x.id === a)?.suelta) });
   const [edit, setEdit] = useState(false);
   const [f, setF] = useState(base);
-  useEffect(() => { setF(base()); setEdit(false); }, [persona.id, persona.rol, persona.acceso_app, (persona.areas_direccion || []).join()]); // eslint-disable-line
+  useEffect(() => { setF(base()); setEdit(false); }, [persona.id, persona.rol, persona.acceso_app, (persona.areas_direccion || []).join(), (persona.areas_lectura || []).join()]); // eslint-disable-line
   const sinPuesto = persona.rol === "colaborador" || (persona.rol === "admin" && f.dir !== "todas");
   const falla = fallaAccesos({ ...f, sinPuesto });
   const guardar = async () => {
@@ -391,7 +391,7 @@ function Accesos({ persona, esYo, busy, onGuardar }) {
       {!edit ? (
         <ul className="pq-l">
           <li><span>App de tienda</span><b>{entraEnApp(persona) ? "Sí" : "No"}</b></li>
-          <li><span>Panel de dirección</span><b>{persona.rol === "admin" ? "Todo" : areasDe(persona).length ? areasDe(persona).map((a) => AREAS_ACCESO.find((x) => x.id === a)?.label || a).join(", ") : "No"}</b></li>
+          <li><span>Panel de dirección</span><b>{persona.rol === "admin" ? "Todo" : areasDe(persona).length ? areasDe(persona).map((a) => (AREAS_ACCESO.find((x) => x.id === a)?.label || a) + (soloVe(persona, a) ? " (solo ver)" : "")).join(", ") : "No"}</b></li>
         </ul>
       ) : (
         <>

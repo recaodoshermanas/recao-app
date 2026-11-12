@@ -39,7 +39,7 @@ import { TecSolicitudes } from "./tecnologia/Solicitudes.jsx";
 import { TecGuia } from "./tecnologia/Guia.jsx";
 import { Avisos, Pestanas } from "./ui.jsx";
 import { tokenRecuperar, limpiarTokenRecuperar, pedirRecuperacion, cambiarConToken } from "../../src/lib/recuperar.js";
-import { entraEnPanel, puedeArea, esDireccionCompleta } from "../../src/lib/accesos.js"; // ACCESOS
+import { entraEnPanel, puedeArea, esDireccionCompleta, soloVe, SUBS_SOLO_DIRECCION } from "../../src/lib/accesos.js"; // ACCESOS
 
 const ICONO = "/icono.png";
 
@@ -159,7 +159,7 @@ function Cabecera({ user, area, areas, onSalir }) {
   );
 }
 
-function Subnav({ area, sub }) {
+function Subnav({ area, sub, soloVer }) {
   if (!area.subs) return null;
   const varias = area.subs.length > 1;
   return (
@@ -167,6 +167,7 @@ function Subnav({ area, sub }) {
       <div className="subnav-t">
         <h1>{area.label}</h1>
         {area.quien && <span>Lleva {area.quien}</span>}
+        {soloVer && <span title="Puedes verlo todo, pero los cambios solo los hace dirección">Solo ver</span>}
       </div>
       {varias && <nav className="pills" aria-label={`Secciones de ${area.label}`}>
         {area.subs.map((s) => (
@@ -198,10 +199,13 @@ export default function App() {
   }, [user, logout]);
   // ACCESOS: solo las áreas que tiene; si abre otra (enlace, aviso), va a la primera suya
   const areas = AREAS.filter((a) => user && puedeArea(user, a.id));
-  const permitida = !!user && puedeArea(user, area.id);
+  const soloVer = !!user && soloVe(user, area.id);
+  const ocultas = soloVer ? SUBS_SOLO_DIRECCION[area.id] || [] : [];
+  const areaVista = ocultas.length ? { ...area, subs: area.subs.filter((s) => !ocultas.includes(s.id)) } : area;
+  const permitida = !!user && puedeArea(user, area.id) && !(sub && ocultas.includes(sub.id));
   useEffect(() => {
-    if (user && enPanel && !permitida && areas[0]) ir(areas[0].id);
-  }, [user, enPanel, permitida, areas]);
+    if (user && enPanel && !permitida && areas[0]) ir(puedeArea(user, area.id) ? area.id : areas[0].id);
+  }, [user, enPanel, permitida, areas, area.id]);
 
   // Notificaciones: llevan a la pantalla que toca
   useEffect(() => {
@@ -280,7 +284,7 @@ export default function App() {
   return (
     <div className="wrap">
       <Cabecera user={user} area={area} areas={areas} onSalir={logout} />
-      <Subnav area={area} sub={sub} />
+      <Subnav area={areaVista} sub={sub} soloVer={soloVer} />
       <main id="main" key={`${area.id}/${sub ? sub.id : ""}/${extra || ""}`}>{contenido}</main>
       <Avisos />
     </div>
