@@ -15,3 +15,7 @@ La base de datos comprueba el área con `puede_area('marketing', …)` (direcci�
 1. `migracion.sql` (columnas nuevas): **antes** de publicar el frontend, porque el login ya lee `acceso_app` y `areas_direccion`.
 2. Edge function `gestion-usuarios` (`gestion-usuarios.index.ts`) y `google-resenas` (acepta también a quien tiene el área Marketing).
 3. Frontend (merge a main).
+
+## Producto «solo ver» (`usuarios.areas_lectura`)
+
+Producto se da en modo solo ver: `puede_ver('producto')` abre la lectura de sus tablas (políticas `*_ver_producto`) y de sus funciones de consulta. Las escrituras (y las edge functions epos-producto, recepcion, consumo-socios, radar-recoger) siguen siendo solo de dirección. En el panel no se enseñan Recepción, Productos a revisar ni Inventario a quien solo ve (`SUBS_SOLO_DIRECCION`). Migración: `migracion-producto-ver.sql`.

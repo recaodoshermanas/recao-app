@@ -40,7 +40,7 @@ const TEL_ERROR = "Teléfono no válido. Escribe el móvil con 9 cifras (ej. 612
 const EMAIL_YA = "Ese email ya tiene una cuenta en la app"; // #49
 
 // ACCESOS: áreas del panel que ya se pueden dar por separado (su base de datos comprueba el área).
-// Personas, Finanzas y Producto de momento solo con dirección completa.
+// Personas y Finanzas de momento solo con dirección completa.
 const AREAS_SUELTAS = ["pulso", "marketing", "plan", "tecnologia", "producto"];
 // ACCESOS: estas se dan en modo «solo ver» (areas_lectura): ve todo, no cambia nada
 const AREAS_LECTURA = ["producto"];
