@@ -18,6 +18,7 @@ export function DisciplinaAdminView() {
   const [reabiertos, setReabiertos] = useState([]);
   const [sinVerif, setSinVerif] = useState([]);
   const [avisos, setAvisos] = useState([]);
+  const [eventAv, setEventAv] = useState({});
   const [fEstado, setFEstado] = useState("emitido");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -58,7 +59,13 @@ export function DisciplinaAdminView() {
       else if (tab === "causas") setCausas((await call("bandeja_causas")).items || []);
       else if (tab === "nocierre") { const b = await sb.rpc("sin_cerrar_bandeja", {}); setNocierre((b && b.items) || []); setReabiertos((b && b.reabiertos) || []); }
       else if (tab === "sinverif") { const b = await sb.rpc("sin_verificar_bandeja", {}); setSinVerif(Array.isArray(b) ? b : []); }
-      else if (tab === "avisos") setAvisos((await call("listar_avisos", fEstado ? { estado: fEstado } : {})).avisos || []);
+      else if (tab === "avisos") {
+        const lista = (await call("listar_avisos", fEstado ? { estado: fEstado } : {})).avisos || [];
+        setAvisos(lista);
+        const m = {};
+        if (lista.length) { try { const ev = await sb.rpc("avisos_con_eventual", { p_ids: lista.map(a => a.id) }); (Array.isArray(ev) ? ev : []).forEach(e => { m[e.aviso_id] = e.eventual_nombre; }); } catch (e) { /* noop */ } }
+        setEventAv(m);
+      }
     } catch (e) { flash(e.message || "Error"); }
     setLoading(false);
   }, [tab, fEstado]);
@@ -201,6 +208,7 @@ export function DisciplinaAdminView() {
               </div>
               <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 4 }}>Turno <b style={{ textTransform: "capitalize" }}>{a.turno}</b> · {fmtDia(a.fecha)}{a.es_falsedad ? " · falsedad" : ""}</div>
               <div style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 4 }}>{SUPTXT[a.supuesto] || a.descripcion}</div>
+              {eventAv[a.id] && <div style={{ background: "#FBF0DA", borderRadius: 10, padding: "8px 12px", marginTop: 9, fontFamily: F, fontSize: 12.5, color: "#8a6a1e", lineHeight: 1.4 }}><b>Turno con eventual</b> ({eventAv[a.id]}): comprueba de quién era la tarea. Si era de la eventual, resuélvelo como «Incidencia sin fallo».</div>}
               {a.alegacion_en && <div style={{ background: "#EAF0F8", borderRadius: 10, padding: "9px 12px", marginTop: 9 }}><div style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: "#3D6AA5", marginBottom: 4 }}>Alegación de la trabajadora</div><div style={{ fontFamily: F, fontSize: 13, color: C.char, lineHeight: 1.4 }}>{a.alegacion || "(sin texto)"}</div></div>}
               {a.estado === "resuelto" && (a.nivel || a.resolucion_nota) && <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 8 }}>{a.nivel ? <b style={{ color: C.red }}>Falta {NIVEL_L[a.nivel]}</b> : null}{a.resolucion_nota ? <div style={{ marginTop: 3 }}>{a.resolucion_nota}</div> : null}</div>}
               {a.estado === "emitido" && <button onClick={() => abrirResolver(a)} style={{ width: "100%", marginTop: 12, background: C.char, color: C.gold, border: "none", borderRadius: 10, padding: 12, fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Resolver</button>}
@@ -350,6 +358,7 @@ export function DisciplinaAdminView() {
             <div style={{ width: 40, height: 4, background: C.brd, borderRadius: 999, margin: "0 auto 16px" }} />
             <div style={{ fontFamily: SF, fontSize: 20, color: C.char }}>Resolver aviso</div>
             <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 16 }}>{resolviendo.usuario_nombre} · turno {resolviendo.turno} · {fmtDia(resolviendo.fecha)}</div>
+            {eventAv[resolviendo.id] && <div style={{ background: "#FBF0DA", borderRadius: 10, padding: "9px 12px", marginBottom: 14, fontFamily: F, fontSize: 12.5, color: "#8a6a1e", lineHeight: 1.4 }}><b>Turno con eventual</b> ({eventAv[resolviendo.id]}): comprueba de quién era la tarea. Si era de la eventual, elige «Incidencia sin fallo».</div>}
             <div style={lbl}>Resultado</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 16 }}>
               {[["descartado", "Descartar el hecho", "No pasó / no procede"], ["sin_fallo", "Incidencia sin fallo", "Queda constancia, no cuenta"], ["confirmado", "Confirmar el fallo", "Se anota en los contadores"]].map(([v, t, s]) => {
