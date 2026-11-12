@@ -6,11 +6,13 @@ import { tokenRecuperar } from "./lib/recuperar.js";
 import { WorkerApp } from "./views/worker/WorkerApp.jsx";
 import { OwnerView } from "./views/owner/OwnerView.jsx";
 import { EventualApp } from "./views/eventual/EventualApp.jsx"; // BOLSA
+import { entraEnApp, entraEnPanel } from "./lib/accesos.js"; // ACCESOS
 
 export default function RecaoApp() {
   const { user, checking, login, logout } = useAuth();
   // BOLSA: las eventuales no cargan facturas/datos del mes/config (no son para ellas)
-  const { facturas, monthlyData, proveedores, config, loading, error, reload } = useRecaoData(user && !user.eventual ? user : null);
+  const sinApp = !!user && !entraEnApp(user); // ACCESOS: cuenta sin acceso a la app de tienda
+  const { facturas, monthlyData, proveedores, config, loading, error, reload } = useRecaoData(user && !user.eventual && !sinApp ? user : null);
 
   if (checking) return (
     <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", fontFamily: SF, color: C.char, background: C.cream }}>
@@ -20,6 +22,16 @@ export default function RecaoApp() {
 
   // Enlace de "¿Has olvidado tu contraseña?": se muestra aunque haya otra sesión abierta en este móvil
   if (!user || tokenRecuperar()) return <LoginScreen onLogin={login} />;
+
+  // ACCESOS: quien no tiene la app (p. ej. solo panel de dirección) no entra aquí
+  if (sinApp) return (
+    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", minHeight: "100vh", padding: "24px", textAlign: "center", fontFamily: F, color: C.char, background: C.cream }}>
+      <div style={{ fontFamily: SF, fontSize: "28px", marginBottom: "10px" }}>Recao</div>
+      <div style={{ fontSize: "15px", maxWidth: "320px", lineHeight: 1.5 }}>Tu cuenta no tiene acceso a la app de la tienda.</div>
+      {entraEnPanel(user) && <a href="https://direccion.elrecao.com" style={{ marginTop: "16px", padding: "12px 20px", borderRadius: "10px", background: C.char, color: C.gold, textDecoration: "none", fontWeight: 600 }}>Ir al panel de dirección</a>}
+      <button onClick={logout} style={{ marginTop: "14px", padding: "10px 18px", border: `1.5px solid ${C.brd}`, borderRadius: "10px", background: "#fff", color: C.char, cursor: "pointer", fontFamily: F }}>Salir</button>
+    </div>
+  );
 
   if (loading) return (
     <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", fontFamily: SF, color: C.char, background: C.cream }}>

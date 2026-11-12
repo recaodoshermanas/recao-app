@@ -7,17 +7,18 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 // Carga la fila de public.usuarios enlazada al usuario de Auth (rol, nombre...).
 // BOLSA: también se leen "eventual" (para mandar a las eventuales a su propia app)
 // y "jornada" (principal/apoyo: cambia cómo cubre un turno de la bolsa).
+// ACCESOS: acceso_app (entra en la app de tienda) y areas_direccion (áreas del panel si no es dirección completa).
 async function loadPerfil(authId, token) {
   try {
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/usuarios?select=id,email,nombre,rol,activo,eventual,jornada,es_socio&auth_id=eq.${authId}`,
+      `${SUPABASE_URL}/rest/v1/usuarios?select=id,email,nombre,rol,activo,eventual,jornada,es_socio,acceso_app,areas_direccion&auth_id=eq.${authId}`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token || SUPABASE_KEY}` } }
     );
     if (!r.ok) return null;
     const rows = await r.json();
     const u = rows?.[0];
     if (!u || !u.activo) return null;
-    return { id: u.id, email: u.email, nombre: u.nombre, rol: u.rol, eventual: !!u.eventual, jornada: u.jornada || null, es_socio: !!u.es_socio };
+    return { id: u.id, email: u.email, nombre: u.nombre, rol: u.rol, eventual: !!u.eventual, jornada: u.jornada || null, es_socio: !!u.es_socio, acceso_app: u.acceso_app !== false, areas_direccion: u.areas_direccion || [] }; // ACCESOS
   } catch (_) {
     return null;
   }

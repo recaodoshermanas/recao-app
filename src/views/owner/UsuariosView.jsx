@@ -3,7 +3,7 @@ import { F, SF, C, inp, lbl, crd, btnDark, avatar } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
 
 const ROLES = [{ id: "trabajadora", label: "Trabajadora" }, { id: "admin", label: "Dirección" }];
-const ROLCHIP = { admin: { bg: "#F0ECF6", fg: "#8B6DAF", label: "Dirección" }, trabajadora: { bg: "#EAF0F8", fg: "#4A7AB5", label: "Trabajadora" } };
+const ROLCHIP = { admin: { bg: "#F0ECF6", fg: "#8B6DAF", label: "Dirección" }, trabajadora: { bg: "#EAF0F8", fg: "#4A7AB5", label: "Trabajadora" }, colaborador: { bg: "#F3EFE6", fg: "#8A7A54", label: "Sin puesto" } }; // ACCESOS
 const EVCHIP = { bg: "#F0ECE2", fg: "#8A7A54", label: "Eventual" };
 // Móvil para los avisos por WhatsApp: 9 cifras si es español; si no, con prefijo (+351…)
 export function telNormalizado(v) {

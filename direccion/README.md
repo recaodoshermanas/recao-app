@@ -1,6 +1,6 @@
 # Recao Dirección
 
-Panel de dirección de Recao (direccion.elrecao.com). Lee y escribe en la misma base de datos (Supabase) que la app, con las mismas cuentas. Solo entran usuarios con rol `admin`.
+Panel de dirección de Recao (direccion.elrecao.com). Lee y escribe en la misma base de datos (Supabase) que la app, con las mismas cuentas. Entran las cuentas de dirección completa (rol `admin`) y las que tienen alguna área en `usuarios.areas_direccion`: esas solo ven sus áreas (ver `src/lib/accesos.js` y `docs/accesos/`).
 
 ## Cómo está montado
 

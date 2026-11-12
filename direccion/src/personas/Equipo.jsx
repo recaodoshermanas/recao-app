@@ -10,9 +10,12 @@ import { Novedades } from "./Novedades.jsx";
 import { PlusFestivo } from "./PlusFestivo.jsx";
 import { HorasPorConfirmar, usePorConfirmar } from "./HorasPorConfirmar.jsx"; // #39
 import { Formacion } from "./Formacion.jsx"; // #79
+import { AREAS_ACCESO, areasDe, modoDireccion, entraEnApp, resumenAccesos } from "../../../src/lib/accesos.js"; // ACCESOS
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
-const tipoDe = (u) => (u.rol === "admin" ? "Dirección" : u.eventual ? "Eventual" : (u.tipo_turno || u.jornada) === "principal" ? "Principal" : (u.tipo_turno || u.jornada) === "apoyo" ? "Apoyo" : "Equipo");
+// ACCESOS: «colaborador» = sin puesto en tienda (solo panel). sinTienda = no hace turnos (dirección o sin puesto)
+const sinTienda = (u) => u.rol === "admin" || u.rol === "colaborador";
+const tipoDe = (u) => (u.rol === "admin" ? "Dirección" : u.rol === "colaborador" ? "Sin puesto en tienda" : u.eventual ? "Eventual" : (u.tipo_turno || u.jornada) === "principal" ? "Principal" : (u.tipo_turno || u.jornada) === "apoyo" ? "Apoyo" : "Equipo");
 const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P", "Formación": "F" };
 const ultimoDia = (a, m) => new Date(a, m, 0).getDate();
 const pctTxt = (v) => (v == null ? "–" : `${Math.round(n0(v) * 100)} %`);
@@ -98,7 +101,7 @@ function Directorio({ equipo, onFicha }) {
       .then((r) => { const m = {}; r.forEach((h) => { (m[h.usuario_id] ||= {})[h.fecha] = h.turno; }); setHor(m); }).catch(() => {});
   }, [hoy]);
   const grupos = [
-    { id: "Principal", t: "Principales" }, { id: "Apoyo", t: "Apoyos" }, { id: "Equipo", t: "Equipo" }, { id: "Eventual", t: "Eventuales" }, { id: "Dirección", t: "Dirección" },
+    { id: "Principal", t: "Principales" }, { id: "Apoyo", t: "Apoyos" }, { id: "Equipo", t: "Equipo" }, { id: "Eventual", t: "Eventuales" }, { id: "Dirección", t: "Dirección" }, { id: "Sin puesto en tienda", t: "Sin puesto en tienda" },
   ];
   const visibles = equipo.filter((u) => verInactivos || u.activo);
   const dias = Array.from({ length: 7 }, (_, i) => masDias(hoy, i));
@@ -115,14 +118,14 @@ function Directorio({ equipo, onFicha }) {
                 const t = hor[u.id]?.[hoy];
                 return (
                   <div key={u.id} role="button" tabIndex={0} className={`card tarjeta-eq ${u.activo ? "" : "inactiva"}`} onClick={() => onFicha(u.id)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onFicha(u.id); } }}>
-                    <div className="te-cab"><Avatar nombre={u.nombre} size={40} /><div><b>{u.nombre}</b><span>{u.activo ? (u.rol === "admin" ? "Dirección" : u.eventual ? `Eventual · ${u.auth_id ? "con acceso a la app" : "sin acceso a la app"}` : tipoDe(u)) : "Desactivada"}</span></div></div>
-                    {u.rol !== "admin" && (
+                    <div className="te-cab"><Avatar nombre={u.nombre} size={40} /><div><b>{u.nombre}</b><span>{u.activo ? (u.rol === "colaborador" ? resumenAccesos(u) : u.rol === "admin" ? "Dirección" : u.eventual ? `Eventual · ${u.auth_id ? "con acceso a la app" : "sin acceso a la app"}` : tipoDe(u)) : "Desactivada"}</span></div></div>
+                    {!sinTienda(u) && (
                       <div className="te-sem" aria-label="Turnos de los próximos 7 días">
                         {dias.map((f) => { const tt = hor[u.id]?.[f]; const inf = tt && TURNOS[tt]; return <span key={f} className={`ts ${f === hoy ? "hoy" : ""}`} style={inf ? { background: inf.bg, color: inf.fg } : undefined} title={`${fechaCorta(f)}: ${tt || "sin turno"}`}>{tt ? ABREV[tt] : "·"}</span>; })}
                       </div>
                     )}
-                    {u.rol !== "admin" && <p className="te-hoy">{t ? `Hoy: ${t}${TURNOS[t]?.horas ? " · " + horasTurno(t, hoy) : ""}` : "Hoy no trabaja"}</p>}
-                    {u.rol !== "admin" && <MesPersona uid={u.id} hoy={hoy} turnos={turnos} pedir={pedirMes} />}
+                    {!sinTienda(u) && <p className="te-hoy">{t ? `Hoy: ${t}${TURNOS[t]?.horas ? " · " + horasTurno(t, hoy) : ""}` : "Hoy no trabaja"}</p>}
+                    {!sinTienda(u) && <MesPersona uid={u.id} hoy={hoy} turnos={turnos} pedir={pedirMes} />}
                   </div>
                 );
               })}
@@ -154,9 +157,9 @@ function Ficha({ persona, yo, onClose, onCambio }) {
       sb.select("vacaciones_saldo", `select=dias_totales&usuario_id=eq.${uid}&anio=eq.${anio}`).catch(() => []),
       sb.select("vacaciones_solicitudes", `select=*&usuario_id=eq.${uid}&order=fecha_inicio.desc`).catch(() => []),
       sb.select("horas_extras", `select=*&usuario_id=eq.${uid}&fecha=gte.${anio}-${String(mes).padStart(2, "0")}-01&order=fecha.desc`).catch(() => []),
-      persona.eventual || persona.rol === "admin" ? null : sb.rpc("disc_fallos_30", { p_uid: uid }).catch(() => null),
-      persona.eventual || persona.rol === "admin" ? null : sb.rpc("disc_falsedades_90", { p_uid: uid }).catch(() => null),
-      persona.eventual || persona.rol === "admin" ? null : sb.rpc("plus_calculo", { p_uid: uid, p_anio: anio, p_mes: mes }).catch(() => null),
+      persona.eventual || sinTienda(persona) ? null : sb.rpc("disc_fallos_30", { p_uid: uid }).catch(() => null),
+      persona.eventual || sinTienda(persona) ? null : sb.rpc("disc_falsedades_90", { p_uid: uid }).catch(() => null),
+      persona.eventual || sinTienda(persona) ? null : sb.rpc("plus_calculo", { p_uid: uid, p_anio: anio, p_mes: mes }).catch(() => null),
     ]);
     setD({ hor, vac: resumenCalendario(sal[0]?.dias_totales ?? totalDefecto(anio), vac.map((x) => x.fecha), sols, hoy), horas, f30, s90, plus: Array.isArray(plus) ? plus[0] : plus, proxVac: sols.filter((s) => s.estado === "aceptado" && s.fecha_fin >= hoy).sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))[0] });
   }, [persona, hoy, anio, mes]);
@@ -180,7 +183,7 @@ function Ficha({ persona, yo, onClose, onCambio }) {
     <Panel titulo={persona.nombre} sub={`${tipoDe(persona)}${persona.email ? " · " + persona.email : ""}${persona.telefono ? " · " + persona.telefono : ""}`} onClose={onClose} ancho="560px">
       {!d ? <p className="empty">Cargando…</p> : (
         <>
-          {persona.rol !== "admin" && (
+          {!sinTienda(persona) && (
             <section className="ficha-sec">
               <h3>Próximos 14 días</h3>
               <div className="te-sem grande">
@@ -191,7 +194,7 @@ function Ficha({ persona, yo, onClose, onCambio }) {
               </div>
             </section>
           )}
-          {!persona.eventual && persona.rol !== "admin" && (
+          {!persona.eventual && !sinTienda(persona) && (
             <div className="ficha-kpis">
               <div><span>Vacaciones que le quedan</span><b>{d.vac.restantes}</b><small>de {d.vac.total} · {d.vac.cogidos} cogidas{d.vac.pendientes ? ` · ${d.vac.pendientes} pendientes` : ""}</small></div>
               <div className={n0(d.f30) >= 3 ? "mal" : ""}><span>Fallos · 30 días</span><b>{d.f30 ?? "–"}<small>/4</small></b><small>{n0(d.s90)} de 3 falsedades en 90 días</small></div>
@@ -199,25 +202,25 @@ function Ficha({ persona, yo, onClose, onCambio }) {
             </div>
           )}
           {d.proxVac && <p className="sub">Próximas vacaciones: {fechaCorta(d.proxVac.fecha_inicio)} → {fechaCorta(d.proxVac.fecha_fin)} ({d.proxVac.dias} días)</p>}
-          {persona.rol !== "admin" && (
+          {!sinTienda(persona) && (
             <section className="ficha-sec">
               <h3>Horas extra de {MESES[mes - 1]} <small>{d.horas.reduce((s, h) => s + n0(h.horas), 0).toLocaleString("es-ES")} h</small></h3>
               {d.horas.length === 0 ? <p className="empty">Ninguna.</p> : <ul className="pq-l">{d.horas.map((h) => <li key={h.id}><span>{fechaCorta(h.fecha)}{h.nota && <span className="pf">{h.nota}</span>}</span><b>{n0(h.horas).toLocaleString("es-ES")} h</b></li>)}</ul>}
             </section>
           )}
           <DatosPersona persona={persona} busy={busy} onGuardar={guardarDatos} />
+          {persona.auth_id && <Accesos persona={persona} esYo={esYo} busy={busy} onGuardar={(c) => cuenta({ action: "actualizar", id: persona.id, ...c }, "Accesos guardados")} />}
           <section className="ficha-sec">
             <h3>Cuenta</h3>
             {esYo ? <p className="sub">Es tu cuenta: no puedes desactivarla ni quitarte el acceso de dirección.</p> : null}
             <div className="acc-cuenta">
               {persona.eventual && !persona.auth_id && <button className="btn-p" disabled={busy} onClick={() => setAcceso(true)}>Dar acceso a la app</button>}
-              {!esYo && <button className="btn-l" disabled={busy} onClick={() => cuenta({ action: "actualizar", id: persona.id, rol: persona.rol === "admin" ? "trabajadora" : "admin" }, "Rol cambiado")}>{persona.rol === "admin" ? "Pasar a trabajadora" : "Dar acceso de dirección"}</button>}
               {!esYo && <button className="btn-l" disabled={busy} onClick={() => (persona.activo ? pedirDesactivar() : cuenta({ action: "actualizar", id: persona.id, activo: true }, "Cuenta activada"))}>{persona.activo ? "Desactivar cuenta" : "Activar cuenta"}</button>}
               {persona.auth_id && <button className="btn-l" disabled={busy} onClick={() => { const p = window.prompt(`Nueva contraseña para ${persona.nombre} (mínimo 8 caracteres)`); if (p && p.length >= 8) cuenta({ action: "resetear_password", id: persona.id, password: p }, "Contraseña cambiada"); else if (p) avisar("Mínimo 8 caracteres", "mal"); }}>Cambiar contraseña</button>}
               {persona.eventual && !esYo && <button className="btn-txt peligro" disabled={busy} onClick={pedirBorrar}>Borrar persona</button>}
             </div>
-            {!persona.eventual && persona.rol !== "admin" && <p className="sub">Las trabajadoras de plantilla no se borran, solo se desactivan: así se conserva su historial.</p>}
-            {persona.rol === "admin" && <p className="sub">Las personas de dirección no se borran, solo se desactivan.</p>}
+            {!persona.eventual && !sinTienda(persona) && <p className="sub">Las trabajadoras de plantilla no se borran, solo se desactivan: así se conserva su historial.</p>}
+            {sinTienda(persona) && <p className="sub">Las personas de dirección o sin puesto en tienda no se borran, solo se desactivan.</p>}
           </section>
         </>
       )}
@@ -235,8 +238,8 @@ function Ficha({ persona, yo, onClose, onCambio }) {
 }
 
 // #49: datos de la persona editables desde su perfil
-const TIPOS = [{ id: "principal", t: "Principal" }, { id: "apoyo", t: "Apoyo" }, { id: "eventual", t: "Eventual" }];
-const tipoId = (p) => (p.eventual ? "eventual" : (p.tipo_turno || p.jornada) === "apoyo" ? "apoyo" : (p.tipo_turno || p.jornada) === "principal" ? "principal" : "");
+const TIPOS = [{ id: "principal", t: "Principal" }, { id: "apoyo", t: "Apoyo" }, { id: "eventual", t: "Eventual" }, { id: "oficina", t: "Sin puesto en tienda" }]; // ACCESOS: oficina
+const tipoId = (p) => (p.rol === "colaborador" ? "oficina" : p.eventual ? "eventual" : (p.tipo_turno || p.jornada) === "apoyo" ? "apoyo" : (p.tipo_turno || p.jornada) === "principal" ? "principal" : "");
 function DatosPersona({ persona, busy, onGuardar }) {
   const [edit, setEdit] = useState(false);
   const base = () => ({ nombre: persona.nombre || "", email: persona.email || "", tel: persona.telefono || "", tipo: tipoId(persona) });
@@ -249,7 +252,7 @@ function DatosPersona({ persona, busy, onGuardar }) {
     const c = { nombre: f.nombre.trim(), telefono: telN || "" };
     const avisos = [];
     if (persona.auth_id && f.email.trim().toLowerCase() !== (persona.email || "").toLowerCase()) { c.email = f.email.trim(); avisos.push(`${persona.nombre} entrará en la app con el nuevo email (${c.email}). Díselo.`); }
-    if (!esAdmin && f.tipo && f.tipo !== tipoId(persona)) { c.tipo = f.tipo; avisos.push("Cambiar el tipo de puesto cambia lo que ve en la app (eventuales o plantilla) y si entra en el plus."); }
+    if (!esAdmin && f.tipo && f.tipo !== tipoId(persona)) { c.tipo = f.tipo; avisos.push(f.tipo === "oficina" ? "Sin puesto en tienda no tiene app ni turnos: solo entra en las áreas del panel que le des (necesita al menos una)." : "Cambiar el tipo de puesto cambia lo que ve en la app (eventuales o plantilla) y si entra en el plus."); }
     if (await onGuardar(c, avisos.length ? avisos.join("\n\n") + "\n\n¿Guardar?" : null)) setEdit(false);
   };
   return (
@@ -332,30 +335,110 @@ function DarAcceso({ persona, onClose, onHecho }) {
   );
 }
 
+// ACCESOS: a qué entra cada persona. App de tienda sí/no y panel de dirección: nada, algunas áreas o todas.
+const MODOS_DIR = [{ id: "no", t: "Sin acceso" }, { id: "algunas", t: "Algunas áreas" }, { id: "todas", t: "Todas (dirección)" }];
+function ElegirAccesos({ app, setApp, dir, setDir, areas, setAreas, sinPuesto, bloquearDir }) {
+  const cambiarArea = (id) => setAreas(areas.includes(id) ? areas.filter((x) => x !== id) : [...areas, id]);
+  return (
+    <>
+      <label className="chk">
+        <input type="checkbox" checked={!sinPuesto && app} disabled={sinPuesto} onChange={(e) => setApp(e.target.checked)} /> Entra en la app de tienda (app.elrecao.com)
+      </label>
+      {sinPuesto && <p className="sub">Sin puesto en tienda no tiene app: solo entra en el panel.</p>}
+      <div className="campo">Panel de dirección (direccion.elrecao.com)
+        <div className="seg">{MODOS_DIR.map((m) => <button key={m.id} type="button" disabled={bloquearDir} aria-pressed={dir === m.id} onClick={() => setDir(m.id)}>{m.t}</button>)}</div>
+        {dir === "todas" && <small>Dirección completa: ve y gestiona todo el panel, también cuentas y ajustes.</small>}
+      </div>
+      {dir === "algunas" && (
+        <div className="campo">Áreas a las que entra
+          {AREAS_ACCESO.map((a) => (
+            <label key={a.id} className="chk" title={a.suelta ? undefined : "De momento esta área solo se puede dar con dirección completa"}>
+              <input type="checkbox" checked={areas.includes(a.id)} disabled={!a.suelta} onChange={() => cambiarArea(a.id)} /> {a.label}{!a.suelta && <small> · de momento solo con dirección completa</small>}
+            </label>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+// Devuelve el motivo si la combinación no vale (o "" si vale)
+function fallaAccesos({ app, dir, areas, sinPuesto }) {
+  if (dir === "algunas" && !areas.length) return "Elige al menos un área del panel.";
+  if (sinPuesto && dir === "no") return "Sin puesto en tienda tiene que entrar en alguna área del panel.";
+  if (!app && dir === "no") return "Sin app ni panel no podría entrar en ningún sitio.";
+  return "";
+}
+
+function Accesos({ persona, esYo, busy, onGuardar }) {
+  const base = () => ({ app: entraEnApp(persona), dir: modoDireccion(persona), areas: areasDe(persona).filter((a) => AREAS_ACCESO.find((x) => x.id === a)?.suelta) });
+  const [edit, setEdit] = useState(false);
+  const [f, setF] = useState(base);
+  useEffect(() => { setF(base()); setEdit(false); }, [persona.id, persona.rol, persona.acceso_app, (persona.areas_direccion || []).join()]); // eslint-disable-line
+  const sinPuesto = persona.rol === "colaborador" || (persona.rol === "admin" && f.dir !== "todas");
+  const falla = fallaAccesos({ ...f, sinPuesto });
+  const guardar = async () => {
+    const c = { acceso_app: sinPuesto ? false : f.app, direccion: f.dir, ...(f.dir === "algunas" ? { areas: f.areas } : {}) };
+    const avisos = [];
+    if (persona.rol === "admin" && f.dir !== "todas") avisos.push(`${persona.nombre} dejará de ser dirección completa. Queda sin puesto en tienda: si trabaja en la tienda, ponle su puesto en Datos.`);
+    if (persona.rol !== "admin" && f.dir === "todas") avisos.push(`${persona.nombre} pasará a dirección completa: verá y gestionará todo el panel (cuentas, finanzas, personas…) y dejará de contar como trabajadora de tienda.`);
+    if (avisos.length && !window.confirm(avisos.join("\n\n") + "\n\n¿Guardar?")) return;
+    if (await onGuardar(c)) setEdit(false);
+  };
+  return (
+    <section className="ficha-sec">
+      <h3>Accesos {!edit && <button className="btn-l" onClick={() => setEdit(true)}>Editar</button>}</h3>
+      {!edit ? (
+        <ul className="pq-l">
+          <li><span>App de tienda</span><b>{entraEnApp(persona) ? "Sí" : "No"}</b></li>
+          <li><span>Panel de dirección</span><b>{persona.rol === "admin" ? "Todo" : areasDe(persona).length ? areasDe(persona).map((a) => AREAS_ACCESO.find((x) => x.id === a)?.label || a).join(", ") : "No"}</b></li>
+        </ul>
+      ) : (
+        <>
+          <ElegirAccesos app={f.app} setApp={(v) => setF({ ...f, app: v })} dir={f.dir} setDir={(v) => setF({ ...f, dir: v })} areas={f.areas} setAreas={(v) => setF({ ...f, areas: v })} sinPuesto={sinPuesto} bloquearDir={esYo} />
+          {esYo && <p className="sub">Es tu cuenta: no puedes quitarte la dirección completa.</p>}
+          {falla && <p className="sub" style={{ color: "var(--down)" }}>{falla}</p>}
+          <div className="acc-cuenta">
+            <button className="btn-p" disabled={!!falla || busy} onClick={guardar}>{busy ? "Guardando…" : "Guardar"}</button>
+            <button className="btn-l" disabled={busy} onClick={() => { setF(base()); setEdit(false); }}>Cancelar</button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function NuevaCuenta({ onClose, onCreada }) {
-  const [f, setF] = useState({ nombre: "", email: "", password: "", tel: "", tipo: "principal", acceso: false });
+  const [f, setF] = useState({ nombre: "", email: "", password: "", tel: "", tipo: "principal", acceso: false, app: true, dir: "no", areas: [] });
   const [busy, setBusy] = useState(false);
   const ev = f.tipo === "eventual";
+  const sinPuesto = f.tipo === "oficina";
   const pideCuenta = !ev || f.acceso;
   const telN = telNormalizado(f.tel);
-  const ok = f.nombre.trim() && (!pideCuenta || (/\S+@\S+\.\S+/.test(f.email) && f.password.length >= 8 && !!telN));
+  const falla = ev ? "" : fallaAccesos({ app: f.app, dir: f.dir, areas: f.areas, sinPuesto });
+  const ok = f.nombre.trim() && !falla && (!pideCuenta || (/\S+@\S+\.\S+/.test(f.email) && f.password.length >= 8 && !!telN));
   const crear = async () => {
     setBusy(true);
     try {
       const r = ev
         ? await sb.fn("gestion-usuarios", { action: "crear_eventual", nombre: f.nombre.trim(), telefono: telN || undefined, acceso: f.acceso, email: f.email.trim().toLowerCase(), password: f.password })
-        : await sb.fn("gestion-usuarios", { action: "crear", tipo: f.tipo === "direccion" ? "admin" : f.tipo, email: f.email.trim().toLowerCase(), nombre: f.nombre.trim(), password: f.password, telefono: telN });
+        : await sb.fn("gestion-usuarios", {
+          action: "crear", tipo: f.dir === "todas" ? "admin" : f.tipo, direccion: f.dir, ...(f.dir === "algunas" ? { areas: f.areas } : {}),
+          acceso_app: sinPuesto ? false : f.app, email: f.email.trim().toLowerCase(), nombre: f.nombre.trim(), password: f.password, telefono: telN,
+        });
       if (r && r.ok === false) throw new Error(r.error);
       avisar(ev && !f.acceso ? "Persona creada sin acceso a la app" : "Cuenta creada"); await onCreada();
     } catch (e) { avisar(e.message || "No se ha podido crear", "mal"); }
     setBusy(false);
   };
   return (
-    <Panel titulo="Nueva cuenta" sub="Elige el tipo de persona. Las eventuales pueden crearse sin acceso a la app." onClose={onClose}
+    <Panel titulo="Nueva cuenta" sub="Elige su puesto en la tienda y a qué entra: la app, el panel de dirección o los dos." onClose={onClose}
       pie={<button className="btn-p" disabled={!ok || busy} onClick={crear}>{busy ? "Creando…" : "Crear"}</button>}>
-      <div className="campo">Tipo
-        <div className="seg">{[...TIPOS, { id: "direccion", t: "Dirección" }].map((t) => <button key={t.id} aria-pressed={f.tipo === t.id} onClick={() => setF({ ...f, tipo: t.id })}>{t.t}</button>)}</div>
-      </div>
+      {f.dir !== "todas" ? (
+        <div className="campo">Puesto en la tienda
+          <div className="seg">{TIPOS.map((t) => <button key={t.id} aria-pressed={f.tipo === t.id} onClick={() => setF({ ...f, tipo: t.id })}>{t.t}</button>)}</div>
+          {sinPuesto && <small>Para quien no hace turnos (p. ej. redes sociales): no sale en horarios, plus ni cobertura.</small>}
+        </div>
+      ) : <p className="sub">Dirección completa: no hace turnos en la tienda.</p>}
       <label className="campo">Nombre<input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></label>
       {ev && <label className="chk"><input type="checkbox" checked={f.acceso} onChange={(e) => setF({ ...f, acceso: e.target.checked })} /> Darle acceso a la app ahora</label>}
       {pideCuenta && (
@@ -366,6 +449,13 @@ function NuevaCuenta({ onClose, onCreada }) {
       )}
       <label className="campo">Móvil (avisos por WhatsApp){pideCuenta ? "" : " · opcional"}<input type="tel" inputMode="tel" value={f.tel} onChange={(e) => setF({ ...f, tel: e.target.value })} placeholder="612 345 678" /></label>
       <p className="sub" style={f.tel && telN === null ? { color: "var(--down)" } : undefined}>{f.tel && telN === null ? "Formato no válido. " : ""}{TEL_AYUDA}</p>
+      {!ev && (
+        <section className="ficha-sec">
+          <h3>Accesos</h3>
+          <ElegirAccesos app={f.app} setApp={(v) => setF({ ...f, app: v })} dir={f.dir} setDir={(v) => setF({ ...f, dir: v })} areas={f.areas} setAreas={(v) => setF({ ...f, areas: v })} sinPuesto={sinPuesto && f.dir !== "todas"} />
+          {falla && <p className="sub" style={{ color: "var(--down)" }}>{falla}</p>}
+        </section>
+      )}
     </Panel>
   );
 }

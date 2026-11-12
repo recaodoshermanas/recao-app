@@ -39,6 +39,7 @@ import { TecSolicitudes } from "./tecnologia/Solicitudes.jsx";
 import { TecGuia } from "./tecnologia/Guia.jsx";
 import { Avisos, Pestanas } from "./ui.jsx";
 import { tokenRecuperar, limpiarTokenRecuperar, pedirRecuperacion, cambiarConToken } from "../../src/lib/recuperar.js";
+import { entraEnPanel, puedeArea, esDireccionCompleta } from "../../src/lib/accesos.js"; // ACCESOS
 
 const ICONO = "/icono.png";
 
@@ -124,7 +125,7 @@ function Login({ onLogin, aviso }) {
   );
 }
 
-function Cabecera({ user, area, onSalir }) {
+function Cabecera({ user, area, areas, onSalir }) {
   const [abierto, setAbierto] = useState(false);
   useEffect(() => {
     const k = (e) => { if (e.key === "Escape") setAbierto(false); };
@@ -140,7 +141,7 @@ function Cabecera({ user, area, onSalir }) {
       </button>
       <div className={`menu${abierto ? " open" : ""}`} id="menu">
         <nav className="nav" aria-label="Áreas">
-          {AREAS.filter((a) => !a.oculto).map((a) => (
+          {areas.filter((a) => !a.oculto).map((a) => (
             <button key={a.id} aria-current={a.id === area.id ? "page" : undefined} disabled={a.pronto}
               title={a.pronto ? "Más adelante" : undefined} onClick={() => { ir(a.id); setAbierto(false); }}>
               {a.label}{a.pronto && <small>pronto</small>}
@@ -149,7 +150,7 @@ function Cabecera({ user, area, onSalir }) {
         </nav>
         <div className="user">
           <span>{user.nombre}</span>
-          <button aria-current={area.id === "ajustes" ? "page" : undefined} onClick={() => ir("ajustes")}>Ajustes</button>
+          {esDireccionCompleta(user) && <button aria-current={area.id === "ajustes" ? "page" : undefined} onClick={() => ir("ajustes")}>Ajustes</button>}
           <button onClick={onSalir}>Salir</button>
         </div>
       </div>
@@ -190,10 +191,17 @@ export default function App() {
   const [aviso, setAviso] = useState("");
   const [mesFoco, setMesFoco] = useState(null);
 
-  // Solo dirección: si entra otra cuenta, se cierra la sesión aquí (en la app sigue funcionando)
+  // Solo dirección o quien tenga alguna área del panel: si entra otra cuenta, se cierra la sesión aquí (en la app sigue funcionando)
+  const enPanel = entraEnPanel(user); // ACCESOS
   useEffect(() => {
-    if (user && user.rol !== "admin") { setAviso("Esta zona es solo para dirección."); logout(); }
+    if (user && !entraEnPanel(user)) { setAviso("Esta zona es solo para dirección."); logout(); }
   }, [user, logout]);
+  // ACCESOS: solo las áreas que tiene; si abre otra (enlace, aviso), va a la primera suya
+  const areas = AREAS.filter((a) => user && puedeArea(user, a.id));
+  const permitida = !!user && puedeArea(user, area.id);
+  useEffect(() => {
+    if (user && enPanel && !permitida && areas[0]) ir(areas[0].id);
+  }, [user, enPanel, permitida, areas]);
 
   // Notificaciones: llevan a la pantalla que toca
   useEffect(() => {
@@ -205,10 +213,11 @@ export default function App() {
   const editarMes = useCallback((mk) => { setMesFoco(mk); ir("finanzas/cierre/cierre"); }, []);
 
   if (checking) return <div className="state">Cargando…</div>;
-  if (!esAdmin || tokenRecuperar()) return <Login onLogin={async (e, p) => { setAviso(""); return login(e, p); }} aviso={aviso} />;
+  if (!enPanel || tokenRecuperar()) return <Login onLogin={async (e, p) => { setAviso(""); return login(e, p); }} aviso={aviso} />;
 
   let contenido;
-  if (area.id === "pulso") contenido = <Pulso />;
+  if (!permitida) contenido = <div className="state">Cargando…</div>; // ACCESOS: de camino a un área suya
+  else if (area.id === "pulso") contenido = <Pulso />;
   else if (area.id === "personas" && sub.id === "resumen") contenido = <PersonasResumen />;
   else if (area.id === "personas" && sub.id === "horarios") contenido = <Horarios extra={extra} />;
   else if (area.id === "personas" && sub.id === "bolsa") contenido = <Bolsa />;
@@ -270,7 +279,7 @@ export default function App() {
 
   return (
     <div className="wrap">
-      <Cabecera user={user} area={area} onSalir={logout} />
+      <Cabecera user={user} area={area} areas={areas} onSalir={logout} />
       <Subnav area={area} sub={sub} />
       <main id="main" key={`${area.id}/${sub ? sub.id : ""}/${extra || ""}`}>{contenido}</main>
       <Avisos />
