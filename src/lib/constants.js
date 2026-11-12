@@ -15,6 +15,7 @@ export const GASTOS_FIJOS_TPL = [
   { key: "whatsapp_varios", label: "WhatsApp Business - Servicios Varios" }, // #107
   { key: "hetzner", label: "Hetzner - Servidor" }, // #122
   { key: "supabase", label: "Supabase - Base de datos" }, // #133
+  { key: "spotify", label: "Spotify" }, // #195
   { key: "ayuntamiento", label: "Gasto Ayuntamiento" },
 ];
 export const OWNER_PASSWORD = "Recao2019_";
