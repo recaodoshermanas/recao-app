@@ -27,6 +27,7 @@ export function RevisarTurnoView({ user }) {
   const [completadas, setCompletadas] = useState([]);
   const [noCompletadas, setNoCompletadas] = useState([]);
   const [reportadas, setReportadas] = useState([]);
+  const [info, setInfo] = useState({});
   const [marcadas, setMarcadas] = useState({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -43,6 +44,7 @@ export function RevisarTurnoView({ user }) {
       setCompletadas(r.completadas || []);
       setNoCompletadas(r.no_completadas || []);
       setReportadas(r.reportadas || []);
+      setInfo({ motivo: r.motivo, ventana: r.ventana || {}, prueba: !!r.prueba });
       setMarcadas({});
     } catch (e) { /* noop */ }
     setLoading(false);
@@ -118,7 +120,7 @@ export function RevisarTurnoView({ user }) {
       {msg && <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: C.gold, padding: "8px 12px", borderRadius: 10, marginBottom: 12, textAlign: "center" }}>{msg}</div>}
 
       {loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 24 }}>Cargando…</div>
-        : !cierre ? <div style={{ fontFamily: F, fontSize: 14, color: C.mut, textAlign: "center", padding: 30 }}>No hay ningún turno anterior reciente para revisar.</div>
+        : !cierre ? <div style={{ fontFamily: F, fontSize: 14, color: C.mut, textAlign: "center", padding: 30, lineHeight: 1.5 }}>{info.motivo === "reabierto" ? "El turno anterior se cerró tras una reapertura de dirección: no hay que verificarlo." : info.motivo === "propio" ? "El turno anterior lo cerraste tú: no hay nada que verificar." : "El turno anterior todavía no ha registrado su cierre. Cuando se registre, aparecerá aquí para verificarlo."}</div>
           : yaVerif ? (
             <div>
               {cab}
@@ -142,6 +144,9 @@ export function RevisarTurnoView({ user }) {
           ) : (
             <div>
               {cab}
+              {info.prueba && <div style={{ fontFamily: F, fontSize: 13, color: "#B23A2C", background: "#FBEAE7", borderRadius: 12, padding: "10px 12px", marginBottom: 12, lineHeight: 1.4 }}>Cuenta Prueba: puedes ver la pantalla, pero no enviar la verificación de un cierre real.</div>}
+              {info.ventana?.vencida ? <div style={{ fontFamily: F, fontSize: 13, color: "#B23A2C", background: "#FBEAE7", borderRadius: 12, padding: "10px 12px", marginBottom: 12, lineHeight: 1.4 }}>La ventana para verificar este turno terminó a las {info.ventana.hasta}. Ya no se puede verificar.</div>
+                : info.ventana?.vigente && info.ventana?.hasta ? <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: "#FFF6DB", borderRadius: 12, padding: "10px 12px", marginBottom: 12, lineHeight: 1.4 }}>Tienes hasta las <b>{info.ventana.hasta}</b> para verificar el turno anterior.</div> : null}
               <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 14, lineHeight: 1.4 }}>Estas tareas se marcaron como <b>hechas</b>. Si alguna no estaba hecha de verdad, márcala como no conforme y adjunta una o varias fotos. Cuando termines, envía la verificación.</div>
               {completadas.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>El turno anterior no marcó ninguna tarea como hecha.</div>
                 : completadas.map(it => {
@@ -165,7 +170,7 @@ export function RevisarTurnoView({ user }) {
 
               {seccionNoCompletadas}
 
-              <button onClick={pedirEnviar} disabled={completadas.length === 0} style={{ width: "100%", boxSizing: "border-box", marginTop: 18, background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: completadas.length === 0 ? 0.5 : 1 }}>
+              <button onClick={pedirEnviar} disabled={completadas.length === 0 || info.prueba || info.ventana?.vencida} style={{ width: "100%", boxSizing: "border-box", marginTop: 18, background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: (completadas.length === 0 || info.prueba || info.ventana?.vencida) ? 0.5 : 1 }}>
                 {nMarcadas > 0 ? `Enviar verificación · ${nMarcadas} no conforme${nMarcadas > 1 ? "s" : ""}` : "Enviar verificación · todo conforme"}
               </button>
             </div>

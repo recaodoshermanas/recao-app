@@ -16,6 +16,7 @@ export function DisciplinaAdminView() {
   const [causas, setCausas] = useState([]);
   const [nocierre, setNocierre] = useState([]);
   const [reabiertos, setReabiertos] = useState([]);
+  const [sinVerif, setSinVerif] = useState([]);
   const [avisos, setAvisos] = useState([]);
   const [fEstado, setFEstado] = useState("emitido");
   const [loading, setLoading] = useState(true);
@@ -56,6 +57,7 @@ export function DisciplinaAdminView() {
       if (tab === "verif") setVerif((await call("bandeja_verificaciones")).items || []);
       else if (tab === "causas") setCausas((await call("bandeja_causas")).items || []);
       else if (tab === "nocierre") { const b = await sb.rpc("sin_cerrar_bandeja", {}); setNocierre((b && b.items) || []); setReabiertos((b && b.reabiertos) || []); }
+      else if (tab === "sinverif") { const b = await sb.rpc("sin_verificar_bandeja", {}); setSinVerif(Array.isArray(b) ? b : []); }
       else if (tab === "avisos") setAvisos((await call("listar_avisos", fEstado ? { estado: fEstado } : {})).avisos || []);
     } catch (e) { flash(e.message || "Error"); }
     setLoading(false);
@@ -78,10 +80,10 @@ export function DisciplinaAdminView() {
   useEffect(() => { loadExp(expUid); }, [expUid, loadExp]);
 
   const verFoto = async (id) => { setFotos(p => ({ ...p, [id]: "loading" })); try { const r = await sb.fn("incidencias", { action: "detalle", id }); setFotos(p => ({ ...p, [id]: (r.fotos && r.fotos.length ? r.fotos : (r.foto ? [r.foto] : [])) })); } catch (e) { setFotos(p => ({ ...p, [id]: [] })); } };
-  const emitir = async (id) => { setBusy(true); try { await call("emitir_verificacion", { incidencia_id: id }); flash("Aviso emitido a la responsable"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
+  const emitir = async (id) => { setBusy(true); try { await call("emitir_verificacion", { incidencia_id: id }); flash("Aviso emitido (fallo para las personas del turno; expediente solo para quien firmó)"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const descartar = async (id) => { if (!window.confirm("¿Descartar esta verificación? No generará aviso.")) return; setBusy(true); try { await call("descartar_verificacion", { incidencia_id: id }); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const revisarCausa = async (id, decision) => { if (decision === "rechazada" && !window.confirm("Rechazar la causa generará un aviso a las dos personas del turno. ¿Seguir?")) return; setBusy(true); try { await call("revisar_causa", { cierre_item_id: id, decision, justificacion: causaNota[id] || null }); flash(decision === "rechazada" ? "Causa rechazada · aviso emitido" : "Causa validada"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
-  const emitirNoCierre = async (fecha, turno) => { if (!window.confirm("Se emitirá un aviso a las dos personas de ese turno por no registrar el cierre. ¿Seguir?")) return; setBusy(true); try { await call("emitir_no_cierre", { fecha, turno }); flash("Aviso de no-cierre emitido"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
+  const emitirNoCierre = async (fecha, turno) => { if (!window.confirm(fecha >= "2026-11-17" ? "Se emitirá un aviso a la principal de ese turno por no registrar el cierre (supuesto 4). ¿Seguir?" : "Se emitirá un aviso a las dos personas de ese turno por no registrar el cierre. ¿Seguir?")) return; setBusy(true); try { await call("emitir_no_cierre", { fecha, turno }); flash("Aviso de no-cierre emitido"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
   const reabrirTurno = async (fecha, turno) => { if (!window.confirm("Se reabrirá el cierre de ese turno: a la principal le llega el aviso y el turno vuelve a aparecer para cerrarlo (48 h), con la fecha original; lo puede cerrar la principal o la apoyo. Si pasan las 48 h sin cerrarlo, vuelve a «Sin cerrar». Si la principal acumula 3 reaperturas en 30 días (como principal) se le registra un fallo en el plus. ¿Reabrir?")) return; setBusy(true); try { const r = await sb.rpc("reabrir_turno_cierre", { p_fecha: fecha, p_turno: turno }); flash(r && r.fallos_creados ? "Turno reabierto · se ha registrado un fallo de plus por 3 reaperturas" : "Turno reabierto"); await load(); } catch (e) { flash((e.message || "Error").replace(/^RPC [^:]+: \d+ /, "")); } setBusy(false); };
   const abrirResolver = (a) => { setResolviendo(a); setRRes("confirmado"); setRNivel(""); setRNota(""); };
   const resolver = async () => { setBusy(true); try { await call("resolver", { aviso_id: resolviendo.id, resultado: rRes, nivel: rRes === "confirmado" && rNivel ? rNivel : undefined, nota: rNota || undefined }); setResolviendo(null); flash("Aviso resuelto"); await load(); } catch (e) { flash(e.message || "Error"); } setBusy(false); };
@@ -139,7 +141,7 @@ export function DisciplinaAdminView() {
       {nocierre.map((it, i) => (
       <div key={i} style={card}>
         <div style={{ fontFamily: SF, fontSize: 16, color: C.char, textTransform: "capitalize" }}>Turno {it.turno} · {fmtDia(it.fecha)}</div>
-        <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 5 }}>No se registró el cierre. Responsables: <b>{it.principal_nombre}</b>{it.apoyo_nombre ? <> y <b>{it.apoyo_nombre}</b></> : " (solo principal)"}</div>
+        <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 5 }}>No se registró el cierre. {it.solo_principal ? <>Responsable: <b>{it.principal_nombre}</b> (principal)</> : <>Responsables: <b>{it.principal_nombre}</b>{it.apoyo_nombre ? <> y <b>{it.apoyo_nombre}</b></> : " (solo principal)"}</>}</div>
         {it.puede_reabrir
           ? <>
               <button onClick={() => reabrirTurno(it.fecha, it.turno)} disabled={busy} style={{ width: "100%", marginTop: 12, background: C.char, color: C.gold, border: "none", borderRadius: 10, padding: 12, fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Reabrir turno</button>
@@ -159,6 +161,20 @@ export function DisciplinaAdminView() {
           <div style={{ fontFamily: F, fontSize: 12.5, marginTop: 5, fontWeight: 700, color: it.vencido ? "#B23A2C" : "#1E7A46" }}>{it.vencido ? "Plazo de 48 h vencido sin cerrar" : `Pueden cerrarlo hasta el ${fmtHora(it.vence_en)}`}</div>
         </div>
       ))}
+    </>);
+
+  const RESV = { fallo: ["Fallo anotado (supuesto 5)", "#FBEAE7", "#B23A2C"], exento_venta: ["Sin fallo · domingo/festivo con mucha venta", "#EAF0F8", "#3D6AA5"], sin_responsable: ["Sin fallo · nadie del turno fichado en la ventana", "#F0EADF", C.mut], pendiente: ["Pendiente de revisar (domingo/festivo)", "#F0EADF", C.mut] };
+  const SinVerif = () => sinVerif.length === 0 ? vacio("Ningún cierre sin verificar ✓")
+    : (<>
+      <div style={{ fontFamily: F, fontSize: 12, color: C.mut, margin: "0 2px 10px", lineHeight: 1.5 }}>Cierres que no se verificaron en su ventana de 2 horas (desde el 17/11/2026). Ya no se pueden verificar.</div>
+      {sinVerif.map((it, i) => { const r = RESV[it.resultado] || [it.resultado, "#F0EADF", C.mut]; return (
+        <div key={i} style={card}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ fontFamily: SF, fontSize: 16, color: C.char, textTransform: "capitalize" }}>Cierre de {it.prev_turno} · {fmtDia(it.prev_fecha)}</div>
+            <span style={{ fontFamily: F, fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 999, background: r[1], color: r[2], height: "fit-content", textAlign: "right" }}>{r[0]}</span>
+          </div>
+          <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 6, lineHeight: 1.5 }}>Cerrado por <b>{it.cerrado_por}</b> · tocaba verificarlo en el turno de {it.turno} del {fmtDia(it.fecha)}, hasta las {new Date(it.cierra).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}{it.responsable ? <> · fallo a <b>{it.responsable}</b></> : null}{it.venta_franja != null ? ` · venta 15–17 h: ${Number(it.venta_franja).toFixed(2)} €` : ""}</div>
+        </div>); })}
     </>);
 
   const Avisos = () => (
@@ -241,7 +257,7 @@ export function DisciplinaAdminView() {
   return (
     <div style={{ padding: "16px", maxWidth: 640, margin: "0 auto" }}>
       <div style={{ display: "flex", gap: 3, background: "#EFE9DD", borderRadius: 11, padding: 3, marginBottom: 14 }}>
-        {[["verif", "Verif."], ["causas", "Causas"], ["nocierre", "Sin cerrar"], ["avisos", "Avisos"], ["exp", "Exped."]].map(([v, l]) => (
+        {[["verif", "Verif."], ["causas", "Causas"], ["nocierre", "Sin cerrar"], ["sinverif", "Sin verif."], ["avisos", "Avisos"], ["exp", "Exped."]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)} style={{ flex: 1, padding: "7px 2px", borderRadius: 8, border: "none", background: tab === v ? "#fff" : "transparent", color: tab === v ? C.char : C.mut, fontFamily: F, fontSize: 11, fontWeight: 700, cursor: "pointer", boxShadow: tab === v ? SHADOW.card : "none" }}>{l}</button>
         ))}
       </div>
@@ -250,7 +266,7 @@ export function DisciplinaAdminView() {
 
       {tab === "exp" ? <Expedientes />
         : loading ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 26 }}>Cargando…</div>
-          : tab === "verif" ? <Verif /> : tab === "causas" ? <Causas /> : tab === "nocierre" ? <NoCierre /> : <Avisos />}
+          : tab === "verif" ? <Verif /> : tab === "causas" ? <Causas /> : tab === "nocierre" ? <NoCierre /> : tab === "sinverif" ? <SinVerif /> : <Avisos />}
 
       {fmOpen && (
         <div onClick={() => setFmOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
