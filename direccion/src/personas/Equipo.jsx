@@ -350,10 +350,11 @@ function ElegirAccesos({ app, setApp, dir, setDir, areas, setAreas, sinPuesto, b
         {dir === "todas" && <small>Dirección completa: ve y gestiona todo el panel, también cuentas y ajustes.</small>}
       </div>
       {dir === "algunas" && (
-        <div className="campo">Áreas a las que entra
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-2)", marginBottom: 4 }}>Áreas a las que entra</div>
           {AREAS_ACCESO.map((a) => (
-            <label key={a.id} className="chk" title={a.suelta ? undefined : "De momento esta área solo se puede dar con dirección completa"}>
-              <input type="checkbox" checked={areas.includes(a.id)} disabled={!a.suelta} onChange={() => cambiarArea(a.id)} /> {a.label}{!a.suelta && <small> · de momento solo con dirección completa</small>}
+            <label key={a.id} className="chk" style={{ display: "flex", marginTop: 8, opacity: a.suelta ? 1 : 0.55 }} title={a.suelta ? undefined : "De momento esta área solo se puede dar con dirección completa"}>
+              <input type="checkbox" style={{ width: 16, height: 16, margin: 0 }} checked={areas.includes(a.id)} disabled={!a.suelta} onChange={() => cambiarArea(a.id)} /> {a.label}{!a.suelta && <small style={{ fontWeight: 500 }}> · de momento solo con dirección completa</small>}
             </label>
           ))}
         </div>
@@ -415,7 +416,12 @@ function NuevaCuenta({ onClose, onCreada }) {
   const pideCuenta = !ev || f.acceso;
   const telN = telNormalizado(f.tel);
   const falla = ev ? "" : fallaAccesos({ app: f.app, dir: f.dir, areas: f.areas, sinPuesto });
-  const ok = f.nombre.trim() && !falla && (!pideCuenta || (/\S+@\S+\.\S+/.test(f.email) && f.password.length >= 8 && !!telN));
+  // Qué falta para poder crear (se enseña junto al botón)
+  const motivo = !f.nombre.trim() ? "Falta el nombre." : falla ? falla
+    : pideCuenta && !/\S+@\S+\.\S+/.test(f.email) ? "Falta el email (o no es válido)."
+    : pideCuenta && f.password.length < 8 ? "La contraseña tiene que tener al menos 8 caracteres."
+    : pideCuenta && !telN ? (f.tel ? "El móvil no tiene un formato válido." : "Falta el móvil.") : "";
+  const ok = !motivo;
   const crear = async () => {
     setBusy(true);
     try {
@@ -432,7 +438,7 @@ function NuevaCuenta({ onClose, onCreada }) {
   };
   return (
     <Panel titulo="Nueva cuenta" sub="Elige su puesto en la tienda y a qué entra: la app, el panel de dirección o los dos." onClose={onClose}
-      pie={<button className="btn-p" disabled={!ok || busy} onClick={crear}>{busy ? "Creando…" : "Crear"}</button>}>
+      pie={<>{motivo && <span className="sub" style={{ marginRight: 12 }}>{motivo}</span>}<button className="btn-p" disabled={!ok || busy} onClick={crear}>{busy ? "Creando…" : "Crear"}</button></>}>
       {f.dir !== "todas" ? (
         <div className="campo">Puesto en la tienda
           <div className="seg">{TIPOS.map((t) => <button key={t.id} aria-pressed={f.tipo === t.id} onClick={() => setF({ ...f, tipo: t.id })}>{t.t}</button>)}</div>
@@ -453,7 +459,6 @@ function NuevaCuenta({ onClose, onCreada }) {
         <section className="ficha-sec">
           <h3>Accesos</h3>
           <ElegirAccesos app={f.app} setApp={(v) => setF({ ...f, app: v })} dir={f.dir} setDir={(v) => setF({ ...f, dir: v })} areas={f.areas} setAreas={(v) => setF({ ...f, areas: v })} sinPuesto={sinPuesto && f.dir !== "todas"} />
-          {falla && <p className="sub" style={{ color: "var(--down)" }}>{falla}</p>}
         </section>
       )}
     </Panel>
