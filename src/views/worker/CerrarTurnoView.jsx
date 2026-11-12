@@ -157,7 +157,7 @@ export function CerrarTurnoView({ user }) {
       setConfirmando(false);
       setModo("ver");
       await load(turno, fReal);
-    } catch (e) { setMsg(e.message || "Error al cerrar"); setConfirmando(false); }
+    } catch (e) { const m = String(e.message || ""); const mm = m.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/); let t = m; try { if (mm) t = JSON.parse('"' + mm[1] + '"'); } catch (x) { /* noop */ } setMsg(t || "Error al cerrar"); setConfirmando(false); }
     setSaving(false);
   };
 
