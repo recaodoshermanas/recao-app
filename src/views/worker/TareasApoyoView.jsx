@@ -40,17 +40,19 @@ export function TareasApoyoView({ onTerminar }) {
 
   const cerrar = async () => {
     if (revisadas < todas.length) { setMsg(`Te faltan ${todas.length - revisadas} por marcar`); return; }
-    if (todas.some(t => estado[t.id].estado === "no" && !(estado[t.id].nota || "").trim())) { setMsg("Indica el motivo de las tareas no hechas"); return; }
+    if (todas.some(t => estado[t.id].estado !== "hecha" && !(estado[t.id].nota || "").trim())) { setMsg("Indica el motivo de las tareas a medias o no hechas"); return; }
     setSaving(true); setMsg("");
     try {
-      await sb.rpc("cerrar_tareas_apoyo", { p_items: todas.map(t => ({ id: t.id, hecha: estado[t.id].estado === "hecha", justificacion: estado[t.id].estado === "no" ? estado[t.id].nota.trim() : null })) });
+      // #201: tres estados. «A medias» aquí no pasa a nadie: lo valora dirección, igual que «No hecha»
+      const BD = { hecha: "hecha", medias: "a_medias", no: "no_hecha" };
+      await sb.rpc("cerrar_tareas_apoyo", { p_items: todas.map(t => ({ id: t.id, hecha: estado[t.id].estado === "hecha", estado: BD[estado[t.id].estado], justificacion: estado[t.id].estado !== "hecha" ? estado[t.id].nota.trim() : null })) });
       setHecho(true);
     } catch (e) { setMsg(errorTexto(e)); await cargar(); }
     setSaving(false);
   };
 
   const segBtn = (activo, tipo) => {
-    const col = tipo === "hecha" ? C.grn : C.red;
+    const col = tipo === "hecha" ? C.grn : tipo === "medias" ? "#C27C0E" : C.red;
     return { flex: 1, textAlign: "center", padding: "9px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 13, fontWeight: 700, border: `1.5px solid ${activo ? col : C.brd}`, background: activo ? col : "#fff", color: activo ? "#fff" : C.mut };
   };
 
@@ -77,17 +79,18 @@ export function TareasApoyoView({ onTerminar }) {
               <div style={{ fontFamily: SF, fontSize: 17, color: C.char }}>Te las ha dejado {g.de}</div>
               <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, margin: "3px 0 12px", lineHeight: 1.4 }}>Turno de {g.turno} · ciérralas antes de las <b style={{ color: C.char }}>{g.plazo_hora}</b>. Después ya no se pueden marcar.</div>
               {(g.tareas || []).map(t => {
-                const st = estado[t.id] || {}; const done = st.estado === "hecha", no = st.estado === "no";
+                const st = estado[t.id] || {}; const done = st.estado === "hecha", no = st.estado === "no", medias = st.estado === "medias";
                 return (
-                  <div key={t.id} style={{ background: "#fff", border: `1.5px solid ${no ? C.red : done ? "#BFE6CC" : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
+                  <div key={t.id} style={{ background: "#fff", border: `1.5px solid ${no ? C.red : medias ? "#C27C0E" : done ? "#BFE6CC" : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
                     <div style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500, marginBottom: 10 }}>{t.texto}</div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={() => setEst(t.id, "hecha")} style={segBtn(done, "hecha")}>Hecha</button>
+                      <button onClick={() => setEst(t.id, "medias")} style={segBtn(medias, "medias")}>A medias</button>
                       <button onClick={() => setEst(t.id, "no")} style={segBtn(no, "no")}>No hecha</button>
                     </div>
-                    {no && (
+                    {(no || medias) && (
                       <div style={{ marginTop: 12 }}>
-                        <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: "#B23A2C", marginBottom: 8 }}>¿Por qué no se ha hecho?</div>
+                        <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: medias ? "#7A4E06" : "#B23A2C", marginBottom: 8, lineHeight: 1.4 }}>{medias ? "¿Por qué se ha quedado a medias y qué falta? No pasa a nadie: lo verá dirección." : "¿Por qué no se ha hecho?"}</div>
                         <input value={st.nota || ""} onChange={e => setNota(t.id, e.target.value)} placeholder="Escribe el motivo" style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />
                       </div>
                     )}

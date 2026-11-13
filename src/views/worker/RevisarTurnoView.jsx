@@ -26,6 +26,7 @@ export function RevisarTurnoView({ user }) {
   const [yaVerif, setYaVerif] = useState(false);
   const [completadas, setCompletadas] = useState([]);
   const [noCompletadas, setNoCompletadas] = useState([]);
+  const [noProcede, setNoProcede] = useState([]); // #201: marcadas «No procedía»
   const [reportadas, setReportadas] = useState([]);
   const [info, setInfo] = useState({});
   const [marcadas, setMarcadas] = useState({});
@@ -43,6 +44,7 @@ export function RevisarTurnoView({ user }) {
       setYaVerif(!!r.ya_verificado);
       setCompletadas(r.completadas || []);
       setNoCompletadas(r.no_completadas || []);
+      setNoProcede(r.no_procede || []);
       setReportadas(r.reportadas || []);
       setInfo({ motivo: r.motivo, ventana: r.ventana || {}, prueba: !!r.prueba });
       setMarcadas({});
@@ -92,7 +94,7 @@ export function RevisarTurnoView({ user }) {
       <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: C.mutL, marginBottom: 8 }}>El turno anterior dejó sin hacer</div>
       {noCompletadas.map(it => (
         <div key={it.id} style={{ background: "#F7F4EE", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", marginBottom: 8 }}>
-          <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut }}>{it.texto}</div>
+          <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut }}>{it.texto}{it.estado === "a_medias" ? <b style={{ color: "#C27C0E", fontSize: 12 }}> · a medias (te llega a ti)</b> : null}</div>
           {it.justificacion && <div style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 3, fontStyle: "italic" }}>“{it.justificacion}”</div>}
         </div>
       ))}
@@ -129,7 +131,7 @@ export function RevisarTurnoView({ user }) {
                 <div>
                   <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: C.mutL, marginBottom: 8 }}>Marcaste como no conformes</div>
                   {reportadas.map((x, i) => {
-                    const t = completadas.find(c => c.id === x.cierre_item_id);
+                    const t = completadas.find(c => c.id === x.cierre_item_id) || noProcede.find(c => c.id === x.cierre_item_id);
                     return (
                       <div key={i} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", marginBottom: 8 }}>
                         <div style={{ fontFamily: F, fontSize: 13.5, color: C.char }}>{t ? t.texto : "Tarea"}</div>
@@ -168,9 +170,34 @@ export function RevisarTurnoView({ user }) {
                   );
                 })}
 
+              {noProcede.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: C.mutL, marginBottom: 8 }}>Marcadas como «No procedía»</div>
+                  <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 10, lineHeight: 1.4 }}>El turno anterior dijo que hoy no tocaban. Si alguna <b>sí tocaba</b>, márcala con foto: cuenta igual que una tarea marcada como hecha que no lo estaba.</div>
+                  {noProcede.map(it => {
+                    const mk = marcadas[it.id];
+                    return (
+                      <div key={it.id} style={{ background: "#fff", border: `1.5px solid ${mk ? C.red : C.brdL}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
+                        <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{it.texto} <span style={{ color: C.mut, fontSize: 12 }}>· no procedía</span></div>
+                        {!mk ? (
+                          <button onClick={() => toggle(it.id)} style={{ marginTop: 10, background: "#FBEDE9", color: C.red, border: "none", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Sí procedía</button>
+                        ) : (
+                          <div style={{ marginTop: 12 }}>
+                            {thumbs(mk, it.id)}
+                            {(mk.fotos || []).length === 0 && <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.red, marginBottom: 10, marginTop: -4 }}>Foto obligatoria (al menos una)</div>}
+                            <textarea value={mk.comentario} onChange={e => setCom(it.id, e.target.value)} placeholder="¿Por qué sí tocaba? (opcional)" rows={2} style={{ width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 12, padding: "10px 12px", fontFamily: F, fontSize: 14, color: C.char, outline: "none", resize: "vertical", marginBottom: 8 }} />
+                            <button onClick={() => toggle(it.id)} style={{ background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>Quitar marca</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {seccionNoCompletadas}
 
-              <button onClick={pedirEnviar} disabled={completadas.length === 0 || info.prueba || info.ventana?.vencida} style={{ width: "100%", boxSizing: "border-box", marginTop: 18, background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: (completadas.length === 0 || info.prueba || info.ventana?.vencida) ? 0.5 : 1 }}>
+              <button onClick={pedirEnviar} disabled={completadas.length + noProcede.length === 0 || info.prueba || info.ventana?.vencida} style={{ width: "100%", boxSizing: "border-box", marginTop: 18, background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: (completadas.length + noProcede.length === 0 || info.prueba || info.ventana?.vencida) ? 0.5 : 1 }}>
                 {nMarcadas > 0 ? `Enviar verificación · ${nMarcadas} no conforme${nMarcadas > 1 ? "s" : ""}` : "Enviar verificación · todo conforme"}
               </button>
             </div>

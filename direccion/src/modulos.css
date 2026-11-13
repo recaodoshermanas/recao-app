@@ -139,6 +139,8 @@ body.con-panel { overflow: hidden; }
 .checklist.ver li span { width: 20px; font-weight: 800; }
 .checklist.ver li.hecha span { color: var(--up); }
 .checklist.ver li.no { color: var(--down); }
+.checklist.ver li.medias span { color: #C27C0E; }
+.checklist.ver li.noproc { color: var(--muted); }
 .checklist.ver li small { display: block; color: var(--text-2); font-style: italic; }
 .nota-txt { background: var(--grid); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin: 8px 0 0; white-space: pre-wrap; }
 .ranking-barras { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 4px; }

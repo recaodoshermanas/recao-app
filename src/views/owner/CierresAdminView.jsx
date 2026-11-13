@@ -38,7 +38,7 @@ export function CierresAdminView() {
   const loadCierres = useCallback(async () => {
     setLoading(true);
     try {
-      let q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc";
+      let q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion,estado),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc";
       if (fUid) q += `&usuario_id=eq.${fUid}`;
       if (desde) q += `&fecha=gte.${desde}`;
       if (hasta) q += `&fecha=lte.${hasta}`;
@@ -108,7 +108,7 @@ export function CierresAdminView() {
         : cierres.map(c => {
           const items = c.items || [];
           const hechas = items.filter(i => i.hecha).length;
-          const pend = items.length - hechas;
+          const pend = items.filter(i => !i.hecha && i.estado !== "no_procedia").length; // #201
           const open = abierto === c.id;
           const completo = pend === 0;
           const caja = cajaDe(c);
@@ -130,7 +130,7 @@ export function CierresAdminView() {
                     {ep.length > 0 && (() => { const n = ep.reduce((s, x) => s + Number(x.ef_dif || 0) + Number(x.ta_dif || 0), 0); return <div style={{ fontFamily: F, fontSize: 12.5, fontWeight: 700, color: Math.abs(n) > 5 ? "#B23A2C" : C.goldDark, marginTop: 2 }}>Caja en Epos: {conSigno(n)}</div>; })()}
                   </div>
                 </div>
-                <span style={{ fontFamily: F, fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 999, background: completo ? "#E7F3EC" : "#FBEAE7", color: completo ? "#1E7A46" : "#B23A2C", whiteSpace: "nowrap", flexShrink: 0 }}>{hechas}/{items.length}{completo ? "" : ` · ${pend} sin hacer`}</span>
+                <span style={{ fontFamily: F, fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 999, background: completo ? "#E7F3EC" : "#FBEAE7", color: completo ? "#1E7A46" : "#B23A2C", whiteSpace: "nowrap", flexShrink: 0 }}>{hechas}/{hechas + pend}{completo ? "" : ` · ${pend} sin hacer`}</span>
               </div>
               {open && (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.brdL}` }}>
@@ -170,7 +170,9 @@ export function CierresAdminView() {
                       <span style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 1, background: it.hecha ? C.grn : "#FBEAE7", display: "flex", alignItems: "center", justifyContent: "center" }}>{it.hecha ? <IcoCheck size={13} color="#fff" sw={3} /> : <span style={{ color: "#B23A2C", fontSize: 12, fontWeight: 700 }}>✕</span>}</span>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontFamily: F, fontSize: 13.5, color: C.char }}>{it.tarea_texto}</div>
-                        {!it.hecha && it.justificacion && <div style={{ fontFamily: F, fontSize: 12, color: "#B23A2C", marginTop: 2 }}>{it.justificacion}</div>}
+                        {it.estado === "a_medias" && <div style={{ fontFamily: F, fontSize: 12, color: "#C27C0E", marginTop: 2 }}>A medias · queda: {it.justificacion}</div>}
+                        {it.estado === "no_procedia" && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 2 }}>No procedía</div>}
+                        {!it.hecha && it.estado !== "a_medias" && it.estado !== "no_procedia" && it.justificacion && <div style={{ fontFamily: F, fontSize: 12, color: "#B23A2C", marginTop: 2 }}>{it.justificacion}</div>}
                       </div>
                     </div>
                   ))}

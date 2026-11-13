@@ -30,8 +30,9 @@ function colorCelda(c) {
 function resumenCelda(c) {
   if (!c || (!c.cierre && !c.hay_turno)) return "Sin turno en el horario";
   if (!c.cierre) return "Sin cierre";
-  if (c.sin_cuenta === 0) return "Todo hecho";
-  return c.sin_cuenta === 1 ? "1 tarea sin hacer" : `${c.sin_cuenta} tareas sin hacer`;
+  const extra = [c.medias ? `${c.medias} a medias` : "", c.noproc ? `${c.noproc} no procedía` : ""].filter(Boolean).join(" · ");
+  const base = c.sin_cuenta === 0 ? "Todo hecho" : c.sin_cuenta === 1 ? "1 tarea sin hacer" : `${c.sin_cuenta} tareas sin hacer`;
+  return extra ? `${base} (${extra})` : base;
 }
 
 function Barra({ valor, meta }) {
@@ -86,6 +87,7 @@ export function TareasEquipo() {
               <strong className={`eq-big ${x.p != null && x.p >= META_HECHAS ? "ok" : "bajo"}`}>{fmtPct(x.p)}</strong>
               <Barra valor={x.p} meta={META_HECHAS} />
               <p className="eq-pie"><Falta valor={x.p} meta={META_HECHAS} /> · meta {META_HECHAS} % · {x.hechas} de {x.toca - x.descontadas}</p>
+              {(x.medias > 0 || x.noproc > 0) && <p className="eq-pie">{x.medias || 0} a medias (cuentan como no hechas) · {x.noproc || 0} no procedía (no cuentan)</p>}
             </div>); })}
         </div>
         <div className="card eq-motivos">
@@ -135,7 +137,12 @@ export function TareasEquipo() {
                         <li key={it.id}>
                           <b>{it.tarea}</b>
                           {it.motivo && <q>{it.motivo}</q>}
-                          <div className="eq-fila"><span className="eq-est pen">Pasada a {it.apoyo || "la persona de apoyo"} · {it.resultado === "sin_cerrar" ? "sin cerrar" : "no hecha"}{it.valoracion === "repercute" ? " · repercute en su plus" : it.valoracion === "no_repercute" ? " · no repercute" : " · pendiente de valorar en Cierres de turno"}</span></div>
+                          <div className="eq-fila"><span className="eq-est pen">Pasada a {it.apoyo || "la persona de apoyo"} · {it.resultado === "sin_cerrar" ? "sin cerrar" : it.est === "a_medias" ? "a medias" : "no hecha"}{it.valoracion === "repercute" ? " · repercute en su plus" : it.valoracion === "no_repercute" ? " · no repercute" : " · pendiente de valorar en Cierres de turno"}</span></div>
+                        </li>); if (it.est === "a_medias" || it.est === "no_procedia") return (
+                        <li key={it.id}>
+                          <b>{it.tarea}</b>
+                          {it.est === "a_medias" && <q>Queda: {it.motivo || "—"}</q>}
+                          <div className="eq-fila"><span className="eq-est pen">{it.est === "a_medias" ? `A medias${it.arrastrada ? " por segunda vez" : ""} · pasa al turno siguiente · cuenta como no hecha (no se valida)` : "No procedía · no cuenta en el porcentaje"}</span></div>
                         </li>); return (
                         <li key={it.id}>
                           <b>{it.tarea}</b>
@@ -205,7 +212,7 @@ function Pasables() {
   return (
     <div className="card">
       <h3>Tareas que se pueden pasar al apoyo</h3>
-      <p className="sub">Al cerrar el turno, la principal puede dejar estas tareas a la persona de apoyo que sigue en la tienda. Las demás solo tienen «Hecha» y «No hecha».</p>
+      <p className="sub">Al cerrar el turno, la principal puede dejar estas tareas a la persona de apoyo que sigue en la tienda. Las demás no tienen «Al apoyo»: si no se terminan, se dejan «A medias» para el turno siguiente.</p>
       {!l ? <Cargando /> : (
         <ul className="eq-lista">
           {l.map((t) => (

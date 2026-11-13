@@ -94,8 +94,8 @@ function useDatos() {
     poner("fichMes", sb.fn("fichajes", { accion: "panel", desde: mes0, hasta: mesFin }));
     poner("bolsa", sb.select("bolsa_turnos", `select=id,fecha,turno,estado,destino,publicado_en,cogido_en&fecha=gte.${mesAnt0}&fecha=lte.${masDias(60)}&estado=in.(abierto,cubierto)`));
     poner("sinCerrar", sb.rpc("sin_cerrar_bandeja", {}));
-    poner("cierres", sb.select("cierres_turno", `select=fecha,turno,items:cierre_items(hecha)&fecha=gte.${mesAnt0}&fecha=lte.${hoy}&limit=1000`));
-    poner("semanas", sb.select("cierres_turno", `select=fecha,items:cierre_items(hecha)&fecha=gte.${masDias(-41)}&fecha=lte.${hoy}&limit=1000`));
+    poner("cierres", sb.select("cierres_turno", `select=fecha,turno,items:cierre_items(hecha,estado)&fecha=gte.${mesAnt0}&fecha=lte.${hoy}&limit=1000`));
+    poner("semanas", sb.select("cierres_turno", `select=fecha,items:cierre_items(hecha,estado)&fecha=gte.${masDias(-41)}&fecha=lte.${hoy}&limit=1000`));
     poner("avisos", sb.select("avisos", "select=id&estado=eq.emitido"));
     poner("incid", sb.select("incidencias_turno", `select=id,cierre_item_id&descartada=eq.false&fecha=gte.${masDias(-30)}`));
     poner("causas", sb.select("causas_revision", `select=cierre_item_id&revisado_en=gte.${masDias(-31)}T00:00:00`));
@@ -173,10 +173,11 @@ export function PersonasResumen() {
   const mesAct = hoy.slice(0, 7);
   const mesPrev = (() => { const d = new Date(`${mesAct}-01T12:00:00`); d.setMonth(d.getMonth() - 1); return ymd(d).slice(0, 7); })();
   const cierres = V("cierres") || [];
-  const calc = (filtro) => { let h = 0, t = 0; cierres.filter(filtro).forEach((c) => (c.items || []).forEach((i) => { t++; if (i.hecha) h++; })); return { h, t, p: pct(h, t) }; };
+  // #201: «No procedía» no cuenta en el porcentaje; «A medias» cuenta como no hecha
+  const calc = (filtro) => { let h = 0, t = 0; cierres.filter(filtro).forEach((c) => (c.items || []).forEach((i) => { if (i.estado === "no_procedia") return; t++; if (i.hecha) h++; })); return { h, t, p: pct(h, t) }; };
   const cAct = calc((c) => c.fecha.startsWith(mesAct)); const cPrev = calc((c) => c.fecha.startsWith(mesPrev));
   const cMan = calc((c) => c.fecha.startsWith(mesAct) && c.turno === "mañana"); const cTar = calc((c) => c.fecha.startsWith(mesAct) && c.turno === "tarde");
-  const sem6 = useMemo(() => { let h = 0, t = 0; (V("semanas") || []).forEach((c) => (c.items || []).forEach((i) => { t++; if (i.hecha) h++; })); return pct(h, t); }, [s.semanas]);
+  const sem6 = useMemo(() => { let h = 0, t = 0; (V("semanas") || []).forEach((c) => (c.items || []).forEach((i) => { if (i.estado === "no_procedia") return; t++; if (i.hecha) h++; })); return pct(h, t); }, [s.semanas]);
   const sinCerrar = (V("sinCerrar") || {}).items || [];
   const revisadas = new Set((V("causas") || []).map((c) => c.cierre_item_id));
   const porRevisar = (V("incid") || []).filter((i) => !i.cierre_item_id || !revisadas.has(i.cierre_item_id)).length;

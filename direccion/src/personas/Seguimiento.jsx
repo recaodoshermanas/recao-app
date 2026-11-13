@@ -44,10 +44,27 @@ const porValorar = (x) => (x.estado === "no_hecha" || x.estado === "sin_cerrar")
 const horaDe = (ts) => new Date(ts).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 function resultadoTraspaso(x) {
   if (x.estado === "hecha") return `hecha a las ${horaDe(x.cerrado_en)}`;
+  if (x.estado === "no_hecha" && x.a_medias) return `a medias (${horaDe(x.cerrado_en)})`;
   if (x.estado === "no_hecha") return `no hecha (${horaDe(x.cerrado_en)})`;
   if (x.estado === "sin_cerrar") return "sin cerrar";
   return "todavía puede cerrarla";
 }
+
+// #201: estado de cada tarea del cierre (los cierres anteriores solo tienen hecha / no hecha)
+const estDe = (i) => i.estado || (i.hecha ? "hecha" : "no_hecha");
+const EST = {
+  hecha: { ico: "✓", cls: "hecha", txt: "Hecha" },
+  a_medias: { ico: "½", cls: "medias", txt: "A medias" },
+  no_procedia: { ico: "–", cls: "noproc", txt: "No procedía" },
+  no_hecha: { ico: "✗", cls: "no", txt: "No hecha" },
+};
+function cuentaEstados(items) {
+  const r = { hecha: 0, a_medias: 0, no_procedia: 0, no_hecha: 0 };
+  (items || []).forEach((i) => { r[estDe(i)]++; });
+  r.cuentan = r.hecha + r.a_medias + r.no_hecha; // «No procedía» no cuenta en el porcentaje
+  return r;
+}
+const pctDe = (e) => (e.cuentan ? Math.round((e.hecha / e.cuentan) * 100) : null);
 
 const PERIODOS = [{ id: "7", label: "7 días" }, { id: "30", label: "30 días" }, { id: "90", label: "90 días" }];
 
@@ -60,14 +77,21 @@ function Cierres({ foco, quitarFoco }) {
   const [abierto, setAbierto] = useState(null);
   const cargar = useCallback(async () => {
     setFilas(null);
-    const q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion),extras:cierre_tareas_extra(texto),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,justificacion,cerrado_en,valoracion),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
+    const q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion,estado,origen_item_id),extras:cierre_tareas_extra(texto),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,a_medias,justificacion,cerrado_en,valoracion),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
       + (foco ? `&id=eq.${foco.cierre_id}` : (uid ? `&usuario_id=eq.${uid}` : "") + `&fecha=gte.${masDias(hoy, -(Number(dias) - 1))}`);
     try { const r = await sb.select("cierres_turno", q); setFilas(r); if (foco && r[0]) setAbierto(r[0].id); } catch (e) { setFilas([]); }
   }, [dias, uid, hoy, foco]);
   useEffect(() => { cargar(); }, [cargar]);
   const nombreDe = useMemo(() => Object.fromEntries((equipo || []).map((u) => [u.id, u.nombre])), [equipo]);
   const trab = (equipo || []).filter((u) => u.rol === "trabajadora" && !u.eventual);
-  const tot = (filas || []).reduce((a, c) => { const it = c.items || []; a.n++; a.tareas += it.length; a.sin += it.filter((i) => !i.hecha).length; a.extra += (c.extras || []).length; a.valorar += (c.traspasos || []).filter(porValorar).length; return a; }, { n: 0, tareas: 0, sin: 0, extra: 0, valorar: 0 });
+  const tot = (filas || []).reduce((a, c) => { const e = cuentaEstados(c.items); a.n++; ["hecha", "a_medias", "no_procedia", "no_hecha", "cuentan"].forEach((k) => { a[k] += e[k]; }); a.extra += (c.extras || []).length; a.valorar += (c.traspasos || []).filter(porValorar).length; return a; }, { n: 0, hecha: 0, a_medias: 0, no_procedia: 0, no_hecha: 0, cuentan: 0, extra: 0, valorar: 0 });
+  // #201: cuántas tareas de cada estado por persona (quien firmó el cierre)
+  const porPersona = Object.values((filas || []).reduce((a, c) => {
+    const k = c.usuario_id; const e = cuentaEstados(c.items);
+    const x = (a[k] ||= { id: k, nombre: nombreDe[k] || "—", n: 0, hecha: 0, a_medias: 0, no_procedia: 0, no_hecha: 0, cuentan: 0 });
+    x.n++; ["hecha", "a_medias", "no_procedia", "no_hecha", "cuentan"].forEach((q) => { x[q] += e[q]; });
+    return a;
+  }, {})).sort((a, b) => a.nombre.localeCompare(b.nombre));
   // #199: dirección decide si una tarea pasada al apoyo que quedó sin hacer repercute en su plus
   const valorar = async (tr, v) => {
     try {
@@ -88,12 +112,26 @@ function Cierres({ foco, quitarFoco }) {
       {!filas ? <Cargando /> : (
         <div className="card">
           <div className="head">
-            <div><h2>{tot.n} cierres</h2><p className="sub">{tot.tareas ? `${Math.round((1 - tot.sin / tot.tareas) * 100)} % de las tareas hechas · ${tot.sin} sin hacer` : "Sin tareas registradas"}{tot.extra ? ` · ${tot.extra} extra` : ""}{tot.valorar ? ` · ${tot.valorar} pasadas al apoyo por valorar` : ""}</p></div>
+            <div><h2>{tot.n} cierres</h2><p className="sub">{tot.cuentan ? `${pctDe(tot)} % de las tareas hechas · ${tot.a_medias} a medias · ${tot.no_hecha} no hechas · ${tot.no_procedia} no procedía (no cuentan)` : tot.no_procedia ? `${tot.no_procedia} no procedía` : "Sin tareas registradas"}{tot.extra ? ` · ${tot.extra} extra` : ""}{tot.valorar ? ` · ${tot.valorar} pasadas al apoyo por valorar` : ""}</p></div>
           </div>
+          {porPersona.length > 0 && !foco && (
+            <div className="tabla-scroll" style={{ overflowX: "auto", marginBottom: 14 }}>
+              <table className="tabla-estados" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={{ padding: "6px 8px" }}>Persona</th><th>Cierres</th><th>Hechas</th><th>A medias</th><th>No hechas</th><th>No procedía</th><th>% hechas</th></tr></thead>
+                <tbody>
+                  {porPersona.map((x) => (
+                    <tr key={x.id} style={{ borderTop: "1px solid var(--line, #eee)" }}>
+                      <td style={{ padding: "6px 8px" }}><b>{x.nombre}</b></td><td>{x.n}</td><td>{x.hecha}</td><td>{x.a_medias}</td><td>{x.no_hecha}</td><td>{x.no_procedia}</td><td>{pctDe(x) == null ? "—" : `${pctDe(x)} %`}</td>
+                    </tr>))}
+                </tbody>
+              </table>
+              <p className="sub" style={{ marginTop: 6 }}>Por quien firmó el cierre. «No procedía» no cuenta en el porcentaje; «A medias» cuenta como no hecha para quien la deja, sin restar plus.</p>
+            </div>
+          )}
           {filas.length === 0 ? <p className="empty">No hay cierres en este periodo.</p> : (
             <ul className="cierres">
               {filas.map((c) => {
-                const it = c.items || []; const hechas = it.filter((i) => i.hecha).length; const ex = c.extras || []; const tr = c.traspasos || [];
+                const it = c.items || []; const est = cuentaEstados(it); const hechas = est.hecha; const ex = c.extras || []; const tr = c.traspasos || [];
                 const caja = c.caja && c.caja[0];
                 const ventas = caja ? n0(caja.caja1_efectivo) + n0(caja.caja1_tarjeta) + n0(caja.caja2_efectivo) + n0(caja.caja2_tarjeta) : null;
                 const open = abierto === c.id;
@@ -102,7 +140,7 @@ function Cierres({ foco, quitarFoco }) {
                     <button className="cierre-fila" onClick={() => setAbierto(open ? null : c.id)} aria-expanded={open}>
                       <span className="f">{fechaCorta(c.fecha)}<small>{c.turno}</small></span>
                       <span className="p"><Avatar nombre={nombreDe[c.usuario_id]} size={24} />{nombreDe[c.usuario_id] || "—"}</span>
-                      <span className={`t ${hechas < it.length ? "mal" : "ok"}`}>{it.length ? `${hechas}/${it.length} tareas` : "—"}{ex.length > 0 && <em className="extra-n" title={`${ex.length} tareas extra`}>+{ex.length}</em>}{tr.length > 0 && <em className="extra-n" title={`${tr.length} pasadas al apoyo`}>→{tr.length}</em>}</span>
+                      <span className={`t ${hechas < est.cuentan ? "mal" : "ok"}`}>{it.length ? `${hechas}/${est.cuentan} tareas` : "—"}{est.a_medias > 0 && <em className="extra-n" title={`${est.a_medias} a medias`}>½{est.a_medias}</em>}{est.no_procedia > 0 && <em className="extra-n" title={`${est.no_procedia} no procedía`}>–{est.no_procedia}</em>}{ex.length > 0 && <em className="extra-n" title={`${ex.length} tareas extra`}>+{ex.length}</em>}{tr.length > 0 && <em className="extra-n" title={`${tr.length} pasadas al apoyo`}>→{tr.length}</em>}</span>
                       <span className="v">{ventas != null ? eur(ventas) : "—"}</span>
                       <span className="nota">{c.notas ? "📝" : ""}</span>
                     </button>
@@ -118,10 +156,10 @@ function Cierres({ foco, quitarFoco }) {
                         )}
                         {it.length > 0 && (
                           <ul className="checklist ver">
-                            {it.map((i, k) => <li key={k} className={i.hecha ? "hecha" : "no"}><span>{i.hecha ? "✓" : "✗"}</span><div>{i.tarea_texto}{!i.hecha && i.justificacion && <small>“{i.justificacion}”</small>}</div></li>)}
+                            {it.map((i, k) => { const e = EST[estDe(i)]; return <li key={k} className={e.cls}><span>{e.ico}</span><div>{i.tarea_texto}{i.origen_item_id ? <small>Venía a medias del turno anterior</small> : null}{e.cls === "medias" && <small>A medias · queda: “{i.justificacion}”</small>}{e.cls === "noproc" && <small>No procedía</small>}{e.cls === "no" && i.justificacion && <small>“{i.justificacion}”</small>}</div></li>; })}
                           </ul>
                         )}
-                        {it.length > 0 && <p className="sub resumen-cierre">{hechas} hechas · {it.length - hechas} sin hacer{ex.length ? ` · +${ex.length} extra` : ""}</p>}
+                        {it.length > 0 && <p className="sub resumen-cierre">{hechas} hechas · {est.a_medias} a medias · {est.no_hecha} no hechas · {est.no_procedia} no procedía{ex.length ? ` · +${ex.length} extra` : ""}</p>}
                         {tr.length > 0 && (
                           <>
                             <h3 className="sub-tit">Pasadas al apoyo</h3>

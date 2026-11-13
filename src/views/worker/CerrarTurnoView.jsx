@@ -11,6 +11,10 @@ const SUG = { "Mañana": "mañana", "Apoyo 1": "mañana", "Tarde": "tarde", "Apo
 export const claveExtra = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 const MAX_EXTRA = 80;
 const chipExtra = { fontFamily: F, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: C.goldSub, background: "#FBF0DA", borderRadius: 999, padding: "3px 8px", flexShrink: 0 };
+// #201: estados del cierre. «medias» pasa al turno siguiente con lo que queda; «noproc» no cuenta en el porcentaje
+const AMBAR = "#C27C0E";
+const EST_BD = { hecha: "hecha", medias: "a_medias", noproc: "no_procedia", no: "no_hecha" };
+const fechaCortaX = (f) => new Date(f + "T12:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "numeric" });
 const grpLbl = { fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: C.mutL, margin: "2px 2px 10px" };
 
 export function CerrarTurnoView({ user }) {
@@ -78,7 +82,7 @@ export function CerrarTurnoView({ user }) {
     try {
       const ex = await sb.select("cierres_turno", `select=id&usuario_id=eq.${user.id}&fecha=eq.${ff}&turno=eq.${tn}`);
       if (ex[0]) {
-        const items = await sb.select("cierre_items", `select=tarea_texto,hecha,justificacion&cierre_id=eq.${ex[0].id}`);
+        const items = await sb.select("cierre_items", `select=tarea_texto,hecha,justificacion,estado,origen_item_id&cierre_id=eq.${ex[0].id}&order=id.asc`);
         setYaCerrado(items);
         try { setExtrasCerradas(await sb.select("cierre_tareas_extra", `select=texto&cierre_id=eq.${ex[0].id}&order=id.asc`)); } catch (e) { setExtrasCerradas([]); }
         try { setPasadasCerradas(await sb.select("cierre_traspasos", `select=tarea_texto,estado&cierre_id=eq.${ex[0].id}&order=id.asc`)); } catch (e) { setPasadasCerradas([]); }
@@ -95,13 +99,17 @@ export function CerrarTurnoView({ user }) {
       setApoyoDisp(null);
       sb.rpc("cierre_apoyos_disponibles", { p_turno: tn }).then((d) => { if (d && d.fecha === ff && (d.apoyos || []).length) setApoyoDisp(d); }).catch(() => {});
       const all = await sb.select("cierre_tareas", `select=id,orden,texto,dia_semana,hora,grupo&turno=eq.${tn}&activa=eq.true&order=orden.asc`);
-      const aplican = all.filter(t => t.dia_semana == null || t.dia_semana === dw);
+      // #201: lo que el turno anterior dejó «A medias» (no en un turno reabierto: ese día ya pasó)
+      let medias = [];
+      const reab = (ctx?.reabiertos || []).some(rb => rb.fecha === ff && rb.turno === tn);
+      if (!reab) { try { const m = await sb.rpc("cierre_pendientes_a_medias", { p_fecha: ff, p_turno: tn }); medias = Array.isArray(m) ? m : []; } catch (e) { medias = []; } }
+      const aplican = [...medias.map(m => ({ id: `m${m.id}`, texto: m.texto, hora: null, grupo: "medias", origen: m })), ...all.filter(t => t.dia_semana == null || t.dia_semana === dw)];
       setTareas(aplican);
       const st = {}; aplican.forEach(t => { st[t.id] = { estado: null, nota: "" }; });
       setEstado(st);
     } catch (e) { setMsg(e.message || "Error"); }
     setLoading(false);
-  }, [user.id, fecha]);
+  }, [user.id, fecha, ctx]);
 
   const cargarProv = useCallback(async (tn) => {
     try {
@@ -131,7 +139,7 @@ export function CerrarTurnoView({ user }) {
   const quitarExtra = (i) => setExtras((xs) => xs.filter((_, k) => k !== i));
   const abrirCierre = () => { setMsg(""); const st = {}; tareas.forEach(t => { st[t.id] = { estado: null, nota: "" }; }); setEstado(st); setModo("cerrar"); };
   const apoyos = (apoyoDisp && apoyoDisp.apoyos) || [];
-  const pasable = (t) => apoyos.length > 0 && ((apoyoDisp && apoyoDisp.pasables) || []).includes(t.id);
+  const pasable = (t) => !t.origen && apoyos.length > 0 && ((apoyoDisp && apoyoDisp.pasables) || []).includes(t.id);
   const apoyoDe = (id) => apoyos.find(a => a.usuario_id === id);
   // Con una sola persona de apoyo se elige sola; con varias, la principal elige a cuál
   const setEst = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], estado: v, apoyo: v === "apoyo" ? (s[id] && s[id].apoyo) || (apoyos.length === 1 ? apoyos[0].usuario_id : null) : null } }));
@@ -139,7 +147,7 @@ export function CerrarTurnoView({ user }) {
   const setNota = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], nota: v } }));
   const setProvCaja = (id, n) => setSelProv(s => { const c = { ...s }; if (c[id] === n) delete c[id]; else c[id] = n; return c; });
 
-  const justif = (s) => s.estado === "no" ? s.nota.trim() : null;
+  const justif = (s) => (s.estado === "no" || s.estado === "medias") ? s.nota.trim() : null;
   const revisadas = tareas.filter(t => estado[t.id] && estado[t.id].estado).length;
 
   const irACaja = async () => {
@@ -147,6 +155,8 @@ export function CerrarTurnoView({ user }) {
     if (sinRevisar.length) { setMsg(`Te faltan ${sinRevisar.length} ${sinRevisar.length === 1 ? "tarea" : "tareas"} por revisar`); return; }
     const faltaMotivo = tareas.filter(t => { const s = estado[t.id]; return s.estado === "no" && !s.nota.trim(); });
     if (faltaMotivo.length) { setMsg("Indica el motivo de las tareas no hechas"); return; }
+    const faltaQueda = tareas.filter(t => { const s = estado[t.id]; return s.estado === "medias" && !s.nota.trim(); });
+    if (faltaQueda.length) { setMsg("Escribe qué queda por hacer en las tareas a medias"); return; }
     const faltaApoyo = tareas.filter(t => { const s = estado[t.id]; return s.estado === "apoyo" && !apoyoDe(s.apoyo); });
     if (faltaApoyo.length) { setMsg("Elige a quién le dejas cada tarea"); return; }
     setMsg("");
@@ -160,7 +170,7 @@ export function CerrarTurnoView({ user }) {
   const enviar = async () => {
     setSaving(true); setMsg("");
     try {
-      const items = tareas.filter(t => estado[t.id].estado !== "apoyo").map(t => ({ tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", justificacion: justif(estado[t.id]) }));
+      const items = tareas.filter(t => estado[t.id].estado !== "apoyo").map(t => ({ tarea_id: t.origen ? t.origen.tarea_id : t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", estado: EST_BD[estado[t.id].estado], justificacion: justif(estado[t.id]), origen_item_id: t.origen ? t.origen.id : null }));
       const p_traspasos = tareas.filter(t => estado[t.id].estado === "apoyo").map(t => ({ tarea_id: t.id, apoyo_id: estado[t.id].apoyo }));
       const p_caja = sinCaja ? null : { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
       const p_facturas = sinCaja ? [] : Object.entries(selProv).map(([id, c]) => ({ id, caja: c }));
@@ -177,30 +187,50 @@ export function CerrarTurnoView({ user }) {
     setSaving(false);
   };
 
+  const vieneDe = (t) => t.origen && (
+    <div style={{ fontFamily: F, fontSize: 12.5, color: AMBAR, lineHeight: 1.4, marginTop: 4 }}>
+      La dejó a medias {t.origen.de || "el turno anterior"} ({t.origen.turno} del {fechaCortaX(t.origen.fecha)}). Queda: <b>{t.origen.queda}</b>
+    </div>
+  );
   const filaVer = (t) => (
-    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
-      <span style={{ width: 20, height: 20, borderRadius: "999px", border: `2px solid ${C.brd}`, flexShrink: 0 }} />
-      <span style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</span>
+    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: `1px solid ${t.origen ? AMBAR : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
+      <span style={{ width: 20, height: 20, borderRadius: "999px", border: `2px solid ${t.origen ? AMBAR : C.brd}`, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</span>
+        {vieneDe(t)}
+      </div>
     </div>
   );
 
   const segBtn = (activo, tipo) => {
-    const col = tipo === "hecha" ? C.grn : tipo === "apoyo" ? C.blu : C.red;
-    return { flex: 1, textAlign: "center", padding: "9px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 13, fontWeight: 700, border: `1.5px solid ${activo ? col : C.brd}`, background: activo ? col : "#fff", color: activo ? "#fff" : C.mut };
+    const col = tipo === "hecha" ? C.grn : tipo === "apoyo" ? C.blu : tipo === "medias" ? AMBAR : tipo === "noproc" ? C.mut : C.red;
+    return { flex: "1 1 40%", textAlign: "center", padding: "9px 6px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 13, fontWeight: 700, border: `1.5px solid ${activo ? col : C.brd}`, background: activo ? col : "#fff", color: activo ? "#fff" : C.mut };
   };
 
   const tarjetaTarea = (t) => {
     const st = estado[t.id] || { estado: null, nota: "" };
-    const done = st.estado === "hecha", no = st.estado === "no", alApoyo = st.estado === "apoyo";
+    const done = st.estado === "hecha", no = st.estado === "no", alApoyo = st.estado === "apoyo", medias = st.estado === "medias", noproc = st.estado === "noproc";
     const ap = alApoyo ? apoyoDe(st.apoyo) : null;
+    const puedePasar = pasable(t);
     return (
-      <div key={t.id} style={{ background: "#fff", border: `1.5px solid ${no ? C.red : done ? "#BFE6CC" : alApoyo ? C.blu : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
-        <div style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500, marginBottom: 10 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</div>
-        <div style={{ display: "flex", gap: 8 }}>
+      <div key={t.id} style={{ background: "#fff", border: `1.5px solid ${no ? C.red : done ? "#BFE6CC" : alApoyo ? C.blu : medias ? AMBAR : noproc ? C.mutL : t.origen ? AMBAR : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
+        <div style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500, marginBottom: 10 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}{vieneDe(t)}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={() => setEst(t.id, "hecha")} style={segBtn(done, "hecha")}>Hecha</button>
+          {puedePasar
+            ? <button onClick={() => setEst(t.id, "apoyo")} style={segBtn(alApoyo, "apoyo")}>Al apoyo</button>
+            : <button onClick={() => setEst(t.id, "medias")} style={segBtn(medias, "medias")}>A medias</button>}
+          {!t.origen && <button onClick={() => setEst(t.id, "noproc")} style={segBtn(noproc, "noproc")}>No procedía</button>}
           <button onClick={() => setEst(t.id, "no")} style={segBtn(no, "no")}>No hecha</button>
-          {pasable(t) && <button onClick={() => setEst(t.id, "apoyo")} style={segBtn(alApoyo, "apoyo")}>Al apoyo</button>}
         </div>
+        {medias && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: AMBAR, marginBottom: 8 }}>¿Qué queda por hacer? Pasa así al turno siguiente.</div>
+            <input value={st.nota} onChange={e => setNota(t.id, e.target.value)} placeholder="Por ejemplo: queda picar Vinted e InPost" style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#FDF6E8", border: "1px solid #EBCB8F", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#7A4E06", outline: "none" }} />
+            {t.origen && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 6, lineHeight: 1.4 }}>Ya venía a medias: si se vuelve a quedar a medias, se avisa a dirección.</div>}
+          </div>
+        )}
+        {noproc && <div style={{ marginTop: 10, fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.4 }}>Hoy no tocaba. No cuenta ni como hecha ni como no hecha. El turno siguiente lo puede revisar.</div>}
         {alApoyo && apoyos.length > 1 && (
           <div style={{ marginTop: 12 }}>
             <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.mut, marginBottom: 8 }}>¿A quién se la dejas?</div>
@@ -273,7 +303,8 @@ export function CerrarTurnoView({ user }) {
     );
   }
 
-  const diarias = tareas.filter(t => t.grupo !== "semanal");
+  const medias = tareas.filter(t => t.grupo === "medias");
+  const diarias = tareas.filter(t => t.grupo !== "semanal" && t.grupo !== "medias");
   const semanales = tareas.filter(t => t.grupo === "semanal");
   const completo = revisadas === tareas.length && tareas.length > 0;
 
@@ -288,6 +319,8 @@ export function CerrarTurnoView({ user }) {
   const pasadasN = tareas.filter(t => estado[t.id] && estado[t.id].estado === "apoyo");
   const pasadasA = [...new Set(pasadasN.map(t => (apoyoDe(estado[t.id].apoyo) || {}).nombre).filter(Boolean))];
   const noHechasList = tareas.filter(t => estado[t.id] && estado[t.id].estado === "no").map(t => ({ texto: t.texto, nota: estado[t.id].nota }));
+  const mediasList = tareas.filter(t => estado[t.id] && estado[t.id].estado === "medias").map(t => ({ texto: t.texto, nota: estado[t.id].nota }));
+  const noProcN = tareas.filter(t => estado[t.id] && estado[t.id].estado === "noproc").length;
 
   const backAction = modo === "caja" ? () => { setModo("cerrar"); setMsg(""); } : (modo === "cerrar" && !yaCerrado ? () => { setModo("ver"); setMsg(""); } : volver);
   const backLabel = modo === "caja" ? "‹ Volver a las tareas" : (modo === "cerrar" && !yaCerrado ? "‹ Volver a las tareas" : "‹ Cambiar turno");
@@ -303,17 +336,19 @@ export function CerrarTurnoView({ user }) {
         : yaCerrado ? (
           <div>
             <div style={{ background: "#E7F3EC", color: "#1E7A46", fontFamily: SF, fontSize: 16, borderRadius: 14, padding: 14, marginBottom: 14, textAlign: "center" }}>Turno cerrado ✓</div>
-            {yaCerrado.map((it, i) => (
+            {yaCerrado.map((it, i) => { const med = it.estado === "a_medias", np = it.estado === "no_procedia"; return (
               <div key={i} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 13, padding: "11px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ width: 24, height: 24, borderRadius: 7, background: it.hecha ? C.grn : "#FBEAE7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  {it.hecha ? <IcoCheck size={15} color="#fff" sw={3} /> : <span style={{ color: "#B23A2C", fontSize: 13, fontWeight: 700 }}>✕</span>}
+                <span style={{ width: 24, height: 24, borderRadius: 7, background: it.hecha ? C.grn : med ? "#FDF0D8" : np ? "#F0EADF" : "#FBEAE7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {it.hecha ? <IcoCheck size={15} color="#fff" sw={3} /> : med ? <span style={{ color: AMBAR, fontSize: 12, fontWeight: 800 }}>½</span> : np ? <span style={{ color: C.mut, fontSize: 14, fontWeight: 800 }}>–</span> : <span style={{ color: "#B23A2C", fontSize: 13, fontWeight: 700 }}>✕</span>}
                 </span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: F, fontSize: 14, color: C.char }}>{it.tarea_texto}</div>
-                  {!it.hecha && it.justificacion && <div style={{ fontFamily: F, fontSize: 12, color: "#B23A2C", marginTop: 3 }}>{it.justificacion}</div>}
+                  <div style={{ fontFamily: F, fontSize: 14, color: C.char }}>{it.tarea_texto}{it.origen_item_id ? <span style={{ color: C.mut, fontSize: 12 }}> · venía a medias</span> : null}</div>
+                  {med && <div style={{ fontFamily: F, fontSize: 12, color: AMBAR, marginTop: 3 }}>A medias · queda: {it.justificacion}</div>}
+                  {np && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 3 }}>No procedía</div>}
+                  {!it.hecha && !med && !np && it.justificacion && <div style={{ fontFamily: F, fontSize: 12, color: "#B23A2C", marginTop: 3 }}>{it.justificacion}</div>}
                 </div>
               </div>
-            ))}
+            ); })}
             {pasadasCerradas.length > 0 && <div style={{ ...grpLbl, marginTop: 16 }}>Pasadas al apoyo · no cuentan para ti</div>}
             {pasadasCerradas.map((x, i) => (
               <div key={`p${i}`} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 13, padding: "11px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
@@ -368,7 +403,9 @@ export function CerrarTurnoView({ user }) {
         ) : modo === "ver" ? (
           <div>
             <div style={{ fontFamily: F, fontSize: 13, color: C.mut, marginBottom: 14 }}>Estas son tus tareas de hoy. Ve haciéndolas y cierra el turno al final.</div>
-            {semanales.length > 0 && <div style={grpLbl}>Diarias</div>}
+            {medias.length > 0 && <div style={{ ...grpLbl, color: AMBAR }}>Vienen a medias del turno anterior</div>}
+            {medias.map(filaVer)}
+            {(semanales.length > 0 || medias.length > 0) && <div style={{ ...grpLbl, marginTop: medias.length ? 18 : 2 }}>Diarias</div>}
             {diarias.map(filaVer)}
             {semanales.length > 0 && <div style={{ ...grpLbl, marginTop: 18 }}>Hoy además</div>}
             {semanales.map(filaVer)}
@@ -377,10 +414,12 @@ export function CerrarTurnoView({ user }) {
         ) : modo === "cerrar" ? (
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 10 }}>
-              <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{apoyos.length ? "Marca cada tarea como hecha, no hecha o déjasela al apoyo." : "Marca cada tarea como hecha o no."}</div>
+              <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{apoyos.length ? "Marca cada tarea: hecha, al apoyo, a medias, no procedía o no hecha." : "Marca cada tarea: hecha, a medias, no procedía o no hecha."}</div>
               <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: completo ? C.grn : C.mutL, whiteSpace: "nowrap" }}>{revisadas} / {tareas.length}</div>
             </div>
-            {semanales.length > 0 && <div style={grpLbl}>Diarias</div>}
+            {medias.length > 0 && <div style={{ ...grpLbl, color: AMBAR }}>Vienen a medias del turno anterior</div>}
+            {medias.map(tarjetaTarea)}
+            {(semanales.length > 0 || medias.length > 0) && <div style={{ ...grpLbl, marginTop: medias.length ? 18 : 2 }}>Diarias</div>}
             {diarias.map(tarjetaTarea)}
             {semanales.length > 0 && <div style={{ ...grpLbl, marginTop: 18 }}>Hoy además</div>}
             {semanales.map(tarjetaTarea)}
@@ -495,12 +534,36 @@ export function CerrarTurnoView({ user }) {
                 <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: C.mut, marginTop: 4 }}>extra</div>
               </div>
             </div>
+            {(mediasList.length > 0 || noProcN > 0) && (
+              <div style={{ display: "flex", gap: 10, marginTop: -4, marginBottom: 14 }}>
+                <div style={{ flex: 1, background: mediasList.length ? "#FDF0D8" : "#F0EADF", borderRadius: 12, padding: "10px 14px", textAlign: "center" }}>
+                  <div style={{ fontFamily: SF, fontSize: 22, color: mediasList.length ? AMBAR : C.mut, lineHeight: 1 }}>{mediasList.length}</div>
+                  <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: mediasList.length ? AMBAR : C.mut, marginTop: 4 }}>a medias</div>
+                </div>
+                <div style={{ flex: 1, background: "#F0EADF", borderRadius: 12, padding: "10px 14px", textAlign: "center" }}>
+                  <div style={{ fontFamily: SF, fontSize: 22, color: C.mut, lineHeight: 1 }}>{noProcN}</div>
+                  <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: C.mut, marginTop: 4 }}>no procedía</div>
+                </div>
+              </div>
+            )}
 
             {extras.length > 0 && (
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 8 }}>Tareas extra</div>
                 {extras.map((x, i) => (
                   <div key={i} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 10, padding: "9px 12px", marginBottom: 7, fontFamily: F, fontSize: 13, color: C.char }}>{x}</div>
+                ))}
+              </div>
+            )}
+
+            {mediasList.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, marginBottom: 8 }}>A medias · pasan al turno siguiente</div>
+                {mediasList.map((x, i) => (
+                  <div key={i} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 10, padding: "9px 12px", marginBottom: 7 }}>
+                    <div style={{ fontFamily: F, fontSize: 13, color: C.char }}>{x.texto}</div>
+                    <div style={{ fontFamily: F, fontSize: 12, color: AMBAR, marginTop: 2 }}>Queda: {x.nota}</div>
+                  </div>
                 ))}
               </div>
             )}
