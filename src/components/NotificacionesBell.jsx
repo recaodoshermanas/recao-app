@@ -25,6 +25,7 @@ const DESTINO = {
   // Bolsa de turnos: las de la trabajadora llevan a «Turnos para cubrir»; las de dirección, a Personas → Bolsa del panel
   turno_recordatorio: "mis", // #48: recordatorio de turno a las eventuales → «Mis turnos»
   horario_cambio: "horario", horario_nuevo: "horario", // #102: dirección cambia el horario → «Mi horario»
+  bolsa_sq_en_bolsa: "horario", bolsa_sq_retirada: "horario", // #198: su turno está (o ya no está) en la bolsa → «Mi horario» en ese día
   bolsa_resumen: "cubrir", bolsa_urgente: "cubrir", bolsa_descanso_pendiente: "cubrir", bolsa_descanso_ok: "cubrir", bolsa_anulado: "cubrir",
   bolsa_cubierto: "bolsa", bolsa_soltado: "bolsa", bolsa_nadie_puede: "bolsa", bolsa_urgente_admin: "bolsa", bolsa_descanso_limite: "bolsa",
   horas_extra_pedida: "horas", horas_extra_resuelta: "horasextra", // #39
@@ -111,6 +112,7 @@ export function NotificacionesBell({ user }) {
     const ref = destino === "solicitudes_tec" ? (/^#(\d+)/.exec(n.titulo || "") || [])[1]
       : destino === "tareas_extra" ? "tareas-extra" + ((/"(.+)"/.exec(n.cuerpo || "") || [])[1] ? ":" + encodeURIComponent(/"(.+)"/.exec(n.cuerpo)[1]) : "")
       : destino === "formacion" ? n.ref || undefined
+      : destino === "horario" ? n.ref || undefined // #198: día del turno
       : destino === "formacion_admin" ? (n.ref ? "formacion:" + n.ref : "formacion")
       : undefined;
     if (destino) { setOpen(false); window.dispatchEvent(new CustomEvent("recao-nav", { detail: { destino, ref } })); }

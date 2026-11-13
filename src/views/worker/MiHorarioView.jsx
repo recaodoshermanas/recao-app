@@ -13,11 +13,13 @@ const navBtn = { border: `1.5px solid ${C.brd}`, background: "#fff", borderRadiu
 // "17:00-23:00" → "17–23" (con minutos solo si no son en punto)
 const horaCorta = (h) => (h || "").split("-").map((x) => { const [hh, mm] = x.split(":"); return mm === "00" ? String(Number(hh)) : `${Number(hh)}:${mm}`; }).join("–");
 
-export function MiHorarioView({ user }) {
-  const [cursor, setCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+export function MiHorarioView({ user, dia }) {
+  // #198: si viene de un aviso de la campana, abre el mes de ese día y lo resalta
+  const [cursor, setCursor] = useState(() => { const d = /^\d{4}-\d{2}-\d{2}$/.test(dia || "") ? new Date(dia + "T12:00:00") : new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [mapa, setMapa] = useState({});
   const [horasFor, setHorasFor] = useState({}); // #138
   const [pend, setPend] = useState({}); // BOLSA: fecha → true si es un descanso compensatorio pendiente
+  const [enBolsa, setEnBolsa] = useState({}); // #198: fecha → true si dirección ha sacado su turno a la bolsa sin quitarla
   const [fest, setFest] = useState({}); // FESTIVOS: fecha → { nombre, ambito }
 
   const { first, days } = useMemo(() => {
@@ -31,9 +33,10 @@ export function MiHorarioView({ user }) {
   const load = useCallback(async () => {
     const desde = ymd(new Date(cursor.y, cursor.m, 1));
     const hasta = ymd(new Date(cursor.y, cursor.m + 1, 0));
+    let rows0 = {};
     try {
       const rows = await sb.select("horarios", `select=fecha,turno,horas_formacion&usuario_id=eq.${user.id}&fecha=gte.${desde}&fecha=lte.${hasta}`);
-      const m = {}; const hf = {}; rows.forEach(r => { m[r.fecha] = r.turno; if (r.turno === "Formación") hf[r.fecha] = r.horas_formacion ?? HORAS_FORMACION; }); setMapa(m); setHorasFor(hf);
+      const m = {}; const hf = {}; rows.forEach(r => { m[r.fecha] = r.turno; if (r.turno === "Formación") hf[r.fecha] = r.horas_formacion ?? HORAS_FORMACION; }); setMapa(m); setHorasFor(hf); rows0 = m;
     } catch (e) { setMapa({}); }
     try { setFest(await cargarFestivos(desde, hasta)); } catch (e) { setFest({}); } // FESTIVOS
     if (BOLSA_ACTIVA) { // BOLSA
@@ -41,6 +44,10 @@ export function MiHorarioView({ user }) {
         const p = await sb.select("bolsa_turnos", `select=fecha&descanso_de=eq.${user.id}&estado=eq.abierto&sin_quitar=is.false&fecha=gte.${desde}&fecha=lte.${hasta}`);
         const mp = {}; p.forEach(r => { mp[r.fecha] = true; }); setPend(mp);
       } catch (e) { setPend({}); }
+      try { // #198
+        const q = await sb.select("bolsa_turnos", `select=fecha,turno&descanso_de=eq.${user.id}&estado=eq.abierto&sin_quitar=is.true&fecha=gte.${desde}&fecha=lte.${hasta}`);
+        const mq = {}; q.forEach(r => { if (rows0[r.fecha] === r.turno) mq[r.fecha] = true; }); setEnBolsa(mq);
+      } catch (e) { setEnBolsa({}); }
     }
   }, [cursor, user.id]);
   useEffect(() => { load(); }, [load]);
@@ -49,6 +56,7 @@ export function MiHorarioView({ user }) {
   const hoy = ymd(new Date());
   const usados = [...new Set(Object.values(mapa))];
   const hayPend = Object.keys(pend).length > 0;
+  const hayBolsa = Object.keys(enBolsa).length > 0; // #198
 
   return (
     <div style={{ padding: "16px 14px", maxWidth: 540, margin: "0 auto" }}>
@@ -66,15 +74,18 @@ export function MiHorarioView({ user }) {
           const def = mapa[f] ? TURNOS[mapa[f]] : null;
           const esHoy = f === hoy;
           const esPend = !!pend[f];
+          const esBolsa = !esPend && !!enBolsa[f]; // #198
+          const esFoco = f === dia;
           const esFest = fest[f];
           return (
-            <div key={f} title={esPend ? "Descanso pendiente: lo trabajas hasta que alguien coja tu turno" : esFest ? `Festivo: ${esFest.nombre}` : undefined} style={{ position: "relative", aspectRatio: "1", border: esPend ? "2px dashed #E0B94A" : esHoy ? `2px solid ${C.char}` : `1px solid ${C.brdL}`, borderRadius: 12, background: def ? def.bg : "#fff", color: def ? def.fg : C.mutL, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 2 }}>
+            <div key={f} title={esPend ? "Descanso pendiente: lo trabajas hasta que alguien coja tu turno" : esBolsa ? "En bolsa · a la espera: sigues apuntada hasta que alguien lo coja" : esFest ? `Festivo: ${esFest.nombre}` : undefined} style={{ position: "relative", aspectRatio: "1", border: esPend ? "2px dashed #E0B94A" : esBolsa ? "2px dashed #2F6FB2" : esHoy ? `2px solid ${C.char}` : `1px solid ${C.brdL}`, borderRadius: 12, boxShadow: esFoco ? `0 0 0 3px ${C.gold}` : undefined, background: def ? def.bg : "#fff", color: def ? def.fg : C.mutL, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 2 }}>
               {esFest && <span aria-label="Festivo" style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: 999, background: C.red }} />}
               <span style={{ fontFamily: F, fontSize: 12.5, fontWeight: 600, color: esFest && !def ? C.red : undefined }}>{d.getDate()}</span>
               {def && <span style={{ fontFamily: F, fontSize: 8.5, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{def.label}</span>}
               {def && mapa[f] === "Formación" && <span style={{ fontFamily: F, fontSize: 8.5, fontWeight: 700, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{horasFor[f] ?? HORAS_FORMACION} h</span>}
               {def && def.horas && <span style={{ fontFamily: F, fontSize: 8.5, fontWeight: 700, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{horaCorta(horasTurno(mapa[f], f))}</span>}
               {esPend && <span style={{ fontFamily: F, fontSize: 7.5, fontWeight: 700, lineHeight: 1, marginTop: 2, color: "#8A6410" }}>desc. pend.</span>}
+              {esBolsa && <span style={{ fontFamily: F, fontSize: 7.5, fontWeight: 700, lineHeight: 1, marginTop: 2, color: "#1F4F85", textAlign: "center" }}>en bolsa</span>}
             </div>
           );
         })}
@@ -95,6 +106,12 @@ export function MiHorarioView({ user }) {
       {hayPend && (
         <div style={{ marginTop: 14, fontFamily: F, fontSize: 12.5, color: "#6A4A08", background: "#FFFBF0", border: "1.5px dashed #E0B94A", borderRadius: 12, padding: "10px 12px", lineHeight: 1.45 }}>
           <strong>Descanso pendiente:</strong> ese día te toca descansar, pero sigues apuntada hasta que una compañera coja tu turno en la bolsa.
+        </div>
+      )}
+
+      {hayBolsa && ( // #198
+        <div style={{ marginTop: 14, fontFamily: F, fontSize: 12.5, color: "#1F4F85", background: "#F2F7FC", border: "1.5px dashed #2F6FB2", borderRadius: 12, padding: "10px 12px", lineHeight: 1.45 }}>
+          <strong>En bolsa · a la espera:</strong> {Object.keys(enBolsa).sort().map(x => Number(x.slice(8))).join(", ")} de {MESES[cursor.m]}. Sigues apuntada hasta que alguien coja tu turno; te avisaremos. Si nadie lo coge, lo trabajas tú.
         </div>
       )}
 

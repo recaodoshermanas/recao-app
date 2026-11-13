@@ -82,7 +82,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [screen, setScreen] = useState(() => (irInicial ? DESTINOS[irInicial][0] : "home"));
   const [pestana, setPestana] = useState(() => (irInicial ? DESTINOS[irInicial][1] : null)); // pestaña de «Horarios y fichajes» o «Mi seguimiento»
   useEffect(() => { if (irInicial && screen !== DESTINOS[irInicial][0]) irInicial = null; }, [screen]);
-  const ir = (destino, ref) => { const d = DESTINOS[destino]; if (!d) return; setPestana(d[1] || null); setVideoAbrir(destino === "formacion" ? ref || null : null); setScreen(d[0]); };
+  const ir = (destino, ref) => { const d = DESTINOS[destino]; if (!d) return; setPestana(d[1] || null); setVideoAbrir(destino === "formacion" ? ref || null : null); setDiaHorario(destino === "horario" && ref ? { fecha: ref, t: Date.now() } : null); setScreen(d[0]); };
   const abrir = (id) => { setPestana(null); setScreen(id); };
 
   const [porCubrir, setPorCubrir] = useState(0); // BOLSA
@@ -97,6 +97,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [videos, setVideos] = useState(null); // #101 formacion_mis_videos()
   const [docsNuevos, setDocsNuevos] = useState(0); // #185 documentos sin abrir en «Mis documentos»
   const [videoAbrir, setVideoAbrir] = useState(null);
+  const [diaHorario, setDiaHorario] = useState(null); // #198: día que abre «Mi horario» desde la campana
   const cargarVideos = () => { sb.rpc("formacion_mis_videos").then(setVideos).catch(() => {}); };
   const [mesFichajes, setMesFichajes] = useState(null); // FICHAJES: mes que abre «Fichajes» desde «Pendiente»
   useEffect(() => { if (screen === "home") setMesFichajes(null); }, [screen]);
@@ -237,7 +238,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       {screen === "sincodigo" && <SinCodigo onTerminar={() => setScreen("home")} onCorregir={() => setScreen("corregir")} />}
       {screen === "corregir" && <CorregirMarcadosView onTerminar={() => setScreen("sincodigo")} />}
       {screen === "marcado" && <ComprobarMarcadoView onTerminar={() => setScreen("home")} />}
-      {screen === "horarios" && <HorariosYFichajes user={user} pestana={pestana} mesFichajes={mesFichajes} />}
+      {screen === "horarios" && <HorariosYFichajes key={diaHorario ? diaHorario.t : "h"} user={user} pestana={pestana} mesFichajes={mesFichajes} dia={diaHorario && diaHorario.fecha} />}
       {screen === "documentos" && <MisDocumentosView />}
       {screen === "cerrar" && <CerrarTurnoView user={user} />}
       {screen === "cubrir" && <CubrirTurnosView user={user} />}
@@ -268,12 +269,12 @@ function Pestanas({ valor, onChange, opciones }) {
   );
 }
 
-function HorariosYFichajes({ user, pestana, mesFichajes }) {
+function HorariosYFichajes({ user, pestana, mesFichajes, dia }) {
   const [tab, setTab] = useState(pestana || "horarios");
   return (
     <>
       <Pestanas valor={tab} onChange={setTab} opciones={[{ id: "horarios", label: "Horarios" }, { id: "fichajes", label: "Fichajes" }]} />
-      {tab === "horarios" ? <MiHorarioView user={user} /> : <MisFichajesView mesInicial={mesFichajes} />}
+      {tab === "horarios" ? <MiHorarioView user={user} dia={dia} /> : <MisFichajesView mesInicial={mesFichajes} />}
     </>
   );
 }
