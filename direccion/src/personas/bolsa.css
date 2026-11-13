@@ -74,3 +74,10 @@
 .b-auto li.deshecho { opacity: .6; }
 .b-auto-f { font-weight: 700; text-transform: capitalize; }
 @media (max-width: 640px) { .b-auto li { grid-template-columns: 1fr auto; } .b-auto-d { grid-column: 1 / -1; } }
+
+/* #197: turno sacado a la bolsa sin quitar a la titular, y devoluciones de días debidos */
+.celda.sq { outline: 2px dashed #3B6FB6; outline-offset: -2px; }
+.celda.sq, .celda.dev { height: auto; min-height: 36px; padding: 3px 0; }
+.celda.dev { box-shadow: inset 0 0 0 2px #7A55A8; }
+.celda-tag { display: block; font-size: 9.5px; font-weight: 700; line-height: 1.1; margin-top: 1px; }
+.b-leyenda-sq { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #1f3f6e; background: color-mix(in srgb, #3B6FB6 8%, var(--card)); border: 2px dashed #3B6FB6; border-radius: 12px; padding: 8px 12px; margin: 0 0 12px; }

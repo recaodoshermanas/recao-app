@@ -38,7 +38,7 @@ export function MiHorarioView({ user }) {
     try { setFest(await cargarFestivos(desde, hasta)); } catch (e) { setFest({}); } // FESTIVOS
     if (BOLSA_ACTIVA) { // BOLSA
       try {
-        const p = await sb.select("bolsa_turnos", `select=fecha&descanso_de=eq.${user.id}&estado=eq.abierto&fecha=gte.${desde}&fecha=lte.${hasta}`);
+        const p = await sb.select("bolsa_turnos", `select=fecha&descanso_de=eq.${user.id}&estado=eq.abierto&sin_quitar=is.false&fecha=gte.${desde}&fecha=lte.${hasta}`);
         const mp = {}; p.forEach(r => { mp[r.fecha] = true; }); setPend(mp);
       } catch (e) { setPend({}); }
     }

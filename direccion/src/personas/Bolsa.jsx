@@ -55,7 +55,7 @@ export function Bolsa() {
   const urgentes = abiertas.filter((o) => plazo(o.fecha).urgente);
   const cubiertas = ofertas.filter((o) => o.estado === "cubierto");
   const cadenas = cubiertas.filter((o) => o.cadena_bolsa_id);
-  const descansos = abiertas.filter((o) => o.origen === "descanso_comp");
+  const descansos = abiertas.filter((o) => o.origen === "descanso_comp" && !o.sin_quitar);
 
   const retirar = async (o) => {
     if (!window.confirm(`¿Retirar de la bolsa el ${o.turno} del ${fechaLarga(o.fecha)}?`)) return;
@@ -73,6 +73,7 @@ export function Bolsa() {
   };
   const origen = (o) => {
     if (o.origen === "cadena") { const p = porId[o.origen_bolsa_id]; return p ? `Hueco por el cambio de día de ${corto(nombreDe[p.cogido_por])}` : "Hueco por un cambio de día"; }
+    if (o.sin_quitar) return `Cambio de turno de ${corto(nombreDe[o.descanso_de])}: sigue apuntada hasta que alguien lo coja${o.limite_en ? ` · se cierra ${new Date(o.limite_en).toLocaleString("es-ES", { timeZone: "Europe/Madrid", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}${o.estado === "cubierto" && o.titular_resultado ? ` · queda en «${o.titular_resultado}»` : ""}`; // #197
     if (o.origen === "descanso_comp") return `Descanso compensatorio de ${corto(nombreDe[o.descanso_de])}${o.limite_descanso ? ` · límite ${fechaCorta(o.limite_descanso)}` : ""}`;
     return null;
   };

@@ -10,6 +10,8 @@ export const TURNOS = {
   "Permiso":    { label: "Permiso",    horas: "",            tipo: "libre",    bg: "#E4DAF0", fg: "#5a4a7a" },
   // #138: se paga a 6 €/h en el sobre (4 h por defecto, editables); no cuenta como día trabajado
   "Formación":  { label: "Formación",  horas: "",            tipo: "libre",    bg: "#D7E8FB", fg: "#16406e" },
+  // #197: día libre que debe (le cubrieron el turno desde la bolsa y cobra nómina). Lo pone la bolsa sola, no se elige a mano.
+  "Libre (debe)": { label: "Libre (debe)", horas: "",        tipo: "libre",    bg: "#EDE3F5", fg: "#4a2f6e" },
 };
 
 // Horarios que cambian según el día de la semana. Cada regla vale desde su fecha (y hasta la siguiente).

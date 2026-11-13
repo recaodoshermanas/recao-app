@@ -36,7 +36,7 @@ export function CubrirTurnosView({ user }) {
       const [o, m, p, u] = await Promise.all([
         sb.rpc("bolsa_disponibles"),
         sb.select("bolsa_turnos", `select=*&cogido_por=eq.${user.id}&estado=eq.cubierto&fecha=gte.${hoy}&order=fecha.asc`),
-        sb.select("bolsa_turnos", `select=*&descanso_de=eq.${user.id}&estado=eq.abierto&order=fecha.asc`),
+        sb.select("bolsa_turnos", `select=*&descanso_de=eq.${user.id}&estado=eq.abierto&sin_quitar=is.false&order=fecha.asc`),
         sb.select("usuarios", `select=avisos_email&id=eq.${user.id}`),
       ]);
       setOfertas((o || []).filter(x => x.destino === "plantilla"));
@@ -133,7 +133,7 @@ export function CubrirTurnosView({ user }) {
                   <ShiftChip turno={o.turno} />
                   <span style={{ fontFamily: F, fontSize: 16.5, fontWeight: 700, color: C.char }}>{horarioDe(o.turno, o.fecha)}</span>
                   <span style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>
-                    {o.origen === "descanso_comp" ? "Descanso de una compañera · " : ""}{esApoyo ? "cambias un día de apoyo" : `${horasDe(o.turno, o.fecha)} h extra`}
+                    {o.origen === "descanso_comp" ? "Descanso de una compañera · " : o.origen === "cambio" ? "Cambio de turno de una compañera · " : ""}{esApoyo ? "cambias un día de apoyo" : `${horasDe(o.turno, o.fecha)} h extra`}
                   </span>
                 </div>
                 <PlazoChip f={o.fecha} />

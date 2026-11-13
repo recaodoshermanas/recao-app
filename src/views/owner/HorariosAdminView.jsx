@@ -6,7 +6,7 @@ import { TURNOS, TURNO_OPCIONES, ymd, horasTurno } from "../../lib/turnos.js";
 
 const DIAS = ["L", "M", "X", "J", "V", "S", "D"];
 const MESES_C = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-const ABBR = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P", "Formación": "F" };
+const ABBR = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P", "Formación": "F", "Libre (debe)": "LD" };
 const TRABAJO = ["Mañana", "Tarde", "Apoyo 1", "Apoyo 2", "Apoyo 3"];
 const navBtn = { border: `1.5px solid ${C.brd}`, background: "#fff", borderRadius: 10, width: 38, height: 38, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 

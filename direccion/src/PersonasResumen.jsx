@@ -18,7 +18,7 @@ const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : null);
 const horaDe = (t) => String(t).slice(11, 16);
 const h1 = (n) => `${(Math.round(Number(n || 0) * 10) / 10).toLocaleString("es-ES")} h`;
 const nomMes = (f) => new Date(`${f}T12:00:00`).toLocaleDateString("es-ES", { month: "long" });
-const NO_TRABAJO = new Set(["Descanso", "Vacaciones", "Baja", "Permiso", "Formación"]);
+const NO_TRABAJO = new Set(["Descanso", "Vacaciones", "Baja", "Permiso", "Formación", "Libre (debe)"]);
 const inicioTurno = (turno, fecha) => { const m = /(\d{1,2}):(\d{2})/.exec(horasTurno(turno, fecha) || ""); return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null; };
 const ahoraHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 

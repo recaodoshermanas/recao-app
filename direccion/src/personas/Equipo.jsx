@@ -16,7 +16,7 @@ const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "
 // ACCESOS: «colaborador» = sin puesto en tienda (solo panel). sinTienda = no hace turnos (dirección o sin puesto)
 const sinTienda = (u) => u.rol === "admin" || u.rol === "colaborador";
 const tipoDe = (u) => (u.rol === "admin" ? "Dirección" : u.rol === "colaborador" ? "Sin puesto en tienda" : u.eventual ? "Eventual" : (u.tipo_turno || u.jornada) === "principal" ? "Principal" : (u.tipo_turno || u.jornada) === "apoyo" ? "Apoyo" : "Equipo");
-const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P", "Formación": "F" };
+const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P", "Formación": "F", "Libre (debe)": "LD" };
 const ultimoDia = (a, m) => new Date(a, m, 0).getDate();
 const pctTxt = (v) => (v == null ? "–" : `${Math.round(n0(v) * 100)} %`);
 
@@ -151,7 +151,7 @@ function Ficha({ persona, yo, onClose, onCambio }) {
   const cargar = useCallback(async () => {
     if (!persona) return;
     const uid = persona.id;
-    const [hor, vac, sal, sols, horas, f30, s90, plus] = await Promise.all([
+    const [hor, vac, sal, sols, horas, f30, s90, plus, deb] = await Promise.all([
       sb.select("horarios", `select=fecha,turno&usuario_id=eq.${uid}&fecha=gte.${hoy}&fecha=lte.${masDias(hoy, 13)}&order=fecha.asc`).catch(() => []),
       sb.select("horarios", `select=fecha&usuario_id=eq.${uid}&turno=eq.Vacaciones&fecha=gte.${anio}-01-01&fecha=lte.${anio}-12-31`).catch(() => []),
       sb.select("vacaciones_saldo", `select=dias_totales&usuario_id=eq.${uid}&anio=eq.${anio}`).catch(() => []),
@@ -160,8 +160,9 @@ function Ficha({ persona, yo, onClose, onCambio }) {
       persona.eventual || sinTienda(persona) ? null : sb.rpc("disc_fallos_30", { p_uid: uid }).catch(() => null),
       persona.eventual || sinTienda(persona) ? null : sb.rpc("disc_falsedades_90", { p_uid: uid }).catch(() => null),
       persona.eventual || sinTienda(persona) ? null : sb.rpc("plus_calculo", { p_uid: uid, p_anio: anio, p_mes: mes }).catch(() => null),
+      persona.eventual || sinTienda(persona) ? null : sb.rpc("dias_debidos_resumen", { p_desde: hoy, p_hasta: hoy }).catch(() => null), // #197
     ]);
-    setD({ hor, vac: resumenCalendario(sal[0]?.dias_totales ?? totalDefecto(anio), vac.map((x) => x.fecha), sols, hoy), horas, f30, s90, plus: Array.isArray(plus) ? plus[0] : plus, proxVac: sols.filter((s) => s.estado === "aceptado" && s.fecha_fin >= hoy).sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))[0] });
+    setD({ hor, vac: resumenCalendario(sal[0]?.dias_totales ?? totalDefecto(anio), vac.map((x) => x.fecha), sols, hoy), horas, f30, s90, plus: Array.isArray(plus) ? plus[0] : plus, proxVac: sols.filter((s) => s.estado === "aceptado" && s.fecha_fin >= hoy).sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))[0] , debe: deb && (deb.nomina || []).includes(uid) ? Number((deb.saldos || {})[uid] || 0) : null });
   }, [persona, hoy, anio, mes]);
   useEffect(() => { setD(null); cargar(); }, [cargar]);
   if (!persona) return null;
@@ -198,6 +199,7 @@ function Ficha({ persona, yo, onClose, onCambio }) {
             <div className="ficha-kpis">
               <div><span>Vacaciones que le quedan</span><b>{d.vac.restantes}</b><small>de {d.vac.total} · {d.vac.cogidos} cogidas{d.vac.pendientes ? ` · ${d.vac.pendientes} pendientes` : ""}</small></div>
               <div className={n0(d.f30) >= 3 ? "mal" : ""}><span>Fallos · 30 días</span><b>{d.f30 ?? "–"}<small>/4</small></b><small>{n0(d.s90)} de 3 falsedades en 90 días</small></div>
+              {d.debe != null && <div className={d.debe > 0 ? "mal" : ""}><span>Días que debe</span><b>{d.debe}</b><small>turnos cubiertos desde la bolsa, menos devoluciones</small></div>}
               <div><span>Plus de {MESES[mes - 1]}</span><b>{d.plus ? eur(d.plus.total, 2) : "–"}</b><small>{d.plus ? `mensual ${pctTxt(d.plus.pct_mensual)} · trayectoria ${pctTxt(d.plus.pct_tray)}` : ""}</small></div>
             </div>
           )}

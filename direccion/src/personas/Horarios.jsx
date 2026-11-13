@@ -9,9 +9,11 @@ import "./bolsa.css"; // BOLSA
 import { cargarFestivos } from "../../../src/lib/festivos.js"; // FESTIVOS
 import { FestivosPanel } from "./Festivos.jsx"; // FESTIVOS
 
-const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P", "Formación": "F" };
-const LIBRES = new Set(["Descanso", "Vacaciones", "Baja", "Permiso", "Formación"]);
+const ABREV = { "Mañana": "M", "Tarde": "T", "Apoyo 1": "A1", "Apoyo 2": "A2", "Apoyo 3": "A3", "Descanso": "D", "Vacaciones": "V", "Baja": "B", "Permiso": "P", "Formación": "F", "Libre (debe)": "LD" };
+const LIBRES = new Set(["Descanso", "Vacaciones", "Baja", "Permiso", "Formación", "Libre (debe)"]);
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+// #197: «vie 20 nov, 13:00» en hora de España
+const fechaHora = (ts) => (ts ? new Date(ts).toLocaleString("es-ES", { timeZone: "Europe/Madrid", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "–");
 
 function huecosDe(filas) {
   const porDia = {};
@@ -37,6 +39,8 @@ export function Horarios({ extra }) {
   const [verFestivos, setVerFestivos] = useState(false);
   const [horasFor, setHorasFor] = useState({}); // #138: horas de cada formación de la semana ("uid|fecha" → horas)
   const [formando, setFormando] = useState(null); // #138: {horas} mientras se elige la duración de una formación
+  const [deb, setDeb] = useState({ nomina: [], saldos: {}, marcas: [] }); // #197: días que debe cada persona de nómina
+  const [sacando, setSacando] = useState(false);
 
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => masDias(lunes, i)), [lunes]);
   const abierto = useRef(false);
@@ -57,16 +61,25 @@ export function Horarios({ extra }) {
   }, [hoy]);
   useEffect(() => { setMapa(null); cargarSemana().catch(() => setMapa({})); }, [cargarSemana]);
   useEffect(() => { cargarProx().catch(() => setProx([])); }, [cargarProx]);
+  // #197: quién cobra nómina, cuántos días debe y qué días están marcados («Libre (debe)» / «Devolución»)
+  const cargarDeb = useCallback(async () => {
+    const r = await sb.rpc("dias_debidos_resumen", { p_desde: lunes, p_hasta: masDias(lunes, 6) });
+    setDeb(r && typeof r === "object" ? { nomina: r.nomina || [], saldos: r.saldos || {}, marcas: r.marcas || [] } : { nomina: [], saldos: {}, marcas: [] });
+  }, [lunes]);
+  useEffect(() => { cargarDeb().catch(() => {}); }, [cargarDeb]);
+  const devol = useMemo(() => { const m = {}; deb.marcas.forEach((x) => { if (x.tipo === "devolucion") m[`${x.usuario_id}|${x.fecha}`] = true; }); return m; }, [deb]);
   const cargarFest = useCallback(() => cargarFestivos(lunes, masDias(lunes, 6)).then(setFestivos).catch(() => setFestivos({})), [lunes]);
   useEffect(() => { cargarFest(); }, [cargarFest]);
   // BOLSA: turnos abiertos en la bolsa (huecos publicados y descansos compensatorios pendientes)
   const cargarBolsa = useCallback(async () => {
     if (!BOLSA_ACTIVA) return;
-    const r = await sb.select("bolsa_turnos", `select=id,fecha,turno,origen,descanso_de,publicado_en&estado=eq.abierto&fecha=gte.${hoy}&fecha=lte.${masDias(hoy, 60)}`);
+    const r = await sb.select("bolsa_turnos", `select=id,fecha,turno,origen,descanso_de,publicado_en,sin_quitar,limite_en&estado=eq.abierto&fecha=gte.${hoy}&fecha=lte.${masDias(hoy, 60)}`);
     setBolsa(Object.fromEntries(r.map((b) => [`${b.fecha}|${b.turno}`, b])));
   }, [hoy]);
   useEffect(() => { cargarBolsa().catch(() => setBolsa({})); }, [cargarBolsa]);
-  const pendiente = useMemo(() => { const m = {}; Object.values(bolsa).forEach((b) => { if (b.origen === "descanso_comp" && b.descanso_de) m[`${b.descanso_de}|${b.fecha}`] = true; }); return m; }, [bolsa]);
+  const pendiente = useMemo(() => { const m = {}; Object.values(bolsa).forEach((b) => { if (b.origen === "descanso_comp" && b.descanso_de && !b.sin_quitar) m[`${b.descanso_de}|${b.fecha}`] = true; }); return m; }, [bolsa]);
+  // #197: turnos sacados a la bolsa sin quitar a la titular ("uid|fecha" → oferta)
+  const sinQuitar = useMemo(() => { const m = {}; Object.values(bolsa).forEach((b) => { if (b.sin_quitar && b.descanso_de) m[`${b.descanso_de}|${b.fecha}`] = b; }); return m; }, [bolsa]);
 
   const trab = useMemo(() => (equipo || []).filter((u) => u.rol === "trabajadora" && u.activo), [equipo]);
   const grupos = useMemo(() => {
@@ -123,11 +136,37 @@ export function Horarios({ extra }) {
       avisar("Retirado de la bolsa");
     } catch (e) { avisar("No se ha podido retirar", "mal"); }
   };
+  // #197: sacar a la bolsa sin quitar a la titular, y marcar «Devolución»
+  const MOT_SQ = { no_trabaja: "Ese día no tiene un turno de trabajo", eventual: "Las eventuales no pueden sacar su turno así", empezado: "El turno ya ha empezado (hay fichaje o cierre)", sin_tiempo: "Ya no da tiempo: la oferta se cerraría antes de poder avisarla", ya_en_bolsa: "Ese turno ya está en la bolsa", solo_direccion: "Solo dirección puede hacerlo" };
+  const sacarSinQuitar = async (uid, fecha) => {
+    setSacando(true);
+    try {
+      const r = await sb.rpc("bolsa_sacar_sin_quitar", { p_uid: uid, p_fecha: fecha });
+      if (r?.ok) { avisar(`En la bolsa. Sigue apuntada hasta que alguien lo coja (se cierra ${fechaHora(r.limite)})`); await cargarBolsa(); setCelda(null); }
+      else avisar(MOT_SQ[r?.motivo] || "No se ha podido sacar a la bolsa", "mal");
+    } catch (e) { avisar("No se ha podido sacar a la bolsa", "mal"); }
+    setSacando(false);
+  };
+  const retirarSinQuitar = async (b) => {
+    if (!b?.id || !window.confirm(`¿Retirar de la bolsa el ${b.turno} del ${fechaCorta(b.fecha)}? Sigue con su turno.`)) return;
+    try {
+      await sb.update("bolsa_turnos", `id=eq.${b.id}`, { estado: "retirado", cerrado_motivo: "retirado_por_direccion" });
+      avisar("Retirado de la bolsa: sigue con su turno"); await cargarBolsa(); setCelda(null);
+    } catch (e) { avisar("No se ha podido retirar", "mal"); }
+  };
+  const marcarDevolucion = async (uid, fecha, marcar) => {
+    try {
+      const r = await sb.rpc("dias_debidos_devolucion", { p_uid: uid, p_fecha: fecha, p_marcar: marcar });
+      if (r?.ok) { avisar(marcar ? `Marcado como «Devolución». Días que debe: ${r.saldo}` : `Quitada la «Devolución». Días que debe: ${r.saldo}`); await cargarDeb(); }
+      else avisar(r?.motivo === "no_debe" ? "No debe ningún día" : r?.motivo === "no_trabaja" ? "Ese día no tiene un turno de trabajo" : "No se ha podido guardar", "mal");
+    } catch (e) { avisar("No se ha podido guardar", "mal"); }
+  };
   const tocaPublicar = (fecha, turno) => BOLSA_ACTIVA && !bolsa[`${fecha}|${turno}`] && diasHasta(fecha) <= DIAS_ANTELACION;
 
   if (!equipo || !mapa) return <Cargando />;
   const turnosDia = (f) => trab.filter((u) => mapa[`${u.id}|${f}`] && !LIBRES.has(mapa[`${u.id}|${f}`])).length;
   const hayPend = BOLSA_ACTIVA && dias.some((f) => trab.some((u) => pendiente[`${u.id}|${f}`])); // BOLSA
+  const haySq = BOLSA_ACTIVA && dias.some((f) => trab.some((u) => sinQuitar[`${u.id}|${f}`])); // #197
 
   return (
     <>
@@ -145,6 +184,7 @@ export function Horarios({ extra }) {
           </div>
         </div>
         {hayPend && <p className="b-leyenda-pend"><b>Borde discontinuo dorado</b><span>= descanso compensatorio pendiente. Esa persona libra en cuanto alguien coja su turno en la bolsa; hasta entonces sigue apuntada.</span></p>}
+        {haySq && <p className="b-leyenda-sq"><b>En bolsa</b><span>= turno sacado a la bolsa sin quitarla. Si alguien lo coge, se le quita; si no, lo trabaja ella.</span></p>}
         <div className="tabla-scroll">
           <table className="cuadrante">
             <thead>
@@ -160,7 +200,7 @@ export function Horarios({ extra }) {
             </thead>
             <tbody>
               {grupos.map((g) => (
-                <GrupoFilas key={g.id} g={g} dias={dias} mapa={mapa} hoy={hoy} onCelda={setCelda} pendiente={pendiente} horasFor={horasFor} />
+                <GrupoFilas key={g.id} g={g} dias={dias} mapa={mapa} hoy={hoy} onCelda={setCelda} pendiente={pendiente} horasFor={horasFor} sinQuitar={sinQuitar} devol={devol} />
               ))}
               <tr className="cobertura">
                 <th>Cobertura</th>
@@ -230,6 +270,35 @@ export function Horarios({ extra }) {
               </div>
             );
           })()}
+          {BOLSA_ACTIVA && (() => { // #197
+            const uid = celda.persona.id, f = celda.fecha, t = mapa[`${uid}|${f}`];
+            const sq = sinQuitar[`${uid}|${f}`];
+            const esNom = deb.nomina.includes(uid); const saldo = Number(deb.saldos[uid] || 0);
+            const trabajo = TURNOS_TRABAJO.includes(t);
+            return (
+              <>
+                {sq ? (
+                  <div className="hueco-acc">
+                    <span><b>En la bolsa sin quitarla.</b> Si alguien lo coge, se le quita y queda en {esNom ? "«Libre (debe)»" : "«Descanso»"}. Si nadie lo coge, se cierra el {fechaHora(sq.limite_en)} y lo trabaja ella.</span>
+                    <button className="btn-l" onClick={() => retirarSinQuitar(sq)}>Retirar de la bolsa</button>
+                  </div>
+                ) : trabajo && f >= hoy && !celda.persona.eventual && !bolsa[`${f}|${t}`] && (
+                  <div className="hueco-acc">
+                    <span>¿Pide cambiar este turno? Sale a la bolsa y ella sigue apuntada hasta que alguien lo coja. {esNom ? "Cobra nómina: si se lo cogen, debe el día." : "Cobra por horas: si se lo cogen, ese día no cobra."}</span>
+                    <button className="btn-p" disabled={sacando} onClick={() => sacarSinQuitar(uid, f)}>Sacar a la bolsa sin quitarla</button>
+                  </div>
+                )}
+                {esNom && (saldo > 0 || devol[`${uid}|${f}`] || t === "Libre (debe)") && (
+                  <div className="hueco-acc">
+                    <span>Días que debe: <b>{saldo}</b>{t === "Libre (debe)" ? ". Este día se lo cubrieron desde la bolsa." : ""}</span>
+                    {trabajo && (devol[`${uid}|${f}`]
+                      ? <button className="btn-l" onClick={() => marcarDevolucion(uid, f, false)}>Quitar «Devolución»</button>
+                      : saldo > 0 && <button className="btn-p" onClick={() => marcarDevolucion(uid, f, true)}>Marcar como «Devolución»</button>)}
+                  </div>
+                )}
+              </>
+            );
+          })()}
           {mapa[`${celda.persona.id}|${celda.fecha}`] && (
             <button className="btn-l quitar" onClick={() => { guardar(celda.persona.id, celda.fecha, null); setCelda(null); }}>Quitar turno</button>
           )}
@@ -250,7 +319,7 @@ export function Horarios({ extra }) {
   );
 }
 
-function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {}, horasFor = {} }) {
+function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {}, horasFor = {}, sinQuitar = {}, devol = {} }) {
   return (
     <>
       <tr className="grupo"><th colSpan={8}>{g.label}</th></tr>
@@ -262,10 +331,12 @@ function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {}, horasFor = {}
             const info = t && TURNOS[t];
             return (
               <td key={f} className={`${f === hoy ? "hoy" : ""}${f < hoy ? " pasado" : ""}`}>
-                <button className={`celda ${t ? "" : "vacia"}${pendiente[`${p.id}|${f}`] ? " pend" : ""}`} onClick={() => onCelda({ persona: p, fecha: f })}
+                <button className={`celda ${t ? "" : "vacia"}${pendiente[`${p.id}|${f}`] ? " pend" : ""}${sinQuitar[`${p.id}|${f}`] ? " sq" : ""}${devol[`${p.id}|${f}`] ? " dev" : ""}`} onClick={() => onCelda({ persona: p, fecha: f })}
                   style={info ? { background: info.bg, color: info.fg } : undefined}
-                  aria-label={`${p.nombre}, ${fechaCorta(f)}: ${t || "sin turno"}`} title={t ? `${t}${info?.horas ? " · " + horasTurno(t, f) : ""}` : "Sin turno"}>
+                  aria-label={`${p.nombre}, ${fechaCorta(f)}: ${t || "sin turno"}${sinQuitar[`${p.id}|${f}`] ? " (en bolsa)" : ""}${devol[`${p.id}|${f}`] ? " (devolución)" : ""}`} title={t ? `${t}${info?.horas ? " · " + horasTurno(t, f) : ""}${sinQuitar[`${p.id}|${f}`] ? " · en bolsa" : ""}${devol[`${p.id}|${f}`] ? " · devolución" : ""}` : "Sin turno"}>
                   {t ? (t === "Formación" ? `F ${horasFor[`${p.id}|${f}`] ?? HORAS_FORMACION}h` : ABREV[t] || t) : "+"}
+                  {sinQuitar[`${p.id}|${f}`] && <small className="celda-tag">en bolsa</small>}
+                  {devol[`${p.id}|${f}`] && <small className="celda-tag">devolución</small>}
                 </button>
               </td>
             );
