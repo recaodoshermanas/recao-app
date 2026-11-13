@@ -131,7 +131,12 @@ export function TareasEquipo() {
                   </div>
                   {(c.items || []).length > 0 && (
                     <ul className="eq-items">
-                      {c.items.map((it) => { const val = it.estado === "validada"; const nada = it.categoria === "nada"; return (
+                      {c.items.map((it) => { const val = it.estado === "validada"; const nada = it.categoria === "nada"; if (it.traspaso) return (
+                        <li key={it.id}>
+                          <b>{it.tarea}</b>
+                          {it.motivo && <q>{it.motivo}</q>}
+                          <div className="eq-fila"><span className="eq-est pen">Pasada a {it.apoyo || "la persona de apoyo"} · {it.resultado === "sin_cerrar" ? "sin cerrar" : "no hecha"}{it.valoracion === "repercute" ? " · repercute en su plus" : it.valoracion === "no_repercute" ? " · no repercute" : " · pendiente de valorar en Cierres de turno"}</span></div>
+                        </li>); return (
                         <li key={it.id}>
                           <b>{it.tarea}</b>
                           <q>{it.motivo || "Sin motivo escrito"}</q>
@@ -173,6 +178,7 @@ export function TareasEquipo() {
 
       <div className="eq-ajustes">
         <Parejas d={d} llamar={llamar} />
+        <Pasables />
         <div className="card">
           <h3>Tareas excluidas de la medida</h3>
           <p className="sub">Las tareas marcadas no cuentan ni como hechas ni como sin hacer. Se aplica a todos los días de todos los meses.</p>
@@ -182,6 +188,29 @@ export function TareasEquipo() {
           </ul>
         </div>
       </div>
+    </div>
+  );
+}
+
+// #199: tareas de la checklist que la principal puede dejar a la persona de apoyo al cerrar
+function Pasables() {
+  const [l, setL] = useState(null);
+  const cargar = useCallback(() => { sb.rpc("cierre_tareas_pasables_lista", {}).then((r) => setL(Array.isArray(r) ? r : [])).catch(() => setL([])); }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+  const cambiar = async (t, v) => {
+    try { await sb.rpc("cierre_tarea_pasable_set", { p_tarea_id: t.id, p_activa: v }); avisar(v ? "Se puede pasar al apoyo" : "Ya no se puede pasar al apoyo"); cargar(); }
+    catch (e) { avisar(e.message || "No se ha podido guardar", "error"); }
+  };
+  const dia = (n) => (n ? ` · ${["", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"][n]}` : "");
+  return (
+    <div className="card">
+      <h3>Tareas que se pueden pasar al apoyo</h3>
+      <p className="sub">Al cerrar el turno, la principal puede dejar estas tareas a la persona de apoyo que sigue en la tienda. Las demás solo tienen «Hecha» y «No hecha».</p>
+      {!l ? <Cargando /> : (
+        <ul className="eq-lista">
+          {l.map((t) => (
+            <li key={t.id}><label><input type="checkbox" checked={t.pasable} onChange={(e) => cambiar(t, e.target.checked)} /> {t.texto}<small> · {t.turno}{dia(t.dia_semana)}</small></label></li>))}
+        </ul>)}
     </div>
   );
 }

@@ -19,6 +19,7 @@ import { CajaView } from "./CajaView.jsx"; // CAJA (caída de Epos)
 import { MisFichajesView } from "./MisFichajesView.jsx"; // FICHAJES
 import { MisDocumentosView } from "./MisDocumentosView.jsx"; // DOCUMENTOS
 import { HacerPedidoView } from "./HacerPedidoView.jsx"; // #143
+import { TareasApoyoView, pendienteApoyo } from "./TareasApoyoView.jsx"; // #199
 import { HorasExtraView } from "../horasextra/HorasExtraView.jsx"; // #39
 import { WorkerView } from "../WorkerView.jsx";
 import { IR_CORREO } from "../../lib/enlaceAviso.js";
@@ -64,12 +65,12 @@ const LO_TUYO = [
   { id: "seguimiento", label: "Mi seguimiento", sub: "Avisos, plus y faltas", Ico: (p) => <IcoBars size={20} color={TOSTADO} sw={1.9} {...p} /> },
   { id: "formacion", label: "Formación", Ico: IcoFormacion }, // #101 (el subtítulo depende de los vídeos que le faltan)
 ];
-const TITULOS = { pedido: "Hacer pedido", caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", marcado: "Comprobar precio marcado", corregir: "Corregir productos marcados", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", formacion: "Formación", cambio: "Cambiar turno", horasextra: "Horas extra", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
+const TITULOS = { pedido: "Hacer pedido", caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", marcado: "Comprobar precio marcado", corregir: "Corregir productos marcados", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", formacion: "Formación", cambio: "Cambiar turno", horasextra: "Horas extra", apoyo: "Tareas que te han dejado", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 // A dónde lleva cada destino de la campana o del correo (?ir=…) en la organización nueva: [pantalla, pestaña]
 const DESTINOS = {
   avisos: ["seguimiento", "avisos"], seguimiento: ["seguimiento", null], fichajes: ["horarios", "fichajes"], horario: ["horarios", "horarios"],
-  vacaciones: ["vacaciones"], cambio: ["cambio"], horasextra: ["horasextra"], recepcion: ["recepcion"], documentos: ["documentos"], cuenta: ["cuenta"], formacion: ["formacion"],
+  vacaciones: ["vacaciones"], cambio: ["cambio"], horasextra: ["horasextra"], recepcion: ["recepcion"], tareas_apoyo: ["apoyo"], documentos: ["documentos"], cuenta: ["cuenta"], formacion: ["formacion"],
   ...(BOLSA_ACTIVA ? { cubrir: ["cubrir"] } : {}),
 };
 // Enlace de un correo de aviso (?ir=vacaciones): abre esa pantalla. Se guarda hasta que la trabajadora sale de ella,
@@ -98,6 +99,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
   const [docsNuevos, setDocsNuevos] = useState(0); // #185 documentos sin abrir en «Mis documentos»
   const [videoAbrir, setVideoAbrir] = useState(null);
   const [diaHorario, setDiaHorario] = useState(null); // #198: día que abre «Mi horario» desde la campana
+  const [tareasApoyo, setTareasApoyo] = useState([]); // #199: tareas que le ha dejado la principal
   const cargarVideos = () => { sb.rpc("formacion_mis_videos").then(setVideos).catch(() => {}); };
   const [mesFichajes, setMesFichajes] = useState(null); // FICHAJES: mes que abre «Fichajes» desde «Pendiente»
   useEffect(() => { if (screen === "home") setMesFichajes(null); }, [screen]);
@@ -119,6 +121,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
     sb.fn("disciplina", { action: "mis_avisos" }).then(r => setAvisos((r.avisos || []).filter(a => a.estado === "emitido" && !a.alegacion_en && a.plazo_alegacion && new Date(a.plazo_alegacion) > new Date()))).catch(() => {});
     cargarVideos(); // #101
     sb.rpc("mis_documentos_sin_abrir").then(r => setDocsNuevos(Number(r) || 0)).catch(() => {}); // #185
+    sb.rpc("mis_tareas_apoyo").then(r => setTareasApoyo(Array.isArray(r) ? r : [])).catch(() => {}); // #199
     sb.rpc("mis_fichajes_dudosos").then(r => setDudosos(Array.isArray(r) ? r : [])).catch(() => {}); // FICHAJES
     sb.select("horarios", `select=turno&usuario_id=eq.${user.id}&fecha=eq.${ymd(new Date())}`).then(r => setTurnoHoy((r && r[0] && r[0].turno) || null)).catch(() => {});
   }, [screen, user.id]);
@@ -129,7 +132,9 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
     const horas = def && def.tipo !== "libre" ? horasTurno(turnoHoy, ymd(new Date())) : "";
     const subturno = horas ? `${turnoHoy} · ${horas.replace("-", " – ")}` : "Tus tareas de hoy y cerrar el turno";
     const plazo = avisos.length ? avisos.map(a => a.plazo_alegacion).sort()[0] : null;
+    const pApoyo = pendienteApoyo(tareasApoyo); // #199
     const pendiente = [
+      pApoyo && { id: "apoyo", n: pApoyo.n, texto: pApoyo.texto, sub: pApoyo.sub, urgente: true, onClick: () => abrir("apoyo") },
       avisos.length && { id: "avisos", n: avisos.length, texto: avisos.length > 1 ? "Avisos por responder" : "Aviso por responder", sub: `Quedan ${horasQuedan(plazo)} h`, urgente: true, onClick: () => ir("avisos") },
       porRecepcionar.n && { id: "recepcion", n: porRecepcionar.n, texto: `${porRecepcionar.n > 1 ? "Pedidos" : "Pedido"} por recepcionar${porRecepcionar.listos ? ` · ${porRecepcionar.listos} ya ${porRecepcionar.listos > 1 ? "tienen" : "tiene"} su factura` : ""}`, onClick: () => abrir("recepcion") }, // RECEPCION
       BOLSA_ACTIVA && porCubrir && { id: "cubrir", n: porCubrir, texto: `${porCubrir > 1 ? "Turnos" : "Turno"} por cubrir en tus días libres`, onClick: () => abrir("cubrir") }, // BOLSA
@@ -241,6 +246,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       {screen === "horarios" && <HorariosYFichajes key={diaHorario ? diaHorario.t : "h"} user={user} pestana={pestana} mesFichajes={mesFichajes} dia={diaHorario && diaHorario.fecha} />}
       {screen === "documentos" && <MisDocumentosView />}
       {screen === "cerrar" && <CerrarTurnoView user={user} />}
+      {screen === "apoyo" && <TareasApoyoView onTerminar={() => setScreen("home")} />}
       {screen === "cubrir" && <CubrirTurnosView user={user} />}
       {screen === "revisar" && <RevisarTurnoView user={user} />}
       {screen === "seguimiento" && <Seguimiento user={user} pestana={pestana} />}

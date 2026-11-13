@@ -12,6 +12,7 @@ import {
 import { MisTurnosMes } from "./MisTurnosMes.jsx"; // #37 resumen del mes
 import { HorasExtraView } from "../horasextra/HorasExtraView.jsx"; // #39
 import { TarjetaFormacion, FormacionView } from "./Formacion.jsx"; // #79 formación en vídeo
+import { TareasApoyoView, pendienteApoyo } from "../worker/TareasApoyoView.jsx"; // #199
 import { card, seccion, btnNo, btnSi, btnTexto, ShiftChip, DateBlock, PlazoChip, Toast, Hoja, PreferenciaAvisos } from "../bolsa/BolsaUI.jsx";
 
 const FILTROS = [
@@ -38,6 +39,7 @@ export function EventualApp({ user }) {
       const d = e.detail && e.detail.destino;
       if (d === "mis") setTab("mis"); else if (d === "cubrir") setTab("bolsa");
       else if (d === "formacion") { setVideoAbrir(e.detail.ref || null); setTab("formacion"); } // #79
+      else if (d === "tareas_apoyo") setTab("apoyo"); // #199
     };
     window.addEventListener("recao-nav", h);
     return () => window.removeEventListener("recao-nav", h);
@@ -59,12 +61,14 @@ export function EventualApp({ user }) {
   const [normaVista, setNormaVista] = useState(leerNorma);
   const [toast, setToast] = useState("");
   const [horasPend, setHorasPend] = useState({}); // #39: fecha → horas extra pendientes de confirmar
+  const [tareasApoyo, setTareasApoyo] = useState([]); // #199: tareas que le ha dejado la principal
   const avisar = (t) => { setToast(t); setTimeout(() => setToast(""), 2600); };
 
   const load = useCallback(async (silencioso) => {
     if (!silencioso) setLoading(true);
     try {
       const hoy = hoyYmd();
+      sb.rpc("mis_tareas_apoyo").then(r => setTareasApoyo(Array.isArray(r) ? r : [])).catch(() => {}); // #199
       const [o, h, c, u] = await Promise.all([
         sb.rpc("bolsa_disponibles"),
         sb.select("horarios", `select=fecha,turno&usuario_id=eq.${user.id}&fecha=gte.${hoy}&order=fecha.asc`),
@@ -160,6 +164,18 @@ export function EventualApp({ user }) {
     );
   }
 
+  if (tab === "apoyo") { // #199
+    return (
+      <div>
+        <div style={{ padding: "14px 16px 0", maxWidth: 540, margin: "0 auto" }}>
+          <button onClick={() => { setTab("bolsa"); load(true); }} style={{ background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}>‹ Volver</button>
+          <div style={{ fontFamily: SF, fontSize: 22, color: C.char, marginTop: 8 }}>Tareas que te han dejado</div>
+        </div>
+        <TareasApoyoView onTerminar={() => { setTab("bolsa"); load(true); }} />
+      </div>
+    );
+  }
+
   if (tab === "formacion") {
     return <FormacionView videos={videos} abrirId={videoAbrir} onCambio={cargarVideos} onVolver={() => { setVideoAbrir(null); setTab("bolsa"); }} />;
   }
@@ -181,6 +197,16 @@ export function EventualApp({ user }) {
       <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut, marginTop: 4, lineHeight: 1.45 }}>
         {pendientes.length === 0 ? "No tienes turnos esperando respuesta." : `${pendientes.length} turno${pendientes.length > 1 ? "s esperan" : " espera"} tu respuesta`}
       </div>
+
+      {(() => { const p = pendienteApoyo(tareasApoyo); return p && ( // #199
+        <button type="button" onClick={() => setTab("apoyo")} style={{ width: "100%", boxSizing: "border-box", marginTop: 16, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 0, overflow: "hidden", cursor: "pointer", textAlign: "left" }}>
+          <div style={{ fontFamily: F, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, color: C.red, padding: "11px 16px 4px" }}>Pendiente</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 16px", background: "#FBEDE9" }}>
+            <span style={{ minWidth: 24, height: 24, padding: "0 7px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12.5, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{p.n}</span>
+            <span style={{ flex: 1, fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{p.texto}{p.sub && <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: "#A3362B" }}>{p.sub}</span>}</span>
+            <span aria-hidden="true" style={{ color: "#A3362B", fontSize: 18 }}>›</span>
+          </div>
+        </button>); })()}
 
       <NovedadesEquipo estilo={{ marginTop: 16 }} />
 

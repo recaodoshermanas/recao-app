@@ -15,7 +15,7 @@ function hace(ts) {
 // El botón de los correos (función notificaciones-email) usa este mismo mapa: si se cambia aquí, cambiarlo también allí.
 const DESTINO = {
   aviso_incidencia: "avisos", resolucion: "avisos", plazo_alegacion: "avisos", acuse_pendiente: "avisos", sancion: "avisos",
-  tarea_extra_repetida: "tareas_extra", incidencia_reportada: "incidencias", alegacion_presentada: "disciplina", umbral_cerca: "disciplina", prescripcion_proxima: "disciplina", acuse_5d: "disciplina", cierre_incompleto: "cierres",
+  tarea_extra_repetida: "tareas_extra", incidencia_reportada: "incidencias", alegacion_presentada: "disciplina", umbral_cerca: "disciplina", prescripcion_proxima: "disciplina", acuse_5d: "disciplina", cierre_incompleto: "cierres", tareas_apoyo_sin_cerrar: "cierres", tareas_apoyo: "tareas_apoyo", /* #199 */
   vacaciones_pendiente: "vacaciones", vacaciones_resuelto: "vacaciones", vacaciones_conflicto: "vacaciones",
   // Recepción de pedidos: la trabajadora vuelve a «Recepcionar pedido»; dirección, a Producto → Recepción
   fichaje_resuelto: "fichajes", fichaje_solicitud: "fichajes_admin",

@@ -44,6 +44,9 @@ export function CerrarTurnoView({ user }) {
   const [hojaExtra, setHojaExtra] = useState(false);
   const [txtExtra, setTxtExtra] = useState("");
   const [sugerencias, setSugerencias] = useState(null);
+  // #199: personas de apoyo que siguen en la tienda y tareas que se les pueden pasar
+  const [apoyoDisp, setApoyoDisp] = useState(null);
+  const [pasadasCerradas, setPasadasCerradas] = useState([]);
 
   const [caja, setCaja] = useState({ c1e: "", c1t: "", c2e: "", c2t: "" });
   const [provList, setProvList] = useState([]);
@@ -78,6 +81,7 @@ export function CerrarTurnoView({ user }) {
         const items = await sb.select("cierre_items", `select=tarea_texto,hecha,justificacion&cierre_id=eq.${ex[0].id}`);
         setYaCerrado(items);
         try { setExtrasCerradas(await sb.select("cierre_tareas_extra", `select=texto&cierre_id=eq.${ex[0].id}&order=id.asc`)); } catch (e) { setExtrasCerradas([]); }
+        try { setPasadasCerradas(await sb.select("cierre_traspasos", `select=tarea_texto,estado&cierre_id=eq.${ex[0].id}&order=id.asc`)); } catch (e) { setPasadasCerradas([]); }
         try {
           const cc = await sb.select("cierres_caja", `select=*&cierre_turno_id=eq.${ex[0].id}`);
           if (cc[0]) {
@@ -87,7 +91,9 @@ export function CerrarTurnoView({ user }) {
         } catch (e) { setCajaCerrada(null); }
         setTareas([]); setLoading(false); return;
       }
-      setYaCerrado(null); setCajaCerrada(null);
+      setYaCerrado(null); setCajaCerrada(null); setPasadasCerradas([]);
+      setApoyoDisp(null);
+      sb.rpc("cierre_apoyos_disponibles", { p_turno: tn }).then((d) => { if (d && d.fecha === ff && (d.apoyos || []).length) setApoyoDisp(d); }).catch(() => {});
       const all = await sb.select("cierre_tareas", `select=id,orden,texto,dia_semana,hora,grupo&turno=eq.${tn}&activa=eq.true&order=orden.asc`);
       const aplican = all.filter(t => t.dia_semana == null || t.dia_semana === dw);
       setTareas(aplican);
@@ -108,7 +114,7 @@ export function CerrarTurnoView({ user }) {
     const ff = f || (tn === "tarde" ? fechaTarde : fechaHoy);
     setFechaSel(ff); setTurno(tn); setModo("ver"); setExtras([]); load(tn, ff);
   };
-  const volver = () => { setFechaSel(null); setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setCajaCerrada(null); setExtras([]); setMsg(""); };
+  const volver = () => { setFechaSel(null); setTurno(null); setModo("ver"); setTareas([]); setYaCerrado(null); setCajaCerrada(null); setExtras([]); setMsg(""); setApoyoDisp(null); };
 
   const abrirHojaExtra = async () => {
     setTxtExtra(""); setHojaExtra(true);
@@ -124,7 +130,12 @@ export function CerrarTurnoView({ user }) {
   };
   const quitarExtra = (i) => setExtras((xs) => xs.filter((_, k) => k !== i));
   const abrirCierre = () => { setMsg(""); const st = {}; tareas.forEach(t => { st[t.id] = { estado: null, nota: "" }; }); setEstado(st); setModo("cerrar"); };
-  const setEst = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], estado: v } }));
+  const apoyos = (apoyoDisp && apoyoDisp.apoyos) || [];
+  const pasable = (t) => apoyos.length > 0 && ((apoyoDisp && apoyoDisp.pasables) || []).includes(t.id);
+  const apoyoDe = (id) => apoyos.find(a => a.usuario_id === id);
+  // Con una sola persona de apoyo se elige sola; con varias, la principal elige a cuál
+  const setEst = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], estado: v, apoyo: v === "apoyo" ? (s[id] && s[id].apoyo) || (apoyos.length === 1 ? apoyos[0].usuario_id : null) : null } }));
+  const setApoyo = (id, uid) => setEstado(s => ({ ...s, [id]: { ...s[id], apoyo: uid } }));
   const setNota = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], nota: v } }));
   const setProvCaja = (id, n) => setSelProv(s => { const c = { ...s }; if (c[id] === n) delete c[id]; else c[id] = n; return c; });
 
@@ -136,6 +147,8 @@ export function CerrarTurnoView({ user }) {
     if (sinRevisar.length) { setMsg(`Te faltan ${sinRevisar.length} ${sinRevisar.length === 1 ? "tarea" : "tareas"} por revisar`); return; }
     const faltaMotivo = tareas.filter(t => { const s = estado[t.id]; return s.estado === "no" && !s.nota.trim(); });
     if (faltaMotivo.length) { setMsg("Indica el motivo de las tareas no hechas"); return; }
+    const faltaApoyo = tareas.filter(t => { const s = estado[t.id]; return s.estado === "apoyo" && !apoyoDe(s.apoyo); });
+    if (faltaApoyo.length) { setMsg("Elige a quién le dejas cada tarea"); return; }
     setMsg("");
     if (sinCaja) { setConfirmando(true); return; }
     await cargarProv(turno);
@@ -147,10 +160,13 @@ export function CerrarTurnoView({ user }) {
   const enviar = async () => {
     setSaving(true); setMsg("");
     try {
-      const items = tareas.map(t => ({ tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", justificacion: justif(estado[t.id]) }));
+      const items = tareas.filter(t => estado[t.id].estado !== "apoyo").map(t => ({ tarea_id: t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", justificacion: justif(estado[t.id]) }));
+      const p_traspasos = tareas.filter(t => estado[t.id].estado === "apoyo").map(t => ({ tarea_id: t.id, apoyo_id: estado[t.id].apoyo }));
       const p_caja = sinCaja ? null : { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
       const p_facturas = sinCaja ? [] : Object.entries(selProv).map(([id, c]) => ({ id, caja: c }));
-      const r = await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras });
+      const r = p_traspasos.length
+        ? await sb.rpc("cerrar_turno_con_apoyo", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras, p_traspasos })
+        : await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras });
       const fReal = (r && r.fecha) || fecha;
       if (fReal !== fecha) setFechaSel(fReal);
       try { const c = await sb.rpc("cierre_contexto", {}); if (c && c.hoy) setCtx(c); } catch (e) { /* noop */ }
@@ -169,20 +185,32 @@ export function CerrarTurnoView({ user }) {
   );
 
   const segBtn = (activo, tipo) => {
-    const col = tipo === "hecha" ? C.grn : C.red;
+    const col = tipo === "hecha" ? C.grn : tipo === "apoyo" ? C.blu : C.red;
     return { flex: 1, textAlign: "center", padding: "9px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 13, fontWeight: 700, border: `1.5px solid ${activo ? col : C.brd}`, background: activo ? col : "#fff", color: activo ? "#fff" : C.mut };
   };
 
   const tarjetaTarea = (t) => {
     const st = estado[t.id] || { estado: null, nota: "" };
-    const done = st.estado === "hecha", no = st.estado === "no";
+    const done = st.estado === "hecha", no = st.estado === "no", alApoyo = st.estado === "apoyo";
+    const ap = alApoyo ? apoyoDe(st.apoyo) : null;
     return (
-      <div key={t.id} style={{ background: "#fff", border: `1.5px solid ${no ? C.red : done ? "#BFE6CC" : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
+      <div key={t.id} style={{ background: "#fff", border: `1.5px solid ${no ? C.red : done ? "#BFE6CC" : alApoyo ? C.blu : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
         <div style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500, marginBottom: 10 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => setEst(t.id, "hecha")} style={segBtn(done, "hecha")}>Hecha</button>
           <button onClick={() => setEst(t.id, "no")} style={segBtn(no, "no")}>No hecha</button>
+          {pasable(t) && <button onClick={() => setEst(t.id, "apoyo")} style={segBtn(alApoyo, "apoyo")}>Al apoyo</button>}
         </div>
+        {alApoyo && apoyos.length > 1 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.mut, marginBottom: 8 }}>¿A quién se la dejas?</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {apoyos.map(a => { const on = st.apoyo === a.usuario_id; return (
+                <button key={a.usuario_id} onClick={() => setApoyo(t.id, a.usuario_id)} style={{ padding: "8px 12px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 12.5, fontWeight: 700, border: `1.5px solid ${on ? C.blu : C.brd}`, background: on ? C.blu : "#fff", color: on ? "#fff" : C.char }}>{a.nombre} · {a.turno}</button>); })}
+            </div>
+          </div>
+        )}
+        {ap && <div style={{ marginTop: 10, fontFamily: F, fontSize: 12.5, color: C.blu, fontWeight: 600, lineHeight: 1.4 }}>Se la dejas a {ap.nombre} · {ap.turno} hasta las {ap.plazo}. La cierra ella.</div>}
         {no && (
           <div style={{ marginTop: 12 }}>
             <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: "#B23A2C", marginBottom: 8 }}>¿Por qué no se ha hecho?</div>
@@ -257,6 +285,8 @@ export function CerrarTurnoView({ user }) {
   const totalDia = sub1 + sub2;
 
   const hechasN = tareas.filter(t => estado[t.id] && estado[t.id].estado === "hecha").length;
+  const pasadasN = tareas.filter(t => estado[t.id] && estado[t.id].estado === "apoyo");
+  const pasadasA = [...new Set(pasadasN.map(t => (apoyoDe(estado[t.id].apoyo) || {}).nombre).filter(Boolean))];
   const noHechasList = tareas.filter(t => estado[t.id] && estado[t.id].estado === "no").map(t => ({ texto: t.texto, nota: estado[t.id].nota }));
 
   const backAction = modo === "caja" ? () => { setModo("cerrar"); setMsg(""); } : (modo === "cerrar" && !yaCerrado ? () => { setModo("ver"); setMsg(""); } : volver);
@@ -281,6 +311,16 @@ export function CerrarTurnoView({ user }) {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontFamily: F, fontSize: 14, color: C.char }}>{it.tarea_texto}</div>
                   {!it.hecha && it.justificacion && <div style={{ fontFamily: F, fontSize: 12, color: "#B23A2C", marginTop: 3 }}>{it.justificacion}</div>}
+                </div>
+              </div>
+            ))}
+            {pasadasCerradas.length > 0 && <div style={{ ...grpLbl, marginTop: 16 }}>Pasadas al apoyo · no cuentan para ti</div>}
+            {pasadasCerradas.map((x, i) => (
+              <div key={`p${i}`} style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 13, padding: "11px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ width: 24, height: 24, borderRadius: 7, background: "#E6EEF8", color: C.blu, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: F, fontSize: 13, fontWeight: 700 }}>→</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: F, fontSize: 14, color: C.char }}>{x.tarea_texto}</div>
+                  <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 2 }}>Pasada al apoyo · {x.estado === "hecha" ? "hecha" : x.estado === "no_hecha" ? "no hecha" : x.estado === "sin_cerrar" ? "sin cerrar" : "la cierra ella"}</div>
                 </div>
               </div>
             ))}
@@ -337,7 +377,7 @@ export function CerrarTurnoView({ user }) {
         ) : modo === "cerrar" ? (
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 10 }}>
-              <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>Marca cada tarea como hecha o no.</div>
+              <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{apoyos.length ? "Marca cada tarea como hecha, no hecha o déjasela al apoyo." : "Marca cada tarea como hecha o no."}</div>
               <div style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: completo ? C.grn : C.mutL, whiteSpace: "nowrap" }}>{revisadas} / {tareas.length}</div>
             </div>
             {semanales.length > 0 && <div style={grpLbl}>Diarias</div>}
@@ -492,6 +532,7 @@ export function CerrarTurnoView({ user }) {
             <div style={{ fontFamily: F, fontSize: 12, color: "#7A5C1A", background: "#FBF4E6", border: "1px solid #EAD9AE", borderRadius: 10, padding: "10px 12px", marginBottom: 16, lineHeight: 1.45 }}>Una vez cerrado, el registro <b>no se puede modificar</b>. Si después ves algo mal, se corrige por la vía de la incidencia.</div>
 
             <button onClick={enviar} disabled={saving} style={{ ...btnDark, fontSize: 16, padding: 15, opacity: saving ? 0.5 : 1 }}>{saving ? "Cerrando…" : "Sí, cerrar turno"}</button>
+            {pasadasN.length > 0 && <div style={{ fontFamily: F, fontSize: 12.5, color: C.blu, fontWeight: 600, textAlign: "center", marginTop: 10, lineHeight: 1.4 }}>{pasadasN.length} {pasadasN.length === 1 ? "tarea pasa" : "tareas pasan"} a {pasadasA.join(" y ")}. No cuentan como no hechas para ti.</div>}
             <button onClick={() => setConfirmando(false)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Revisar</button>
           </div>
         </div>

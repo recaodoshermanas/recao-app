@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { TareasEquipo } from "./TareasEquipo.jsx";
 import { DisciplinaAdminView } from "../../../src/views/owner/DisciplinaAdminView.jsx";
-import { Pestanas, useEquipo, hoyStr, masDias, fechaCorta, Cargando, Avatar, hace, n0, Panel } from "../ui.jsx";
+import { Pestanas, useEquipo, hoyStr, masDias, fechaCorta, Cargando, Avatar, hace, n0, Panel, avisar } from "../ui.jsx";
 import { eur } from "../fmt.js";
 
 // sub puede ser "tareas-extra:<texto>" (desde el aviso de tarea repetida) para abrir directamente su detalle
@@ -39,6 +39,16 @@ export function Seguimiento({ sub }) {
   );
 }
 
+// #199: tareas que la principal pasó al apoyo al cerrar
+const porValorar = (x) => (x.estado === "no_hecha" || x.estado === "sin_cerrar") && !x.valoracion;
+const horaDe = (ts) => new Date(ts).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+function resultadoTraspaso(x) {
+  if (x.estado === "hecha") return `hecha a las ${horaDe(x.cerrado_en)}`;
+  if (x.estado === "no_hecha") return `no hecha (${horaDe(x.cerrado_en)})`;
+  if (x.estado === "sin_cerrar") return "sin cerrar";
+  return "todavía puede cerrarla";
+}
+
 const PERIODOS = [{ id: "7", label: "7 días" }, { id: "30", label: "30 días" }, { id: "90", label: "90 días" }];
 
 function Cierres({ foco, quitarFoco }) {
@@ -50,14 +60,22 @@ function Cierres({ foco, quitarFoco }) {
   const [abierto, setAbierto] = useState(null);
   const cargar = useCallback(async () => {
     setFilas(null);
-    const q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion),extras:cierre_tareas_extra(texto),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
+    const q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion),extras:cierre_tareas_extra(texto),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,justificacion,cerrado_en,valoracion),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
       + (foco ? `&id=eq.${foco.cierre_id}` : (uid ? `&usuario_id=eq.${uid}` : "") + `&fecha=gte.${masDias(hoy, -(Number(dias) - 1))}`);
     try { const r = await sb.select("cierres_turno", q); setFilas(r); if (foco && r[0]) setAbierto(r[0].id); } catch (e) { setFilas([]); }
   }, [dias, uid, hoy, foco]);
   useEffect(() => { cargar(); }, [cargar]);
   const nombreDe = useMemo(() => Object.fromEntries((equipo || []).map((u) => [u.id, u.nombre])), [equipo]);
   const trab = (equipo || []).filter((u) => u.rol === "trabajadora" && !u.eventual);
-  const tot = (filas || []).reduce((a, c) => { const it = c.items || []; a.n++; a.tareas += it.length; a.sin += it.filter((i) => !i.hecha).length; a.extra += (c.extras || []).length; return a; }, { n: 0, tareas: 0, sin: 0, extra: 0 });
+  const tot = (filas || []).reduce((a, c) => { const it = c.items || []; a.n++; a.tareas += it.length; a.sin += it.filter((i) => !i.hecha).length; a.extra += (c.extras || []).length; a.valorar += (c.traspasos || []).filter(porValorar).length; return a; }, { n: 0, tareas: 0, sin: 0, extra: 0, valorar: 0 });
+  // #199: dirección decide si una tarea pasada al apoyo que quedó sin hacer repercute en su plus
+  const valorar = async (tr, v) => {
+    try {
+      await sb.rpc("traspaso_valorar", { p_id: tr.id, p_valoracion: v });
+      setFilas((fs) => fs.map((c) => ({ ...c, traspasos: (c.traspasos || []).map((x) => (x.id === tr.id ? { ...x, valoracion: v } : x)) })));
+      avisar(v === "repercute" ? "Guardado: repercute en el plus" : "Guardado: no repercute");
+    } catch (e) { avisar(e.message || "No se ha podido guardar", "error"); }
+  };
 
   return (
     <>
@@ -70,12 +88,12 @@ function Cierres({ foco, quitarFoco }) {
       {!filas ? <Cargando /> : (
         <div className="card">
           <div className="head">
-            <div><h2>{tot.n} cierres</h2><p className="sub">{tot.tareas ? `${Math.round((1 - tot.sin / tot.tareas) * 100)} % de las tareas hechas · ${tot.sin} sin hacer` : "Sin tareas registradas"}{tot.extra ? ` · ${tot.extra} extra` : ""}</p></div>
+            <div><h2>{tot.n} cierres</h2><p className="sub">{tot.tareas ? `${Math.round((1 - tot.sin / tot.tareas) * 100)} % de las tareas hechas · ${tot.sin} sin hacer` : "Sin tareas registradas"}{tot.extra ? ` · ${tot.extra} extra` : ""}{tot.valorar ? ` · ${tot.valorar} pasadas al apoyo por valorar` : ""}</p></div>
           </div>
           {filas.length === 0 ? <p className="empty">No hay cierres en este periodo.</p> : (
             <ul className="cierres">
               {filas.map((c) => {
-                const it = c.items || []; const hechas = it.filter((i) => i.hecha).length; const ex = c.extras || [];
+                const it = c.items || []; const hechas = it.filter((i) => i.hecha).length; const ex = c.extras || []; const tr = c.traspasos || [];
                 const caja = c.caja && c.caja[0];
                 const ventas = caja ? n0(caja.caja1_efectivo) + n0(caja.caja1_tarjeta) + n0(caja.caja2_efectivo) + n0(caja.caja2_tarjeta) : null;
                 const open = abierto === c.id;
@@ -84,7 +102,7 @@ function Cierres({ foco, quitarFoco }) {
                     <button className="cierre-fila" onClick={() => setAbierto(open ? null : c.id)} aria-expanded={open}>
                       <span className="f">{fechaCorta(c.fecha)}<small>{c.turno}</small></span>
                       <span className="p"><Avatar nombre={nombreDe[c.usuario_id]} size={24} />{nombreDe[c.usuario_id] || "—"}</span>
-                      <span className={`t ${hechas < it.length ? "mal" : "ok"}`}>{it.length ? `${hechas}/${it.length} tareas` : "—"}{ex.length > 0 && <em className="extra-n" title={`${ex.length} tareas extra`}>+{ex.length}</em>}</span>
+                      <span className={`t ${hechas < it.length ? "mal" : "ok"}`}>{it.length ? `${hechas}/${it.length} tareas` : "—"}{ex.length > 0 && <em className="extra-n" title={`${ex.length} tareas extra`}>+{ex.length}</em>}{tr.length > 0 && <em className="extra-n" title={`${tr.length} pasadas al apoyo`}>→{tr.length}</em>}</span>
                       <span className="v">{ventas != null ? eur(ventas) : "—"}</span>
                       <span className="nota">{c.notas ? "📝" : ""}</span>
                     </button>
@@ -104,6 +122,31 @@ function Cierres({ foco, quitarFoco }) {
                           </ul>
                         )}
                         {it.length > 0 && <p className="sub resumen-cierre">{hechas} hechas · {it.length - hechas} sin hacer{ex.length ? ` · +${ex.length} extra` : ""}</p>}
+                        {tr.length > 0 && (
+                          <>
+                            <h3 className="sub-tit">Pasadas al apoyo</h3>
+                            <p className="sub">No cuentan ni como hechas ni como no hechas para {nombreDe[c.usuario_id] || "la principal"}.</p>
+                            <ul className="checklist ver">
+                              {tr.map((x) => (
+                                <li key={x.id} className={x.estado === "hecha" ? "hecha" : x.estado === "pendiente" ? "" : "no"}>
+                                  <span>{x.estado === "hecha" ? "✓" : x.estado === "pendiente" ? "…" : "✗"}</span>
+                                  <div>
+                                    {x.tarea_texto}
+                                    <small>Pasada a {nombreDe[x.apoyo_id] || "la persona de apoyo"} · {resultadoTraspaso(x)}</small>
+                                    {x.estado === "no_hecha" && x.justificacion && <small>“{x.justificacion}”</small>}
+                                    {(x.estado === "no_hecha" || x.estado === "sin_cerrar") && (
+                                      <span className="tr-valorar" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8, alignItems: "center" }}>
+                                        <button className={x.valoracion === "repercute" ? "btn-p" : "btn-l"} onClick={() => valorar(x, "repercute")}>Repercute en el plus</button>
+                                        <button className={x.valoracion === "no_repercute" ? "btn-p" : "btn-l"} onClick={() => valorar(x, "no_repercute")}>No repercute</button>
+                                        {!x.valoracion && <small style={{ margin: 0 }}>Pendiente de valorar</small>}
+                                      </span>
+                                    )}
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
                         {ex.length > 0 && (
                           <>
                             <h3 className="sub-tit">Tareas extra</h3>
