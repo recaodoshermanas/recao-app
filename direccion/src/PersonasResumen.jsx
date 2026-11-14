@@ -178,7 +178,8 @@ export function PersonasResumen() {
   const cAct = calc((c) => c.fecha.startsWith(mesAct)); const cPrev = calc((c) => c.fecha.startsWith(mesPrev));
   const cMan = calc((c) => c.fecha.startsWith(mesAct) && c.turno === "mañana"); const cTar = calc((c) => c.fecha.startsWith(mesAct) && c.turno === "tarde");
   const sem6 = useMemo(() => { let h = 0, t = 0; (V("semanas") || []).forEach((c) => (c.items || []).forEach((i) => { if (i.estado === "no_procedia") return; t++; if (i.hecha) h++; })); return pct(h, t); }, [s.semanas]);
-  const sinCerrar = (V("sinCerrar") || {}).items || [];
+  // #202: los turnos sin cerrar de antes del 17/11 quedan archivados sin aviso (no salen en Decisiones)
+  const sinCerrar = ((V("sinCerrar") || {}).items || []).filter((x) => x.fecha >= "2026-11-17");
   const revisadas = new Set((V("causas") || []).map((c) => c.cierre_item_id));
   const porRevisar = (V("incid") || []).filter((i) => !i.cierre_item_id || !revisadas.has(i.cierre_item_id)).length;
   const avisosAb = (V("avisos") || []).length;
@@ -221,7 +222,7 @@ export function PersonasResumen() {
 
   const franja = [];
   const sc0 = sinCerrar[0];
-  if (!E("sinCerrar")) franja.push({ k: "cerrar", c: sinCerrar.length ? "rojo" : "ok", n: sinCerrar.length, t: "Turnos sin cerrar", d: sc0 ? `${sc0.turno} del ${diaCorto(sc0.fecha)}${sc0.principal_nombre ? ` · ${sc0.principal_nombre}` : ""}` : "Al día", ruta: "personas/seguimiento/disciplina" });
+  if (!E("sinCerrar")) franja.push({ k: "cerrar", c: sinCerrar.length ? "rojo" : "ok", n: sinCerrar.length, t: "Turnos sin cerrar", d: sc0 ? `${sc0.turno} del ${diaCorto(sc0.fecha)}${sc0.principal_nombre ? ` · ${sc0.principal_nombre}` : ""}` : "Al día", ruta: "personas/seguimiento/decisiones:sin_cerrar" });
   if (!E("horarios")) franja.push({ k: "hueco", c: huecos15.length ? "rojo" : "ok", n: huecos15.length, t: "Turnos sin cubrir (15 días)", d: huecos15[0] ? `${huecos15[0].turno}, ${diaCorto(huecos15[0].fecha)}` : "Al día", ruta: "personas/horarios" });
   if (!E("bolsa")) franja.push({ k: "bolsa", c: urg.length ? "rojo" : "ok", n: urg.length, t: "Bolsa urgente", d: urg[0] ? `${urg[0].turno}, ${diaCorto(urg[0].fecha)}` : `a ${DIAS_URGENTE} días o menos`, ruta: "personas/bolsa" });
   if (!E("vacSol") && !E("cambios")) franja.push({ k: "rev", c: vacSol + camb ? "ama" : "ok", n: vacSol + camb, t: "Vacaciones y cambios por revisar", d: vacSol + camb ? `${pl(vacSol, "vacación", "vacaciones")} · ${pl(camb, "cambio", "cambios")}` : "Al día", ruta: "personas/solicitudes" });
@@ -308,12 +309,12 @@ export function PersonasResumen() {
         <Barra etiqueta="Turno de tarde" valor={cTar.p || 0} texto={cTar.p == null ? "—" : `${cTar.p} %`} />
         <p className="sub">Últimas 6 semanas: {sem6 == null ? "—" : `${sem6} %`}</p>
         <Cifras items={[
-          { n: avisosAb, t: "avisos con plazo abierto", ruta: "personas/seguimiento/disciplina" },
-          { n: porRevisar, t: "verificaciones por revisar", ruta: "personas/seguimiento/incidencias" },
-          { n: sinCerrar.length, t: "turnos sin cerrar", c: "rojo", ruta: "personas/seguimiento/disciplina" },
-          { n: repiten, t: "tareas extra que se repiten", ruta: "personas/seguimiento/tareas-extra" },
+          { n: avisosAb, t: "avisos con plazo abierto", ruta: "personas/seguimiento/expedientes" },
+          { n: porRevisar, t: "verificaciones por revisar", ruta: "personas/seguimiento/decisiones:verif" },
+          { n: sinCerrar.length, t: "turnos sin cerrar", c: "rojo", ruta: "personas/seguimiento/decisiones:sin_cerrar" },
+          { n: repiten, t: "tareas extra que se repiten", ruta: "personas/seguimiento/tareas:tarea" },
         ]} />
-        <p className="sub">Los expedientes abiertos están en Disciplina.</p>
+        <p className="sub">Lo que espera tu decisión está en Seguimiento → Decisiones; los expedientes, en Seguimiento → Expedientes.</p>
       </Ventana>),
     documentos: (
       <Ventana {...P("documentos")} icono="📄" nombre="Documentos" cargando={L("docs")} error={E("docs")} ruta="personas/documentos" rutaTxt="Documentos"

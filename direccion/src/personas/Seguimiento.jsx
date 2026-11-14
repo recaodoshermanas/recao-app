@@ -1,40 +1,71 @@
-// Personas · Seguimiento: cierres de turno, tareas extra (#56), tareas sin hacer (incidencias) y disciplina.
+// Personas · Seguimiento (#202): cuatro pestañas y ninguna subpestaña.
+// «Decisiones» (todo lo que espera a dirección) · «Turnos» (cierres, verificación y proveedores) ·
+// «Tareas» (por tarea, por persona y por equipo) · «Expedientes» (por persona; desde aquí se amonesta).
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { TareasEquipo } from "./TareasEquipo.jsx";
-import { DisciplinaAdminView } from "../../../src/views/owner/DisciplinaAdminView.jsx";
-import { Pestanas, useEquipo, hoyStr, masDias, fechaCorta, Cargando, Avatar, hace, n0, Panel, avisar } from "../ui.jsx";
+import { Decisiones, cargarDecisiones, TIPOS } from "./Decisiones.jsx";
+import { Expedientes } from "./Expedientes.jsx";
+import { Pestanas, useEquipo, hoyStr, masDias, fechaCorta, Cargando, Avatar, hace, n0, Panel } from "../ui.jsx";
 import { eur } from "../fmt.js";
 
-// sub puede ser "tareas-extra:<texto>" (desde el aviso de tarea repetida) para abrir directamente su detalle
-function leerSub(sub) {
+// Rutas: personas/seguimiento/<vista>[:detalle]. Las de antes siguen funcionando y caen en su sitio nuevo:
+// cierres → turnos · incidencias → decisiones (verificaciones) · disciplina → decisiones · tareas-extra[:texto] → tareas (por tarea)
+// tareas-equipo → tareas (por equipo). Los filtros de la bandeja: decisiones:verif, decisiones:sin_cerrar…
+export function leerSub(sub) {
   const s = String(sub || "");
-  if (s.startsWith("tareas-extra")) return { vista: "tareas-extra", tarea: s.slice("tareas-extra:".length) || null };
-  return { vista: s || "cierres", tarea: null };
+  const [v, ...resto] = s.split(":"); const det = resto.join(":") || null;
+  if (v === "tareas-extra") return { vista: "tareas", modo: "tarea", tarea: det };
+  if (v === "tareas-equipo") return { vista: "tareas", modo: "equipo", tarea: null };
+  if (v === "tareas") return { vista: "tareas", modo: ["tarea", "persona", "equipo"].includes(det) ? det : "tarea", tarea: null };
+  if (v === "cierres" || v === "turnos") return { vista: "turnos" };
+  if (v === "incidencias") return { vista: "decisiones", filtro: "verif" };
+  if (v === "disciplina" || v === "decisiones" || !v) return { vista: "decisiones", filtro: TIPOS.some((t) => t.id === det) ? det : "" };
+  if (v === "expedientes") return { vista: "expedientes" };
+  return { vista: "decisiones", filtro: "" };
 }
 
 export function Seguimiento({ sub }) {
   const ini = leerSub(sub);
   const [vista, setVista] = useState(ini.vista);
-  const [tareaFoco, setTareaFoco] = useState(ini.tarea);
+  const [filtro, setFiltro] = useState(ini.filtro || "");
+  const [modo, setModo] = useState(ini.modo || "tarea");
+  const [tareaFoco, setTareaFoco] = useState(ini.tarea || null);
   const [cierreFoco, setCierreFoco] = useState(null);
-  const [repiten, setRepiten] = useState(0);
-  const contar = useCallback(() => { sb.rpc("tareas_extra_resumen", { p_dias: 30 }).then((r) => setRepiten((r && r.repiten) || 0)).catch(() => {}); }, []);
-  useEffect(() => { contar(); }, [contar]);
-  useEffect(() => { const x = leerSub(sub); setVista(x.vista); setTareaFoco(x.tarea); }, [sub]);
-  const abrirCierre = (c) => { setCierreFoco(c); setVista("cierres"); };
+  const [cuenta, setCuenta] = useState(null);
+  useEffect(() => { cargarDecisiones().then((l) => setCuenta(l.length)).catch(() => {}); }, []);
+  useEffect(() => { const x = leerSub(sub); setVista(x.vista); setFiltro(x.filtro || ""); if (x.modo) setModo(x.modo); setTareaFoco(x.tarea || null); }, [sub]);
+  const abrirCierre = (c) => { setCierreFoco(c); setVista("turnos"); };
+  const onCuenta = useCallback((n) => setCuenta(n), []);
   return (
     <>
       <div className="barra-sec">
         <Pestanas valor={vista} onChange={(v) => { setVista(v); setCierreFoco(null); }} etiqueta="Seguimiento" opciones={[
-          { id: "cierres", label: "Cierres de turno" }, { id: "tareas-extra", label: "Tareas extra", n: repiten }, { id: "incidencias", label: "Tareas sin hacer" }, { id: "disciplina", label: "Disciplina" }, { id: "tareas-equipo", label: "Tareas por equipo" },
+          { id: "decisiones", label: "Decisiones", n: cuenta }, { id: "turnos", label: "Turnos" }, { id: "tareas", label: "Tareas" }, { id: "expedientes", label: "Expedientes" },
         ]} />
       </div>
-      {vista === "cierres" && <Cierres foco={cierreFoco} quitarFoco={() => setCierreFoco(null)} />}
-      {vista === "tareas-extra" && <TareasExtra inicial={tareaFoco} onCambio={contar} onAbrirCierre={abrirCierre} />}
-      {vista === "incidencias" && <Incidencias />}
-      {vista === "disciplina" && <div className="card legado-dentro ancho"><DisciplinaAdminView /></div>}
-      {vista === "tareas-equipo" && <TareasEquipo />}
+      {vista === "decisiones" && <Decisiones filtro={filtro} setFiltro={setFiltro} onCuenta={onCuenta} />}
+      {vista === "turnos" && <Cierres foco={cierreFoco} quitarFoco={() => setCierreFoco(null)} />}
+      {vista === "tareas" && <Tareas modo={modo} setModo={setModo} tareaFoco={tareaFoco} onAbrirCierre={abrirCierre} />}
+      {vista === "expedientes" && <Expedientes />}
+    </>
+  );
+}
+
+// «Tareas»: las tres vistas que antes eran tres pestañas. El periodo manda en «por tarea» y «por persona»;
+// «por equipo» sigue yendo por meses, como hasta ahora.
+const PERIODOS_T = [{ id: "7", label: "7 días" }, { id: "30", label: "30 días" }, { id: "90", label: "3 meses" }];
+function Tareas({ modo, setModo, tareaFoco, onAbrirCierre }) {
+  const [dias, setDias] = useState("30");
+  return (
+    <>
+      <div className="filtros-linea">
+        <Pestanas valor={modo} onChange={setModo} etiqueta="Vista" opciones={[{ id: "tarea", label: "Por tarea" }, { id: "persona", label: "Por persona" }, { id: "equipo", label: "Por equipo" }]} />
+        {modo !== "equipo" && <Pestanas valor={dias} onChange={setDias} etiqueta="Periodo" opciones={PERIODOS_T} />}
+      </div>
+      {modo === "tarea" && <TareasExtra dias={dias} inicial={tareaFoco} onAbrirCierre={onAbrirCierre} />}
+      {modo === "persona" && <Incidencias dias={dias} />}
+      {modo === "equipo" && <TareasEquipo />}
     </>
   );
 }
@@ -48,6 +79,35 @@ function resultadoTraspaso(x) {
   if (x.estado === "no_hecha") return `no hecha (${horaDe(x.cerrado_en)})`;
   if (x.estado === "sin_cerrar") return "sin cerrar";
   return "todavía puede cerrarla";
+}
+
+// #202: quién se queda con una tarea pasada al apoyo que quedó sin hacer (se decide en «Decisiones»)
+function cuentaTxt(x, nombreDe) {
+  const c = x.cuenta_a || (x.valoracion === "repercute" ? "apoyo" : x.valoracion === "no_repercute" ? "nadie" : null);
+  if (c === "principal") return "Dirección: cuenta a la principal";
+  if (c === "apoyo") return `Dirección: cuenta a ${nombreDe[x.apoyo_id] || "la persona de apoyo"}`;
+  if (c === "nadie") return "Dirección: no cuenta a nadie";
+  return "Pendiente de decidir en «Decisiones»";
+}
+const VERIF_TXT = { verificado: ["✓ verificado", "ok"], fallo: ["✗ sin verificar", "mal"], exento_venta: ["— domingo de mucha venta", ""], sin_responsable: ["— nadie fichado en la ventana", ""], pendiente: ["… por revisar", ""], abierta: ["… puede verificarse", ""] };
+const horaMad = (ts) => new Date(ts).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
+function Verif({ i }) {
+  if (!i) return <span className="vf">—</span>;
+  const [t, cls] = VERIF_TXT[i.verif] || ["—", ""];
+  return <span className={`vf ${cls}`}>{t}{i.verif === "verificado" && i.verif_en ? ` · ${horaMad(i.verif_en)}` : ""}{i.verif === "fallo" && i.responsable ? <small>fallo a {i.responsable}</small> : null}{i.verif === "exento_venta" && i.venta_franja != null ? <small>{eur(i.venta_franja)} de 15 a 17</small> : null}</span>;
+}
+// Bocadillo con los proveedores del turno: al pasar el ratón o al tocarlo en el móvil
+function Provs({ i, k, abierto, setAbierto }) {
+  const l = (i && i.proveedores) || null;
+  if (!l) return <span className="pv">—</span>;
+  if (l.length === 0) return <span className="pv">Ninguno</span>;
+  return (
+    <span className="pv con-boc" onMouseEnter={() => setAbierto(k)} onMouseLeave={() => setAbierto(null)}
+      onClick={(e) => { e.stopPropagation(); setAbierto(abierto ? null : k); }}>
+      <u>{l.length} {l.length === 1 ? "proveedor" : "proveedores"}</u>
+      {abierto && <span className="bocadillo" role="tooltip">{l.map((p) => <span key={p.id}><b>{p.proveedor}</b> {p.hora}</span>)}</span>}
+    </span>
+  );
 }
 
 // #201: estado de cada tarea del cierre (los cierres anteriores solo tienen hecha / no hecha)
@@ -75,11 +135,18 @@ function Cierres({ foco, quitarFoco }) {
   const [uid, setUid] = useState("");
   const [filas, setFilas] = useState(null);
   const [abierto, setAbierto] = useState(null);
+  const [info, setInfo] = useState({});
+  const [bocadillo, setBocadillo] = useState(null);
   const cargar = useCallback(async () => {
     setFilas(null);
-    const q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion,estado,origen_item_id),extras:cierre_tareas_extra(texto),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,a_medias,justificacion,cerrado_en,valoracion),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
+    const q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion,estado,origen_item_id),extras:cierre_tareas_extra(texto),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,a_medias,justificacion,cerrado_en,valoracion,cuenta_a),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
       + (foco ? `&id=eq.${foco.cierre_id}` : (uid ? `&usuario_id=eq.${uid}` : "") + `&fecha=gte.${masDias(hoy, -(Number(dias) - 1))}`);
-    try { const r = await sb.select("cierres_turno", q); setFilas(r); if (foco && r[0]) setAbierto(r[0].id); } catch (e) { setFilas([]); }
+    try {
+      const r = await sb.select("cierres_turno", q); setFilas(r); if (foco && r[0]) setAbierto(r[0].id);
+      // #202: verificación del turno siguiente y proveedores del turno (si falla, la fila sale con «—»)
+      setInfo({});
+      if (r.length) sb.rpc("seg_turnos_info", { p_ids: r.map((c) => c.id) }).then((l) => setInfo(Object.fromEntries((l || []).map((x) => [x.cierre_id, x])))).catch(() => {});
+    } catch (e) { setFilas([]); }
   }, [dias, uid, hoy, foco]);
   useEffect(() => { cargar(); }, [cargar]);
   const nombreDe = useMemo(() => Object.fromEntries((equipo || []).map((u) => [u.id, u.nombre])), [equipo]);
@@ -92,15 +159,6 @@ function Cierres({ foco, quitarFoco }) {
     x.n++; ["hecha", "a_medias", "no_procedia", "no_hecha", "cuentan"].forEach((q) => { x[q] += e[q]; });
     return a;
   }, {})).sort((a, b) => a.nombre.localeCompare(b.nombre));
-  // #199: dirección decide si una tarea pasada al apoyo que quedó sin hacer repercute en su plus
-  const valorar = async (tr, v) => {
-    try {
-      await sb.rpc("traspaso_valorar", { p_id: tr.id, p_valoracion: v });
-      setFilas((fs) => fs.map((c) => ({ ...c, traspasos: (c.traspasos || []).map((x) => (x.id === tr.id ? { ...x, valoracion: v } : x)) })));
-      avisar(v === "repercute" ? "Guardado: repercute en el plus" : "Guardado: no repercute");
-    } catch (e) { avisar(e.message || "No se ha podido guardar", "error"); }
-  };
-
   return (
     <>
       <div className="filtros-linea">
@@ -112,7 +170,7 @@ function Cierres({ foco, quitarFoco }) {
       {!filas ? <Cargando /> : (
         <div className="card">
           <div className="head">
-            <div><h2>{tot.n} cierres</h2><p className="sub">{tot.cuentan ? `${pctDe(tot)} % de las tareas hechas · ${tot.a_medias} a medias · ${tot.no_hecha} no hechas · ${tot.no_procedia} no procedía (no cuentan)` : tot.no_procedia ? `${tot.no_procedia} no procedía` : "Sin tareas registradas"}{tot.extra ? ` · ${tot.extra} extra` : ""}{tot.valorar ? ` · ${tot.valorar} pasadas al apoyo por valorar` : ""}</p></div>
+            <div><h2>{tot.n} cierres</h2><p className="sub">{tot.cuentan ? `${pctDe(tot)} % de las tareas hechas · ${tot.a_medias} a medias · ${tot.no_hecha} no hechas · ${tot.no_procedia} no procedía (no cuentan)` : tot.no_procedia ? `${tot.no_procedia} no procedía` : "Sin tareas registradas"}{tot.extra ? ` · ${tot.extra} extra` : ""}{tot.valorar ? ` · ${tot.valorar} pasadas al apoyo por decidir` : ""}</p></div>
           </div>
           {porPersona.length > 0 && !foco && (
             <div className="tabla-scroll" style={{ overflowX: "auto", marginBottom: 14 }}>
@@ -129,7 +187,8 @@ function Cierres({ foco, quitarFoco }) {
             </div>
           )}
           {filas.length === 0 ? <p className="empty">No hay cierres en este periodo.</p> : (
-            <ul className="cierres">
+            <ul className="cierres con-info">
+              <li className="cierre-cab" aria-hidden="true"><span>Día</span><span>Quién cerró</span><span>Tareas</span><span>Verificación</span><span>Proveedores</span><span className="v">Ventas</span><span></span></li>
               {filas.map((c) => {
                 const it = c.items || []; const est = cuentaEstados(it); const hechas = est.hecha; const ex = c.extras || []; const tr = c.traspasos || [];
                 const caja = c.caja && c.caja[0];
@@ -141,6 +200,8 @@ function Cierres({ foco, quitarFoco }) {
                       <span className="f">{fechaCorta(c.fecha)}<small>{c.turno}</small></span>
                       <span className="p"><Avatar nombre={nombreDe[c.usuario_id]} size={24} />{nombreDe[c.usuario_id] || "—"}</span>
                       <span className={`t ${hechas < est.cuentan ? "mal" : "ok"}`}>{it.length ? `${hechas}/${est.cuentan} tareas` : "—"}{est.a_medias > 0 && <em className="extra-n" title={`${est.a_medias} a medias`}>½{est.a_medias}</em>}{est.no_procedia > 0 && <em className="extra-n" title={`${est.no_procedia} no procedía`}>–{est.no_procedia}</em>}{ex.length > 0 && <em className="extra-n" title={`${ex.length} tareas extra`}>+{ex.length}</em>}{tr.length > 0 && <em className="extra-n" title={`${tr.length} pasadas al apoyo`}>→{tr.length}</em>}</span>
+                      <Verif i={info[c.id]} />
+                      <Provs i={info[c.id]} k={c.id} abierto={bocadillo === c.id} setAbierto={setBocadillo} />
                       <span className="v">{ventas != null ? eur(ventas) : "—"}</span>
                       <span className="nota">{c.notas ? "📝" : ""}</span>
                     </button>
@@ -172,13 +233,7 @@ function Cierres({ foco, quitarFoco }) {
                                     {x.tarea_texto}
                                     <small>Pasada a {nombreDe[x.apoyo_id] || "la persona de apoyo"} · {resultadoTraspaso(x)}</small>
                                     {x.estado === "no_hecha" && x.justificacion && <small>“{x.justificacion}”</small>}
-                                    {(x.estado === "no_hecha" || x.estado === "sin_cerrar") && (
-                                      <span className="tr-valorar" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8, alignItems: "center" }}>
-                                        <button className={x.valoracion === "repercute" ? "btn-p" : "btn-l"} onClick={() => valorar(x, "repercute")}>Repercute en el plus</button>
-                                        <button className={x.valoracion === "no_repercute" ? "btn-p" : "btn-l"} onClick={() => valorar(x, "no_repercute")}>No repercute</button>
-                                        {!x.valoracion && <small style={{ margin: 0 }}>Pendiente de valorar</small>}
-                                      </span>
-                                    )}
+                                    {(x.estado === "no_hecha" || x.estado === "sin_cerrar") && <small>{cuentaTxt(x, nombreDe)}</small>}
                                   </div>
                                 </li>
                               ))}
@@ -207,8 +262,7 @@ function Cierres({ foco, quitarFoco }) {
   );
 }
 
-function Incidencias() {
-  const [dias, setDias] = useState("30");
+function Incidencias({ dias }) {
   const [lista, setLista] = useState(null);
   const [quien, setQuien] = useState("");
   const [foto, setFoto] = useState(null);
@@ -225,10 +279,7 @@ function Incidencias() {
   };
   return (
     <>
-      <div className="filtros-linea">
-        <Pestanas valor={dias} onChange={setDias} etiqueta="Periodo" opciones={PERIODOS} />
-        {quien && <button className="btn-l" onClick={() => setQuien("")}>Quitar filtro</button>}
-      </div>
+      {quien && <div className="filtros-linea"><button className="btn-l" onClick={() => setQuien("")}>Quitar filtro</button></div>}
       <div className="grid sin-margen">
         <div className="card c5">
           <h2>Quién deja tareas sin hacer</h2>
@@ -265,11 +316,9 @@ function Incidencias() {
 }
 
 // #56 · Tareas extra apuntadas en los cierres: agrupadas por texto, repetidas y detalle
-const PERIODOS_EXTRA = [{ id: "30", label: "Últimos 30 días" }, { id: "90", label: "3 meses" }, { id: "todo", label: "Todo" }];
 const dondeTurno = (m, t) => (m && t ? "mañana y tarde" : m ? "mañana" : t ? "tarde" : "—");
 
-function TareasExtra({ inicial, onCambio, onAbrirCierre }) {
-  const [dias, setDias] = useState("30");
+function TareasExtra({ dias, inicial, onCambio, onAbrirCierre }) {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState("");
   const [detalle, setDetalle] = useState(inicial ? { clave: inicial } : null);
@@ -284,9 +333,6 @@ function TareasExtra({ inicial, onCambio, onAbrirCierre }) {
   const lista = datos.lista || [];
   return (
     <>
-      <div className="filtros-linea">
-        <Pestanas valor={dias} onChange={setDias} etiqueta="Periodo" opciones={PERIODOS_EXTRA} />
-      </div>
       {datos.repiten > 0 && <p className="aviso-repite">{datos.repiten === 1 ? "1 tarea se repite" : `${datos.repiten} tareas se repiten`} · 3 veces o más en los últimos 30 días</p>}
       <div className="card">
         <div className="head"><div><h2>{lista.length} {lista.length === 1 ? "tarea extra" : "tareas extra"}</h2><p className="sub">Lo que las trabajadoras apuntan al cerrar el turno y no está en la lista · pulsa una para ver el detalle</p></div></div>

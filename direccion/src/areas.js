@@ -93,14 +93,14 @@ const FIN_SUB_ANTIGUO = { efectivo: "caja", banco: "bancos", gastos: "facturas" 
 // El botón de los correos (función notificaciones-email) usa estas mismas rutas: si se cambian aquí, cambiarlas también allí.
 export const DESTINOS = {
   horarios: "personas/horarios", cobertura: "personas/horarios", vacaciones: "personas/solicitudes",
-  cambios: "personas/solicitudes", cierres: "personas/seguimiento/cierres", incidencias: "personas/seguimiento/incidencias",
-  disciplina: "personas/seguimiento/disciplina", horas: "personas/equipo", usuarios: "personas/equipo",
+  cambios: "personas/solicitudes", cierres: "personas/seguimiento/turnos", incidencias: "personas/seguimiento/decisiones:verif",
+  disciplina: "personas/seguimiento/decisiones", horas: "personas/equipo", usuarios: "personas/equipo",
   candidatos: "personas/seleccion", plus: "personas/equipo", bolsa: "personas/bolsa",
   recepcion_admin: "producto/recepcion", fichajes_admin: "personas/fichajes", documentos_admin: "personas/documentos",
-  tareas_extra: "personas/seguimiento", solicitudes_tec: "tecnologia/solicitudes", formacion_admin: "personas/equipo", caja_fuerte: "finanzas/efectivo/caja", bancos: "finanzas/banco/bancos", pagos: "finanzas/banco/pagos", productos_revisar: "producto/revisar",
+  tareas_extra: "personas/seguimiento/tareas", solicitudes_tec: "tecnologia/solicitudes", formacion_admin: "personas/equipo", caja_fuerte: "finanzas/efectivo/caja", bancos: "finanzas/banco/bancos", pagos: "finanzas/banco/pagos", productos_revisar: "producto/revisar",
 };
 
-// Enlaces antiguos de Personas → secciones nuevas
+// Enlaces antiguos de Personas → secciones nuevas (#202: dentro de Seguimiento, Seguimiento.jsx → leerSub los lleva a su pestaña)
 const ANTIGUAS = { cobertura: "horarios", vacaciones: "solicitudes", cambios: "solicitudes", cierres: "seguimiento", incidencias: "seguimiento", disciplina: "seguimiento", plus: "equipo", horas: "equipo" };
 
 export function leerRuta(hash) {
