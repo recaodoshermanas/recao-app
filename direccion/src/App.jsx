@@ -3,6 +3,7 @@ import { useAuth } from "../../src/hooks/useAuth.js";
 import { useRecaoData } from "../../src/hooks/useRecaoData.js";
 import { NotificacionesBell } from "../../src/components/NotificacionesBell.jsx";
 import { AREAS, DESTINOS, FIN_PESTANAS, PROD_GRUPOS, grupoDe, leerRuta } from "./areas.js";
+import { sb } from "../../src/lib/supabase.js"; // #205: contadores de las áreas de Producto
 import { Pulso } from "./Pulso.jsx";
 import { PersonasResumen } from "./PersonasResumen.jsx";
 import { Legado } from "./Legado.jsx";
@@ -178,6 +179,15 @@ function entradasMenu(area) {
 }
 
 function Subnav({ area, sub, soloVer }) {
+  // #205: «Control (n)»: productos distintos pendientes (Precio, Subidas de coste, Precios por aprobar, Etiquetas); «Innovación (n)»: Lab por decidir + Radar en bandeja
+  const [cuentas, setCuentas] = useState(null);
+  useEffect(() => {
+    if (area.id !== "producto") return undefined;
+    let vivo = true;
+    sb.rpc("producto_pendientes_areas").then((r) => { if (vivo) setCuentas(r); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [area.id, sub && sub.id]);
+  const etiqueta = (e) => (e.subs && cuentas && Number(cuentas[e.id]) > 0 ? `${e.label} (${cuentas[e.id]})` : e.label);
   if (!area.subs) return null;
   const varias = area.subs.length > 1;
   const entradas = entradasMenu(area);
@@ -191,7 +201,7 @@ function Subnav({ area, sub, soloVer }) {
       </div>
       {varias && <nav className="pills" aria-label={`Secciones de ${area.label}`}>
         {entradas.map((e) => (
-          <a key={e.id} href={e.href} aria-current={e === actual ? "page" : undefined}>{e.label}</a>
+          <a key={e.id} href={e.href} aria-current={e === actual ? "page" : undefined}>{etiqueta(e)}</a>
         ))}
       </nav>}
       {varias && actual?.subs && <nav className="pills pills-2" aria-label={`Secciones de ${actual.label}`}>
@@ -203,7 +213,7 @@ function Subnav({ area, sub, soloVer }) {
         <span className="sr">Sección</span>
         <select value={sub.id} onChange={(e) => ir(`${area.id}/${e.target.value}`)}>
           {entradas.map((e) => e.subs
-            ? <optgroup key={e.id} label={e.label}>{e.subs.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</optgroup>
+            ? <optgroup key={e.id} label={etiqueta(e)}>{e.subs.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</optgroup>
             : <option key={e.id} value={e.id}>{e.label}</option>)}
         </select>
       </label>}
