@@ -30,9 +30,9 @@ export const AREAS = [
   },
   {
     id: "producto", label: "Producto", quien: "Javi",
+    // #205: en el menú se agrupan en Control, Datos e Innovación (ver PROD_GRUPOS); la URL de cada una no cambia
     subs: [
       { id: "resumen", label: "Resumen" },
-      // #205: agrupadas en Control, Datos e Innovación (PRODUCTO_GRUPOS). Las rutas no cambian: #/producto/<subárea>
       { id: "recepcion", label: "Recepción" },
       { id: "pedidos", label: "Pedidos" },
       { id: "revisar", label: "Productos a revisar" },
@@ -75,13 +75,15 @@ export const AREAS = [
   { id: "ajustes", label: "Ajustes", oculto: true, subs: [{ id: "general", label: "Ajustes", legado: true }] },
 ];
 
-// #205: Producto agrupa sus subáreas en tres áreas. #/producto/control (o datos, innovacion) abre su primera subárea.
-export const PRODUCTO_GRUPOS = [
+// #205: áreas de Producto. Cada una agrupa subáreas que siguen en su misma URL (#/producto/<subárea>/…),
+// así los avisos, la campana y los correos (producto/revisar, producto/recepcion…) llegan igual que antes.
+// También vale #/producto/<área>[/<subárea>[/detalle]]: abre esa subárea (o la primera del área).
+export const PROD_GRUPOS = [
   { id: "control", label: "Control", subs: ["recepcion", "pedidos", "revisar", "inventario", "salud"] },
   { id: "datos", label: "Datos", subs: ["proveedores", "familias", "catalogo"] },
   { id: "innovacion", label: "Innovación", subs: ["lab", "radar"] },
 ];
-export const grupoDe = (subId) => PRODUCTO_GRUPOS.find((g) => g.subs.includes(subId));
+export const grupoDe = (subId) => PROD_GRUPOS.find((g) => g.subs.includes(subId)) || null;
 
 // #60: Finanzas se agrupa en 5 apartados; cada uno tiene dentro sus pestañas (la primera es la de por defecto).
 // La URL es #/finanzas/<apartado>/<pestaña>. Las pantallas "legado" vienen de la app (Facturas, Cierre de mes, Tesorería).
@@ -113,7 +115,9 @@ export const DESTINOS = {
 const ANTIGUAS = { cobertura: "horarios", vacaciones: "solicitudes", cambios: "solicitudes", cierres: "seguimiento", incidencias: "seguimiento", disciplina: "seguimiento", plus: "equipo", horas: "equipo" };
 
 export function leerRuta(hash) {
-  const [a, s0, extra] = String(hash || "").split("?")[0].replace(/^#\/?/, "").split("/"); // #81: «?mes=…» no cuenta para la ruta
+  let [a, s0, extra, extra2] = String(hash || "").split("?")[0].replace(/^#\/?/, "").split("/"); // #81: «?mes=…» no cuenta para la ruta
+  const grupo = a === "producto" && PROD_GRUPOS.find((g) => g.id === s0); // #205: #/producto/control[/revisar[/precio]]
+  if (grupo) { if (grupo.subs.includes(extra)) { s0 = extra; extra = extra2; } else { s0 = grupo.subs[0]; extra = undefined; } }
   const area = AREAS.find((x) => x.id === a && !x.pronto) || AREAS[0];
   if (area.id === "finanzas") {
     let subId = s0, pedida = extra;
@@ -127,8 +131,7 @@ export function leerRuta(hash) {
     const tab = pestanas ? (pestanas.find((t) => t.id === pedida) || pestanas[0]).id : undefined;
     return { area, sub, extra: tab };
   }
-  const grupo = area.id === "producto" && PRODUCTO_GRUPOS.find((g) => g.id === s0); // #205
-  const s = area.id === "personas" && ANTIGUAS[s0] ? ANTIGUAS[s0] : grupo ? grupo.subs[0] : s0;
+  const s = area.id === "personas" && ANTIGUAS[s0] ? ANTIGUAS[s0] : s0;
   const sub = area.subs ? (area.subs.find((x) => x.id === s) || area.subs[0]) : null;
   const extraFinal = extra || (area.id === "personas" && ["cierres", "incidencias", "disciplina"].includes(s0) ? (s0 === "incidencias" ? "incidencias" : s0) : undefined);
   return { area, sub, extra: extraFinal ? decodeURIComponent(extraFinal) : undefined };
