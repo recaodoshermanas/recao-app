@@ -18,7 +18,6 @@ const TIPOS = [
   { id: "certificado", t: "Certificado", firma: false },
   { id: "otro", t: "Otro documento", firma: false },
 ];
-const PAPEL_SIN_FIRMA = ["otro", "certificado"]; // #207: ya firmados en papel, sin recibí ni aviso
 const TIPO = Object.fromEntries(TIPOS.map((x) => [x.id, x]));
 const ESTADO = {
   pendiente: { t: "Sin abrir", c: "#8A5A0B" },
@@ -116,16 +115,16 @@ function Subir({ trabajadoras, onHecho }) {
   const [periodo, setPeriodo] = useState(mesAnterior());
   const [titulo, setTitulo] = useState("");
   const [papel, setPapel] = useState(false);
+  const [interno, setInterno] = useState(""); // #207 documento interno al que corresponde la copia firmada
+  const [internos, setInternos] = useState([]);
+  useEffect(() => { sb.fn("doc-interna", { accion: "lista" }).then((r) => setInternos(r.documentos || [])).catch(() => {}); }, []);
   const [archivo, setArchivo] = useState(null);
   const [busy, setBusy] = useState(false);
   const [hechos, setHechos] = useState([]);
-  const [internos, setInternos] = useState([]); // #207 documentos internos a los que se puede unir la copia firmada
-  const [interno, setInterno] = useState("");
   const input = useRef(null);
   const t = TIPO[tipo];
-  const puedePapel = t.firma || PAPEL_SIN_FIRMA.includes(tipo);
-  const papelSinAviso = papel && PAPEL_SIN_FIRMA.includes(tipo);
-  useEffect(() => { sb.fn("docs-internos", { accion: "panel" }).then((r) => setInternos(r.documentos || [])).catch(() => setInternos([])); }, []);
+  const papelSuelto = tipo === "otro" || tipo === "certificado"; // #207: sin recibí y sin aviso
+  const puedePapel = t.firma || papelSuelto;
 
   const subir = async () => {
     if (!usuario) { avisar("Elige la trabajadora", "mal"); return; }
@@ -137,14 +136,15 @@ function Subir({ trabajadoras, onHecho }) {
       const s = await fn("subida", { usuario_id: usuario });
       const { error } = await supabase.storage.from("personal").uploadToSignedUrl(s.ruta, s.token, archivo, { contentType: "application/pdf" });
       if (error) throw new Error("No se ha podido subir el PDF");
-      const r = papelSinAviso
-        ? await sb.fn("docs-internos", { accion: "registrar_firmado", usuario_id: usuario, ruta: s.ruta, tipo, titulo: titulo.trim() || undefined, doc_interno_id: interno || undefined, nombre_archivo: archivo.name })
+      const sinAviso = papelSuelto && papel;
+      const r = sinAviso
+        ? await sb.fn("doc-interna", { accion: "registrar_papel", usuario_id: usuario, ruta: s.ruta, tipo, titulo: titulo.trim() || undefined, doc_interno_id: interno ? Number(interno) : undefined, nombre_archivo: archivo.name })
         : await fn("registrar", { usuario_id: usuario, ruta: s.ruta, tipo, periodo: tipo === "nomina" ? periodo : undefined, titulo: titulo.trim() || undefined, firmado_en_papel: t.firma && papel, nombre_archivo: archivo.name });
       const nombre = trabajadoras.find((u) => u.id === usuario)?.nombre;
-      setHechos((h) => [{ id: r.documento.id, texto: `${r.documento.titulo} · ${nombre}${papelSinAviso ? " · firmado en papel" : ""}` }, ...h]);
-      avisar(papelSinAviso ? `Guardado como firmado en la ficha de ${nombre}, sin avisarle` : `Subido y avisada ${nombre}`);
-      // listo para la siguiente: se queda el tipo, el mes y el documento interno elegido
-      setUsuario(""); setArchivo(null); setTitulo(""); if (!papelSinAviso) setPapel(false); if (input.current) input.current.value = "";
+      setHechos((h) => [{ id: r.documento.id, texto: `${r.documento.titulo} · ${nombre}` }, ...h]);
+      avisar(sinAviso ? `Guardado como firmado en la ficha de ${nombre}, sin avisar` : `Subido y avisada ${nombre}`);
+      // listo para la siguiente: se queda el tipo, el mes y el documento interno
+      setUsuario(""); setArchivo(null); setTitulo(""); if (!sinAviso) setPapel(false); if (input.current) input.current.value = "";
       onHecho();
     } catch (e) { avisar(e.message || "No se ha podido subir", "mal"); }
     setBusy(false);
@@ -162,7 +162,7 @@ function Subir({ trabajadoras, onHecho }) {
         <label className="campo">Trabajadora
           <select value={usuario} onChange={(e) => setUsuario(e.target.value)}>
             <option value="">Elige…</option>
-            {trabajadoras.map((u) => <option key={u.id} value={u.id}>{u.nombre}{u.eventual ? " (eventual)" : ""}</option>)}
+            {trabajadoras.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
           </select>
         </label>
         {tipo === "nomina" && <label className="campo">Mes de la nómina<input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)} /></label>}
@@ -176,16 +176,16 @@ function Subir({ trabajadoras, onHecho }) {
           <input type="checkbox" checked={papel} onChange={(e) => { setPapel(e.target.checked); if (!e.target.checked) setInterno(""); }} /> Ya está firmado en papel (solo se guarda y ella lo puede consultar)
         </label>
       )}
-      {papelSinAviso && (
-        <label className="campo" style={{ maxWidth: 380 }}>¿A qué documento interno corresponde?
+      {papelSuelto && papel && (
+        <label className="campo" style={{ maxWidth: 380 }}>¿A qué documento interno corresponde? <small>(opcional)</small>
           <select value={interno} onChange={(e) => setInterno(e.target.value)}>
             <option value="">Ninguno</option>
             {internos.map((x) => <option key={x.id} value={x.id}>{x.titulo}</option>)}
           </select>
         </label>
       )}
-      <p className="pf" style={{ marginTop: 0 }}>{papelSinAviso ? `Se guarda como firmado en su ficha. No se le pide recibí ni se le avisa (ni en la app, ni por correo, ni por WhatsApp).${interno ? " También aparecerá dentro del documento en «Documentación interna»." : ""}` : t.firma ? (papel ? "Se guarda como firmado." : "Quedará pendiente de firma digital.") : "Ella lo abre en la app y confirma que lo ha recibido."}</p>
-      <button className="btn-p" disabled={busy} onClick={subir}>{busy ? "Subiendo…" : papelSinAviso ? "Guardar firmado" : "Subir y avisar"}</button>
+      <p className="pf" style={{ marginTop: 0 }}>{papelSuelto && papel ? "Se guarda como firmado en su ficha. No se le pide recibí ni se le avisa." : t.firma ? (papel ? "Se guarda como firmado." : "Quedará pendiente de firma digital.") : "Ella lo abre en la app y confirma que lo ha recibido."}</p>
+      <button className="btn-p" disabled={busy} onClick={subir}>{busy ? "Subiendo…" : papelSuelto && papel ? "Guardar sin avisar" : "Subir y avisar"}</button>
       {hechos.length > 0 && (
         <div style={{ marginTop: 18 }}>
           <div className="pf" style={{ fontWeight: 700 }}>Subidos ahora</div>

@@ -13,7 +13,7 @@ import { MisTurnosMes } from "./MisTurnosMes.jsx"; // #37 resumen del mes
 import { HorasExtraView } from "../horasextra/HorasExtraView.jsx"; // #39
 import { TarjetaFormacion, FormacionView } from "./Formacion.jsx"; // #79 formación en vídeo
 import { TareasApoyoView, pendienteApoyo } from "../worker/TareasApoyoView.jsx"; // #199
-import { MisDocumentosView } from "../worker/MisDocumentosView.jsx"; // #207 sus documentos (p. ej. copias firmadas en papel)
+import { MisDocumentosView } from "../worker/MisDocumentosView.jsx"; // #207 copias firmadas en papel
 import { card, seccion, btnNo, btnSi, btnTexto, ShiftChip, DateBlock, PlazoChip, Toast, Hoja, PreferenciaAvisos } from "../bolsa/BolsaUI.jsx";
 
 const FILTROS = [
@@ -63,7 +63,8 @@ export function EventualApp({ user }) {
   const [toast, setToast] = useState("");
   const [horasPend, setHorasPend] = useState({}); // #39: fecha → horas extra pendientes de confirmar
   const [tareasApoyo, setTareasApoyo] = useState([]); // #199: tareas que le ha dejado la principal
-  const [misDocs, setMisDocs] = useState({ n: 0, nuevos: 0 }); // #207: solo se enseña «Mis documentos» si tiene alguno
+  const [nDocs, setNDocs] = useState(0); // #207: solo se enseña «Mis documentos» si tiene alguno
+  useEffect(() => { sb.fn("documentos", { accion: "mis_documentos" }).then((r) => setNDocs((r.documentos || []).length)).catch(() => {}); }, [tab]);
   const avisar = (t) => { setToast(t); setTimeout(() => setToast(""), 2600); };
 
   const load = useCallback(async (silencioso) => {
@@ -71,8 +72,6 @@ export function EventualApp({ user }) {
     try {
       const hoy = hoyYmd();
       sb.rpc("mis_tareas_apoyo").then(r => setTareasApoyo(Array.isArray(r) ? r : [])).catch(() => {}); // #199
-      Promise.all([sb.select("documentos_personal", `select=id&usuario_id=eq.${user.id}&estado=neq.anulado`), sb.rpc("mis_documentos_sin_abrir")])
-        .then(([d, n]) => setMisDocs({ n: Array.isArray(d) ? d.length : 0, nuevos: Number(n) || 0 })).catch(() => {}); // #207
       const [o, h, c, u] = await Promise.all([
         sb.rpc("bolsa_disponibles"),
         sb.select("horarios", `select=fecha,turno&usuario_id=eq.${user.id}&fecha=gte.${hoy}&order=fecha.asc`),
@@ -184,7 +183,7 @@ export function EventualApp({ user }) {
     return (
       <div>
         <div style={{ padding: "14px 16px 0", maxWidth: 540, margin: "0 auto" }}>
-          <button onClick={() => { setTab("bolsa"); load(true); }} style={{ background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}>‹ Volver</button>
+          <button onClick={() => setTab("bolsa")} style={{ background: "none", border: "none", color: C.blu, fontFamily: F, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}>‹ Volver</button>
           <div style={{ fontFamily: SF, fontSize: 22, color: C.char, marginTop: 8 }}>Mis documentos</div>
         </div>
         <MisDocumentosView />
@@ -228,11 +227,11 @@ export function EventualApp({ user }) {
 
       <TarjetaFormacion videos={videos} onAbrir={() => { setVideoAbrir(null); setTab("formacion"); }} />
 
-      {misDocs.n > 0 && ( // #207
+      {nDocs > 0 && ( // #207
         <button type="button" onClick={() => setTab("documentos")} style={{ width: "100%", boxSizing: "border-box", marginTop: 16, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: "13px 16px", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ flex: 1 }}>
-            <span style={{ display: "block", fontFamily: SF, fontSize: 18, color: C.char }}>Mis documentos</span>
-            <span style={{ display: "block", fontFamily: F, fontSize: 13, color: C.mut, marginTop: 2 }}>{misDocs.nuevos > 0 ? (misDocs.nuevos === 1 ? "1 documento nuevo" : `${misDocs.nuevos} documentos nuevos`) : misDocs.n === 1 ? "1 documento" : `${misDocs.n} documentos`}</span>
+            <span style={{ display: "block", fontFamily: F, fontSize: 15, fontWeight: 700, color: C.char }}>Mis documentos</span>
+            <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 2 }}>{nDocs === 1 ? "1 documento" : `${nDocs} documentos`}</span>
           </span>
           <span aria-hidden="true" style={{ color: C.mut, fontSize: 18 }}>›</span>
         </button>
