@@ -32,18 +32,19 @@ export const AREAS = [
     id: "producto", label: "Producto", quien: "Javi",
     subs: [
       { id: "resumen", label: "Resumen" },
-      { id: "catalogo", label: "Catálogo" },
+      // #205: agrupadas en Control, Datos e Innovación (PRODUCTO_GRUPOS). Las rutas no cambian: #/producto/<subárea>
       { id: "recepcion", label: "Recepción" },
       { id: "pedidos", label: "Pedidos" },
       { id: "revisar", label: "Productos a revisar" },
-      { id: "consumo", label: "Consumo socios" },
       { id: "inventario", label: "Inventario" },
-      { id: "app", label: "App de tienda" },
-      { id: "familias", label: "Familias" },
-      { id: "proveedores", label: "Proveedores" },
       { id: "salud", label: "Salud del catálogo" },
+      { id: "proveedores", label: "Proveedores" },
+      { id: "familias", label: "Familias" },
+      { id: "catalogo", label: "Catálogo" },
       { id: "lab", label: "Lab" },
       { id: "radar", label: "Radar" },
+      { id: "consumo", label: "Consumo socios" },
+      { id: "app", label: "App de tienda" },
     ],
   },
   {
@@ -73,6 +74,14 @@ export const AREAS = [
   // fuera del menú principal: se abre desde el usuario
   { id: "ajustes", label: "Ajustes", oculto: true, subs: [{ id: "general", label: "Ajustes", legado: true }] },
 ];
+
+// #205: Producto agrupa sus subáreas en tres áreas. #/producto/control (o datos, innovacion) abre su primera subárea.
+export const PRODUCTO_GRUPOS = [
+  { id: "control", label: "Control", subs: ["recepcion", "pedidos", "revisar", "inventario", "salud"] },
+  { id: "datos", label: "Datos", subs: ["proveedores", "familias", "catalogo"] },
+  { id: "innovacion", label: "Innovación", subs: ["lab", "radar"] },
+];
+export const grupoDe = (subId) => PRODUCTO_GRUPOS.find((g) => g.subs.includes(subId));
 
 // #60: Finanzas se agrupa en 5 apartados; cada uno tiene dentro sus pestañas (la primera es la de por defecto).
 // La URL es #/finanzas/<apartado>/<pestaña>. Las pantallas "legado" vienen de la app (Facturas, Cierre de mes, Tesorería).
@@ -118,7 +127,8 @@ export function leerRuta(hash) {
     const tab = pestanas ? (pestanas.find((t) => t.id === pedida) || pestanas[0]).id : undefined;
     return { area, sub, extra: tab };
   }
-  const s = area.id === "personas" && ANTIGUAS[s0] ? ANTIGUAS[s0] : s0;
+  const grupo = area.id === "producto" && PRODUCTO_GRUPOS.find((g) => g.id === s0); // #205
+  const s = area.id === "personas" && ANTIGUAS[s0] ? ANTIGUAS[s0] : grupo ? grupo.subs[0] : s0;
   const sub = area.subs ? (area.subs.find((x) => x.id === s) || area.subs[0]) : null;
   const extraFinal = extra || (area.id === "personas" && ["cierres", "incidencias", "disciplina"].includes(s0) ? (s0 === "incidencias" ? "incidencias" : s0) : undefined);
   return { area, sub, extra: extraFinal ? decodeURIComponent(extraFinal) : undefined };

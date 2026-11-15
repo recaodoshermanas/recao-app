@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../../src/hooks/useAuth.js";
 import { useRecaoData } from "../../src/hooks/useRecaoData.js";
 import { NotificacionesBell } from "../../src/components/NotificacionesBell.jsx";
-import { AREAS, DESTINOS, FIN_PESTANAS, leerRuta } from "./areas.js";
+import { AREAS, DESTINOS, FIN_PESTANAS, PROD_GRUPOS, grupoDe, leerRuta } from "./areas.js";
 import { Pulso } from "./Pulso.jsx";
 import { PersonasResumen } from "./PersonasResumen.jsx";
 import { Legado } from "./Legado.jsx";
@@ -159,9 +159,29 @@ function Cabecera({ user, area, areas, onSalir }) {
   );
 }
 
+// #205: en Producto, la fila de arriba enseña Resumen, Control, Datos, Innovación y las sueltas;
+// si estás dentro de un área, debajo salen sus subáreas. Cada subárea sigue en su URL de siempre.
+function entradasMenu(area) {
+  if (area.id !== "producto") return area.subs.map((s) => ({ id: s.id, label: s.label, href: `#/${area.id}/${s.id}`, subs: null }));
+  const visibles = new Set(area.subs.map((s) => s.id));
+  const out = [];
+  for (const s of area.subs) {
+    const g = grupoDe(s.id);
+    if (!g) { out.push({ id: s.id, label: s.label, href: `#/producto/${s.id}`, subs: null }); continue; }
+    if (out.some((x) => x.id === g.id)) continue;
+    const hijas = g.subs.filter((id) => visibles.has(id)).map((id) => area.subs.find((x) => x.id === id));
+    if (hijas.length) out.push({ id: g.id, label: g.label, href: `#/producto/${hijas[0].id}`, subs: hijas });
+  }
+  // orden pedido: Resumen, Control, Datos, Innovación y luego el resto
+  const peso = (x) => (x.id === "resumen" ? 0 : x.subs ? 1 + PROD_GRUPOS.findIndex((g) => g.id === x.id) : 10);
+  return out.map((x, i) => ({ x, i })).sort((p, q) => peso(p.x) - peso(q.x) || p.i - q.i).map((p) => p.x);
+}
+
 function Subnav({ area, sub, soloVer }) {
   if (!area.subs) return null;
   const varias = area.subs.length > 1;
+  const entradas = entradasMenu(area);
+  const actual = entradas.find((e) => (e.subs ? e.subs.some((s) => s.id === sub.id) : e.id === sub.id));
   return (
     <div className="subnav">
       <div className="subnav-t">
@@ -170,14 +190,21 @@ function Subnav({ area, sub, soloVer }) {
         {soloVer && <span title="Puedes verlo todo, pero los cambios solo los hace dirección">Solo ver</span>}
       </div>
       {varias && <nav className="pills" aria-label={`Secciones de ${area.label}`}>
-        {area.subs.map((s) => (
+        {entradas.map((e) => (
+          <a key={e.id} href={e.href} aria-current={e === actual ? "page" : undefined}>{e.label}</a>
+        ))}
+      </nav>}
+      {varias && actual?.subs && <nav className="pills pills-2" aria-label={`Secciones de ${actual.label}`}>
+        {actual.subs.map((s) => (
           <a key={s.id} href={`#/${area.id}/${s.id}`} aria-current={s.id === sub.id ? "page" : undefined}>{s.label}</a>
         ))}
       </nav>}
       {varias && <label className="pills-movil">
         <span className="sr">Sección</span>
         <select value={sub.id} onChange={(e) => ir(`${area.id}/${e.target.value}`)}>
-          {area.subs.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          {entradas.map((e) => e.subs
+            ? <optgroup key={e.id} label={e.label}>{e.subs.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</optgroup>
+            : <option key={e.id} value={e.id}>{e.label}</option>)}
         </select>
       </label>}
     </div>
