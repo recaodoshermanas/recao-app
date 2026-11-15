@@ -19,6 +19,7 @@ const SECCIONES = [
   { id: "codigo", label: "Código de barras" }, { id: "nuevos", label: "Productos nuevos" }, { id: "incidencias", label: "Incidencias" },
   { id: "tienda", label: "Precios cambiados en tienda" }, // #35
   { id: "lentos", label: "Seguir comprando o no" }, // #144
+  { id: "marcados", label: "Precio marcado" }, // #203
 ];
 const NOMBRE_SEC = Object.fromEntries(SECCIONES.map((s) => [s.id, s.label]));
 const margen = (coste, pvp) => (pvp > 0 ? Math.round((1 - coste / pvp) * 1000) / 10 : null);
@@ -78,7 +79,7 @@ export function ProductosRevisar({ extra }) {
     precio: new Set(s.precio.map((x) => Number(x.product_id))), coste: new Set(s.coste.map((x) => Number(x.product_id))), iva: new Set(s.iva.map((x) => Number(x.product_id))),
     codigo: new Set(codigo.flatMap((i) => [Number(i.product_id_existente), Number(i.product_id_nuevo)]).filter(Boolean)),
     nuevos: new Set(altas.map((a) => Number(a.product_id)).filter(Boolean)), incidencias: new Set(incid.flatMap((i) => [Number(i.product_id_existente), Number(i.product_id_nuevo)]).filter(Boolean)),
-    lentos: new Set(),
+    lentos: new Set(), marcados: new Set(),
     tienda: new Set(tienda.lista.map((x) => Number(x.product_id))),
   };
   const otras = (pid, actual) => SECCIONES.map((x) => x.id).filter((k) => k !== actual && ids[k].has(Number(pid)));
@@ -94,6 +95,7 @@ export function ProductosRevisar({ extra }) {
       {tab === "codigo" && <Incidencias lista={codigo} P={P} U={U} onHecho={cargar} otras={otras} sec="codigo" vacio="No hay códigos repetidos. Aparecen cuando un producto nuevo o un código puesto en tienda ya lo tenía otro producto." titulo="Códigos de barras repetidos" />}
       {tab === "nuevos" && <Nuevos d={d} P={P} U={U} cargar={cargar} otras={otras} />}
       {tab === "lentos" && <SecLentos />}
+      {tab === "marcados" && <SecMarcados />}
       {tab === "tienda" && <SecTienda lista={tienda.lista} nombres={tienda.nombres} otras={otras} onHecho={cargar} />}
       {tab === "incidencias" && <Incidencias lista={incid} P={P} U={U} onHecho={cargar} otras={otras} sec="incidencias" vacio="No hay incidencias. Aparecen cuando una trabajadora dice que un código lleva al producto equivocado." titulo="«No es este producto»" />}
     </>
@@ -459,6 +461,93 @@ function SecTienda({ lista, nombres, otras, onHecho }) {
                       {Math.abs(Number(c.pvp_antes) - Number(c.pvp_nuevo)) >= 0.005 && <button className="btn-l" disabled={busy === c.id} onClick={() => devolver(c)}>Volver a {eur(c.pvp_antes, 2)}</button>}
                     </div>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- #203 · Productos con precio marcado: no generan avisos de precio ni se mandan a tienda a comprobar ----------
+function SecMarcados() {
+  const [lista, setLista] = useState(null);
+  const [filtro, setFiltro] = useState("");
+  const [ver, setVer] = useState("activos");
+  const [busca, setBusca] = useState("");
+  const [encontrados, setEncontrados] = useState([]);
+  const [busy, setBusy] = useState(null);
+  const cargar = useCallback(async () => {
+    try { setLista((await sb.rpc("precio_marcado_lista")) || []); } catch (e) { avisar(msg(e), "mal"); setLista((x) => x || []); }
+  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => {
+    const t = busca.trim();
+    if (t.length < 3) { setEncontrados([]); return; }
+    const h = setTimeout(async () => {
+      try {
+        const q = /^\d{6,}$/.test(t) ? `barcode=eq.${t}` : `name=ilike.*${encodeURIComponent(t.replace(/[*,()]/g, " "))}*`;
+        setEncontrados((await sb.select("epos_products", `select=id,name,supplier_name,sale_price&archivado=not.is.true&${q}&order=name&limit=15`)) || []);
+      } catch (_) { setEncontrados([]); }
+    }, 300);
+    return () => clearTimeout(h);
+  }, [busca]);
+  if (!lista) return <Cargando />;
+  const guardar = async (pid, activo, nombre) => {
+    setBusy(pid);
+    try { await sb.rpc("precio_marcado_guardar", { p_product: Number(pid), p_activo: activo }); avisar(activo ? `«${nombre}» cuenta como precio marcado` : `«${nombre}» ya no cuenta como precio marcado: volverá a avisar si baja el margen`); await cargar(); }
+    catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  const enLista = new Map(lista.map((m) => [Number(m.product_id), m]));
+  const f = filtro.trim().toLowerCase();
+  const vis = lista.filter((m) => (ver === "todos" || (ver === "activos" ? m.activo : !m.activo)) && (!f || `${m.nombre} ${m.proveedor} ${m.barcode}`.toLowerCase().includes(f)));
+  const nAct = lista.filter((m) => m.activo).length;
+  return (
+    <div className="card mt">
+      <div className="head"><div><h2>Precio marcado</h2><p className="sub">Productos que traen el precio puesto en el envase. Al recibirlos se actualiza el coste, pero no salen en «Precio» ni en «Precios por aprobar» ni se mandan a tienda a comprobar. Si alguno deja de venir marcado, quítalo de la lista y volverá a avisar cuando el margen baje del objetivo. El precio de venta no se toca desde aquí.</p></div></div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+        <label style={{ position: "absolute", left: -9999 }} htmlFor="pm-filtro">Buscar en la lista</label>
+        <input id="pm-filtro" className="mini-input" placeholder="Buscar en la lista…" value={filtro} onChange={(e) => setFiltro(e.target.value)} style={{ width: 200 }} />
+        <select aria-label="Qué productos ver" value={ver} onChange={(e) => setVer(e.target.value)}>
+          <option value="activos">Marcados ({nAct})</option>
+          <option value="quitados">Quitados ({lista.length - nAct})</option>
+          <option value="todos">Todos ({lista.length})</option>
+        </select>
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ position: "absolute", left: -9999 }} htmlFor="pm-anadir">Añadir producto</label>
+        <input id="pm-anadir" className="mini-input" placeholder="Añadir: nombre o código de barras…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ width: 280 }} />
+        {encontrados.length > 0 && (
+          <div style={{ marginTop: 6 }}>
+            {encontrados.map((p) => {
+              const ya = enLista.get(Number(p.id));
+              return (
+                <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "3px 0" }}>
+                  <span style={{ flex: 1 }}><span className="pn">{p.name}</span><span className="pf">{[p.supplier_name, eur(p.sale_price, 2)].filter(Boolean).join(" · ")}</span></span>
+                  {ya?.activo ? <span className="pf">Ya está</span> : <button className="btn-l" disabled={busy === p.id} onClick={async () => { await guardar(p.id, true, p.name); setBusca(""); }}>Añadir</button>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {!vis.length ? <p className="empty">{lista.length ? "Ningún producto con ese filtro." : "No hay productos con precio marcado."}</p> : (
+        <div className="tabla-scroll">
+          <table className="ranking">
+            <thead><tr><th>Producto</th><th className="r">Precio marcado</th><th className="r">Precio en caja</th><th>Desde</th><th></th></tr></thead>
+            <tbody>
+              {vis.map((m) => (
+                <tr key={m.product_id} style={m.activo ? undefined : { opacity: 0.6 }}>
+                  <td><span className="pn">{m.nombre || `Producto ${m.product_id}`}</span><span className="pf">{[m.proveedor, m.categoria, m.archivado && "archivado"].filter(Boolean).join(" · ")}</span></td>
+                  <td className="r">{m.precio != null ? eur(m.precio, 2) : "—"}</td>
+                  <td className="r">{m.pvp != null ? eur(m.pvp, 2) : "—"}{m.precio != null && m.pvp != null && Math.abs(Number(m.precio) - Number(m.pvp)) >= 0.005 && <span className="pf" style={{ color: "#A3362B" }}>distinto</span>}</td>
+                  <td><span className="pf">{[m.marcado_por, m.marcado_en && hace(m.marcado_en)].filter(Boolean).join(" · ") || "—"}</span></td>
+                  <td>{m.activo
+                    ? <button className="btn-txt" disabled={busy === m.product_id} onClick={() => guardar(m.product_id, false, m.nombre)}>Quitar</button>
+                    : <button className="btn-l" disabled={busy === m.product_id} onClick={() => guardar(m.product_id, true, m.nombre)}>Volver a marcar</button>}</td>
                 </tr>
               ))}
             </tbody>
