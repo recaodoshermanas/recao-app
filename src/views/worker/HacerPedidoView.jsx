@@ -4,6 +4,7 @@ import { sb } from "../../lib/supabase.js";
 
 // #143 Hacer pedido: pedidos a proveedores calculados con ventas y stock (solo Ana Mari y dirección).
 // El pedido NO toca el stock: solo la recepción lo hace.
+// #209: salvo cuando Ana Mari corrige a mano el stock de un producto (se guarda como stock real en Epos y queda registrado).
 const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 14, boxShadow: SHADOW.card };
 const wrap = { padding: "16px 16px 28px", maxWidth: 540, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 };
 const FORMAS = { whatsapp: "WhatsApp", app: "App del proveedor", comercial: "Comercial" };
@@ -32,6 +33,28 @@ export function HacerPedidoView() {
         </button>
       ))}
     </div>
+  );
+}
+
+// #209 Stock de un producto que se puede tocar y corregir. Al guardar se pide confirmación y se escribe en Epos.
+const fmtStock = (x) => (x.stock == null ? "sin registro" : x.al_peso ? `${num(x.stock)} g` : num(x.stock));
+function StockEditable({ x, abierto, onAbrir, onCerrar, onGuardar, ocupado }) {
+  const [txt, setTxt] = useState("");
+  useEffect(() => { if (abierto) setTxt(x.stock == null ? "" : String(Math.max(0, Math.round(Number(x.stock) * 10) / 10)).replace(".", ",")); }, [abierto, x.stock]);
+  if (!abierto) return (
+    <span>
+      Stock{" "}
+      <button type="button" onClick={onAbrir} aria-label={`Corregir stock de ${x.nombre}`} style={{ font: "inherit", fontWeight: 700, color: C.char, background: C.cream, border: `1px solid ${C.brdL}`, borderRadius: 8, padding: "1px 8px", cursor: "pointer" }}>{fmtStock(x)} ✎</button>
+      {x.corregido && <span style={{ color: "#2F7D4F", fontWeight: 600 }}> · stock corregido</span>}
+    </span>
+  );
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      Stock real{x.al_peso ? " (g)" : ""}:
+      <input value={txt} autoFocus inputMode="decimal" aria-label="Stock real" onFocus={e => e.target.select()} onChange={e => setTxt(e.target.value.replace(/[^\d.,]/g, ""))} style={{ ...inp, width: 80, textAlign: "center", padding: "4px 6px", fontWeight: 700 }} />
+      <button type="button" disabled={ocupado || txt === ""} onClick={() => onGuardar(txt)} style={{ ...btnDark, padding: "4px 12px" }}>{ocupado ? "Guardando…" : "Guardar"}</button>
+      <button type="button" disabled={ocupado} onClick={onCerrar} style={{ ...btnGhost, padding: "4px 10px" }}>Cancelar</button>
+    </span>
   );
 }
 
@@ -85,6 +108,9 @@ function Proveedor({ p: p0, onVolver }) {
   const [q, setQ] = useState("");
   const [res, setRes] = useState([]);
   const [aviso, setAviso] = useState("");
+  const [manual, setManual] = useState({}); // cantidades cambiadas a mano: se respetan al recalcular
+  const [stockAbierto, setStockAbierto] = useState(null);
+  const [stockBusy, setStockBusy] = useState(null);
 
   const calcular = useCallback(async () => {
     setD(null); setErr("");
@@ -96,7 +122,7 @@ function Proveedor({ p: p0, onVolver }) {
   useEffect(() => { if (p.forma) calcular(); }, [p.forma, p.veces_semana, calcular]);
 
   const paso = (l) => l.unidades_caja || 1;
-  const cambiar = (l, dir) => setCant(c => ({ ...c, [l.product_id]: Math.max(0, (c[l.product_id] || 0) + dir * paso(l)) }));
+  const cambiar = (l, dir) => { setManual(m => ({ ...m, [l.product_id]: true })); setCant(c => ({ ...c, [l.product_id]: Math.max(0, (c[l.product_id] || 0) + dir * paso(l)) })); };
   // #175 «Viene por cajas»: se guarda en la ficha del producto y vale para los siguientes pedidos.
   const guardarCaja = async (l, porCajas, txt) => {
     const n = parseInt(txt, 10);
@@ -116,7 +142,7 @@ function Proveedor({ p: p0, onVolver }) {
     setCajaBusy(null);
   };
   // #176 Escribir la cantidad con el teclado (en cajas si el producto va por cajas).
-  const escribir = (l, txt) => { const v = parseInt(String(txt).replace(/\D/g, ""), 10) || 0; setCant(c => ({ ...c, [l.product_id]: Math.min(v, 9999) * paso(l) })); };
+  const escribir = (l, txt) => { setManual(m => ({ ...m, [l.product_id]: true })); const v = parseInt(String(txt).replace(/\D/g, ""), 10) || 0; setCant(c => ({ ...c, [l.product_id]: Math.min(v, 9999) * paso(l) })); };
   // #176 «No se pide aquí»: quita la línea solo de este pedido (se puede deshacer hasta enviarlo).
   const quitar = (l) => setQuitados(x => [...x, l.product_id]);
   const deshacerQuitar = (id) => setQuitados(x => x.filter(i => i !== id));
@@ -143,6 +169,37 @@ function Proveedor({ p: p0, onVolver }) {
       setBuscando(false); setQ("");
     } catch (e) { setErr(e.message || "No se ha podido añadir el producto"); }
   };
+  // #209 Corregir el stock: confirmación, guardado en Epos y recálculo del pedido con el stock nuevo.
+  const guardarStock = async (x, txt) => {
+    const n = Number(String(txt).replace(",", "."));
+    if (!Number.isFinite(n) || n < 0 || n > 100000) { setErr("Pon un stock válido: un número de 0 en adelante."); return; }
+    const antes = x.stock == null ? "sin registro" : fmtStock(x);
+    const nuevoTxt = x.al_peso ? `${num(n)} g` : num(n);
+    if (!window.confirm(`¿Guardar stock de ${x.nombre}: ${nuevoTxt} (antes ${antes})?`)) return;
+    setStockBusy(x.product_id); setErr(""); setAviso("");
+    try {
+      await sb.fn("pedido-stock", { product_id: x.product_id, stock: n, stock_antes: x.stock, supplier_id: p.supplier_id });
+    } catch (e) { setErr(e.message || "No se ha podido guardar el stock en Epos. El stock no se ha cambiado."); setStockBusy(null); return; }
+    try {
+      const r = await sb.rpc("pedido_calcular", { p_supplier: p.supplier_id });
+      const nuevas = r.lineas || [];
+      const ids = new Set(nuevas.map(l => l.product_id));
+      // líneas que ya estaban y que no deben desaparecer: añadidas a mano o con cantidad cambiada a mano
+      const conservar = (d.lineas || []).filter(l => !ids.has(l.product_id) && (manual[l.product_id] || !l.clase || l.clase === "–")).map(l => {
+        if (l.product_id !== x.product_id) return l;
+        const b = ["no_hace_falta", "esperando_direccion", "en_observacion"].map(k => (r[k] || []).find(y => y.product_id === x.product_id)).find(Boolean);
+        return { ...l, stock: b ? b.stock : n, corregido: true, dudoso: false };
+      });
+      const quitar = new Set(conservar.map(l => l.product_id));
+      const limpiar = (arr) => (arr || []).filter(y => !quitar.has(y.product_id));
+      setD({ ...r, lineas: [...nuevas, ...conservar], no_hace_falta: limpiar(r.no_hace_falta), esperando_direccion: limpiar(r.esperando_direccion), en_observacion: limpiar(r.en_observacion) });
+      setCant(c => { const o = {}; for (const l of [...nuevas, ...conservar]) o[l.product_id] = manual[l.product_id] || !ids.has(l.product_id) ? (c[l.product_id] || 0) : Number(l.cantidad) || 0; return o; });
+      const ahora = nuevas.find(l => l.product_id === x.product_id);
+      setAviso(`Stock de «${x.nombre}» guardado en Epos: ${nuevoTxt}.` + (manual[x.product_id] ? " Se mantiene la cantidad que habías puesto." : ahora ? ` Ahora se piden ${ahora.cantidad}.` : quitar.has(x.product_id) ? "" : " Ahora no hace falta pedirlo."));
+    } catch (e) { setAviso(`Stock de «${x.nombre}» guardado en Epos. No se ha podido recalcular: vuelve a entrar en el proveedor.`); }
+    setStockAbierto(null); setStockBusy(null);
+  };
+  const stockDe = (x) => <StockEditable x={x} abierto={stockAbierto === x.product_id} ocupado={stockBusy === x.product_id} onAbrir={() => setStockAbierto(x.product_id)} onCerrar={() => setStockAbierto(null)} onGuardar={(txt) => guardarStock(x, txt)} />;
   const visibles = d ? (d.lineas || []).filter(l => !quitados.includes(l.product_id)) : [];
   const lineas = visibles.filter(l => (cant[l.product_id] || 0) > 0);
   const textoLinea = (l) => {
@@ -181,11 +238,11 @@ function Proveedor({ p: p0, onVolver }) {
     </div>
   );
 
-  const bloque = (titulo, items) => items && items.length > 0 && (
+  const bloque = (titulo, items, conStock) => items && items.length > 0 && (
     <details style={card}>
       <summary style={{ fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>{titulo} ({items.length})</summary>
       <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-        {items.map(x => <div key={x.product_id} style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.4 }}><b style={{ color: C.char }}>{x.nombre}</b> · {x.motivo}</div>)}
+        {items.map(x => <div key={x.product_id} style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.4 }}><b style={{ color: C.char }}>{x.nombre}</b> · {x.motivo}{conStock && <div style={{ marginTop: 3 }}>{stockDe(x)}</div>}</div>)}
       </div>
     </details>
   );
@@ -199,7 +256,7 @@ function Proveedor({ p: p0, onVolver }) {
       {p.forma && d && (
         <>
           <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.45 }}>
-            Se pide {p.veces_semana === 1 ? "una vez" : `${p.veces_semana} veces`} por semana. Stock según la foto de la noche del {d.foto_stock ? fechaCorta(d.foto_stock) : "–"} menos lo vendido después. Las cantidades se pueden cambiar con + y −.
+            Se pide {p.veces_semana === 1 ? "una vez" : `${p.veces_semana} veces`} por semana. Stock según la foto de la noche del {d.foto_stock ? fechaCorta(d.foto_stock) : "–"} menos lo vendido después. Las cantidades se pueden cambiar con + y −. Si el stock no es el real, tócalo y corrígelo: se guarda en Epos.
           </div>
           {lineas.length === 0 && <div style={{ ...card, fontFamily: F, fontSize: 14 }}>Hoy no hace falta pedir nada a este proveedor.</div>}
           {aviso && <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{aviso}</div>}
@@ -221,7 +278,7 @@ function Proveedor({ p: p0, onVolver }) {
             <div key={l.product_id} style={{ ...card, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ fontFamily: F, fontSize: 14.5, fontWeight: 700, color: C.char }}>{l.nombre} <span style={{ fontWeight: 600, fontSize: 11.5, color: C.mut }}>· clase {l.clase}</span></div>
               {(l.nombre_proveedor || l.ref) && <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{l.nombre_proveedor}{l.ref ? ` · ref ${l.ref}` : ""}</div>}
-              <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.4 }}>Venta semanal {num(l.venta_semana)} · Stock {l.stock == null ? "sin registro" : num(l.stock)}{l.dudoso ? " ⚠ stock dudoso" : ""}<br />{l.motivo}</div>
+              <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.4 }}>Venta semanal {num(l.venta_semana)} · {stockDe(l)}{l.dudoso ? " ⚠ stock dudoso" : ""}<br />{l.motivo}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button type="button" aria-label="Menos" onClick={() => cambiar(l, -1)} style={{ ...btnGhost, width: 40, height: 40, padding: 0 }}>−</button>
                 <div style={{ minWidth: 90, textAlign: "center", fontFamily: F, fontSize: 15, fontWeight: 700 }}>
@@ -260,9 +317,9 @@ function Proveedor({ p: p0, onVolver }) {
                 </div>); })}
             </div>
           )}
-          {bloque("Esperando a dirección", d.esperando_direccion)}
-          {bloque("En observación", d.en_observacion)}
-          {bloque("No hace falta todavía", d.no_hace_falta)}
+          {bloque("Esperando a dirección", d.esperando_direccion, true)}
+          {bloque("En observación", d.en_observacion, true)}
+          {bloque("No hace falta todavía", d.no_hace_falta, true)}
           {bloque("No se piden", d.no_se_piden)}
           {lineas.length > 0 && (
             <div style={{ ...card, display: "flex", flexDirection: "column", gap: 8 }}>
