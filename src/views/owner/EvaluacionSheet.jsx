@@ -2,12 +2,11 @@ import { useState, useMemo } from "react";
 import { F, SF, C } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
 import {
-  PUESTOS, ELIMINATORIOS, INFORMATIVOS, EXP_OPCIONES, TRANSPORTE_OPCIONES,
-  ESCALA_B, PARADAS, PRUEBA, COMPETENCIAS, UMBRALES, RESULTADO_L,
-  calcularEvaluacion, comps,
+  PUESTOS, ELIMINATORIOS, INFORMATIVOS, EXP_OPCIONES, TRANSPORTE_OPCIONES, CAMPO_LLAMADA,
+  ESCALA_B, TRAMOS, ITEMS, CAMPO_PERFIL, PLANTILLA_ACTUAL, PLANTILLA_ANTERIOR, RESULTADO_L,
+  calcularEvaluacion, resultadoGuardado, esPlantillaAnterior, comps, aplica,
 } from "../../lib/evaluacionCandidatas.js";
 
-const ETQ = Object.fromEntries(UMBRALES.map((u) => [u.id, u]));
 const nowISO = () => new Date().toISOString();
 const fmtEn = (s) => { if (!s) return ""; try { return new Date(s).toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 
@@ -40,12 +39,96 @@ function Label({ children, sub }) {
     </div>
   );
 }
-function Anclas({ a1, a4 }) {
+// Referencias de cómo suena cada nota (1 y 4 siempre; 2 y 3 si la ficha las trae)
+const REF_COL = { 1: ["#B23A2C", "#FBEAE7"], 2: ["#8a6a1e", "#FBF0DA"], 3: ["#3d6b4f", "#EEF4EA"], 4: ["#1E7A46", "#E7F3EC"] };
+function Referencias({ refs }) {
+  const ks = [1, 2, 3, 4].filter((k) => refs && refs[k]);
   return (
-    <div style={{ display: "flex", gap: 8, margin: "7px 0 8px" }}>
-      <div style={{ flex: 1, fontFamily: F, fontSize: 11, color: "#B23A2C", background: "#FBEAE7", borderRadius: 8, padding: "6px 8px", lineHeight: 1.3 }}><b>1 ·</b> {a1}</div>
-      <div style={{ flex: 1, fontFamily: F, fontSize: 11, color: "#1E7A46", background: "#E7F3EC", borderRadius: 8, padding: "6px 8px", lineHeight: 1.3 }}><b>4 ·</b> {a4}</div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, margin: "7px 0 8px" }}>
+      {ks.map((k) => (
+        <div key={k} style={{ fontFamily: F, fontSize: 11, color: REF_COL[k][0], background: REF_COL[k][1], borderRadius: 8, padding: "6px 8px", lineHeight: 1.3 }}><b>{k} ·</b> {refs[k]}</div>
+      ))}
     </div>
+  );
+}
+const aviso = { fontFamily: F, fontSize: 12, color: "#5b4a1e", background: "#FBF0DA", borderRadius: 10, padding: "9px 12px", marginBottom: 12, lineHeight: 1.45 };
+const OP_LABEL = Object.fromEntries(Object.values(ITEMS).filter((it) => it.opciones).flatMap((it) => it.opciones.map((o) => [`${it.cod}:${o.v}`, o.label])));
+
+function Item({ it, value, onPick }) {
+  const cab = (
+    <Label sub={it.consigna || it.pregunta}>
+      <span style={{ color: C.goldDark }}>{it.cod}</span> · {it.titulo}{it.sub && <span style={{ color: C.mutL, fontWeight: 500 }}> — {it.sub}</span>}
+    </Label>
+  );
+  if (it.tipo === "descriptiva") {
+    return (
+      <div style={{ marginBottom: 16 }}>
+        {cab}
+        <Selector value={value} opciones={it.opciones.map((o) => ({ ...o, small: true }))} onPick={onPick} />
+        {it.ayuda && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 6, lineHeight: 1.4 }}>{it.ayuda}</div>}
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {cab}
+      <Referencias refs={it.refs} />
+      <Selector value={value} opciones={it.tipo === "media" ? OP_W : OP_14} onPick={onPick} />
+    </div>
+  );
+}
+
+// Evaluación guardada con la plantilla anterior: solo lectura, tal cual se guardó.
+function VistaAnterior({ ev, onClose }) {
+  const A = ev.parte_a || {}, B = ev.parte_b || {};
+  const calc = resultadoGuardado(ev);
+  const v = (x) => (x === 0 || x ? String(x) : "—");
+  const fila = (k, t, val) => (
+    <div key={k} style={{ display: "flex", gap: 10, justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.brdL}` }}>
+      <span style={{ fontFamily: F, fontSize: 12.5, color: C.char, lineHeight: 1.35 }}><b style={{ color: C.goldDark }}>{k}</b> · {t}</span>
+      <span style={{ fontFamily: F, fontSize: 13, fontWeight: 700, color: C.char, flexShrink: 0 }}>{val}</span>
+    </div>
+  );
+  const sino = (x) => (x === "si" ? "Sí" : x === "no" ? "No" : "—");
+  return (
+    <>
+      <div style={{ ...aviso, marginTop: 12 }}>Evaluación hecha con la <b>plantilla anterior</b> (septiembre). Se enseña tal cual se guardó, con su nota de entonces; no se recalcula y no es comparable con las de la plantilla nueva.</div>
+      <div style={secTit}>Parte A · CV + llamada</div>
+      <div style={box}>
+        {ELIMINATORIOS.map((e) => fila(e.id, e.texto, sino(A[e.id])))}
+        {fila("Exp.", "Experiencia de cara al público (× 2)", v(A.exp))}
+        {fila("Transp.", "Transporte (× 1)", v(A.transporte))}
+        {A.L3 && fila("L3", INFORMATIVOS.L3.texto, A.L3)}
+        {A.L5 && fila("L5", INFORMATIVOS.L5.texto, sino(A.L5))}
+        {A.L6 && fila("L6", INFORMATIVOS.L6.texto, sino(A.L6))}
+        {A.L6_nota && <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 8, whiteSpace: "pre-wrap" }}>¿Qué preguntó? {A.L6_nota}</div>}
+        {A.nota_llamada && <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 8, whiteSpace: "pre-wrap" }}>Llamada: {A.nota_llamada}</div>}
+      </div>
+      <div style={secTit}>Parte B · Entrevista + prueba</div>
+      {PLANTILLA_ANTERIOR.bloques.map((bl) => (
+        <div key={bl.label} style={box}>
+          <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: C.mutL, marginBottom: 6 }}>{bl.label}</div>
+          {bl.items.filter((it) => it.id !== "P8" || ev.puesto === "principal").map((it) => fila(it.id, it.texto, v(B[it.id])))}
+        </div>
+      ))}
+      {B.notas && Object.values(B.notas).some(Boolean) && (
+        <div style={box}>
+          <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: C.mutL, marginBottom: 6 }}>Notas</div>
+          {Object.entries(B.notas).filter(([, t]) => t).map(([k, t]) => <div key={k} style={{ fontFamily: F, fontSize: 12.5, color: C.char, marginBottom: 6, whiteSpace: "pre-wrap" }}><b>{k}:</b> {t}</div>)}
+        </div>
+      )}
+      <div style={{ ...box, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {calc.descartada ? <span style={{ fontFamily: F, fontSize: 13, color: "#B23A2C" }}>Descartada · {calc.motivoDescarte}</span> : (
+          <>
+            <span style={{ fontFamily: SF, fontSize: 26, color: calc.notaFinal == null ? C.mutL : C.char }}>{calc.notaFinal == null ? "—" : calc.notaFinal}</span>
+            <span style={{ fontFamily: F, fontSize: 12, color: C.mut }}>/ 100</span>
+            {calc.etiqueta && <span style={{ fontFamily: F, fontSize: 12, fontWeight: 700, color: calc.etiqueta.fg, background: calc.etiqueta.bg, borderRadius: 999, padding: "4px 12px" }}>{calc.etiqueta.label}</span>}
+            <span style={{ fontFamily: F, fontSize: 12, color: C.mut, marginLeft: "auto" }}>{RESULTADO_L[calc.resultado] || calc.resultado}{!calc.completa && calc.falta.length ? ` · falta ${calc.falta.join(", ")}` : ""}</span>
+          </>
+        )}
+      </div>
+      <button onClick={onClose} style={{ width: "100%", background: C.char, color: C.gold, border: "none", borderRadius: 12, padding: 14, fontFamily: F, fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 8 }}>Cerrar</button>
+    </>
   );
 }
 const box = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 14, padding: "13px 14px", marginBottom: 11 };
@@ -54,9 +137,10 @@ const ta = { width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.br
 
 export function EvaluacionSheet({ candidato, evaluacion, currentUser, onClose, onSaved }) {
   const ev0 = evaluacion || {};
+  const anterior = esPlantillaAnterior(evaluacion);
   const [puesto, setPuesto] = useState(ev0.puesto || null);
   const [A, setA] = useState(ev0.parte_a || {});
-  const [B, setB] = useState(ev0.parte_b || {});
+  const [B, setB] = useState(anterior ? {} : (ev0.parte_b || {}));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2600); };
@@ -72,12 +156,13 @@ export function EvaluacionSheet({ candidato, evaluacion, currentUser, onClose, o
     if (!puesto) { flash("Elige el puesto primero"); return; }
     setBusy(true);
     const aTocada = Object.keys(A).length > 0;
-    const bTocada = Object.keys(B).some((k) => k !== "notas" ? B[k] != null : Object.keys(B.notas || {}).length);
+    if (anterior) { setBusy(false); return; }
+    const bTocada = Object.keys(B).some((k) => k === "plantilla" ? false : k !== "notas" ? (B[k] != null && B[k] !== "") : Object.values(B.notas || {}).some(Boolean));
     const row = {
       candidato_id: candidato.id,
       puesto,
       parte_a: A,
-      parte_b: B,
+      parte_b: { ...B, plantilla: PLANTILLA_ACTUAL },
       total_a: calc.totalA,
       total_b: calc.totalB,
       nota_final: calc.notaFinal,
@@ -112,21 +197,23 @@ export function EvaluacionSheet({ candidato, evaluacion, currentUser, onClose, o
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: SF, fontSize: 19, color: C.char }}>{candidato.nombre}</div>
-              <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Evaluación · {candidato.poblacion || "—"}</div>
+              <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Evaluación · {candidato.poblacion || "—"}{anterior && <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: "#6b5a8a", background: "#EEE9F5", borderRadius: 999, padding: "2px 8px" }}>plantilla anterior</span>}</div>
             </div>
             <button onClick={onClose} style={{ background: "none", border: "none", fontFamily: F, fontSize: 22, color: C.mut, cursor: "pointer", lineHeight: 1, padding: 2 }}>×</button>
           </div>
           {/* Puesto */}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             {PUESTOS.map((p) => { const on = puesto === p.id; return (
-              <button key={p.id} onClick={() => setPuesto(p.id)} style={{ flex: 1, padding: "10px 8px", borderRadius: 11, border: `1.5px solid ${on ? C.char : C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut, fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{p.label}</button>
+              <button key={p.id} onClick={() => !anterior && setPuesto(p.id)} disabled={anterior} style={{ flex: 1, padding: "10px 8px", borderRadius: 11, border: `1.5px solid ${on ? C.char : C.brd}`, background: on ? C.char : "#fff", color: on ? C.gold : C.mut, fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{p.label}</button>
             ); })}
           </div>
         </div>
 
         {/* Cuerpo con scroll */}
         <div style={{ flex: 1, overflowY: "auto", padding: "6px 16px 16px" }}>
-          {!puesto ? (
+          {anterior ? (
+            <VistaAnterior ev={evaluacion} onClose={onClose} />
+          ) : !puesto ? (
             <div style={{ fontFamily: SF, fontSize: 15, color: C.mut, textAlign: "center", padding: "34px 10px" }}>Elige el puesto (apoyo o principal) para empezar la evaluación.</div>
           ) : (
             <>
@@ -157,7 +244,9 @@ export function EvaluacionSheet({ candidato, evaluacion, currentUser, onClose, o
                 )}
                 <Label>{INFORMATIVOS.L6.texto}</Label>
                 <Selector value={A.L6} opciones={OP_SINO} onPick={(v) => setAk("L6", v)} />
-                <textarea value={A.L6_nota || ""} onChange={(e) => setAk("L6_nota", e.target.value)} placeholder="¿Qué preguntó? (opcional)" rows={2} style={{ ...ta, marginTop: 8 }} />
+                <div style={{ height: 12 }} />
+                <Label sub={CAMPO_LLAMADA.ayuda}>{CAMPO_LLAMADA.label}</Label>
+                <textarea value={A[CAMPO_LLAMADA.id] || ""} onChange={(e) => setAk(CAMPO_LLAMADA.id, e.target.value)} placeholder="Lo que preguntó, con sus palabras…" rows={2} style={{ ...ta, marginBottom: 12 }} />
                 <Label>Cómo habla por teléfono (nota libre)</Label>
                 <textarea value={A.nota_llamada || ""} onChange={(e) => setAk("nota_llamada", e.target.value)} placeholder="Hechos concretos…" rows={2} style={ta} />
               </div>
@@ -172,38 +261,36 @@ export function EvaluacionSheet({ candidato, evaluacion, currentUser, onClose, o
               </div>
 
               {/* ---------- PARTE B ---------- */}
-              <div style={secTit}>Parte B · Entrevista + prueba</div>
+              <div style={secTit}>Parte B · La entrevista (una hora en la tienda)</div>
               <div style={{ fontFamily: F, fontSize: 12, color: C.mut, background: "#F5F0E6", borderRadius: 10, padding: "9px 12px", marginBottom: 11, lineHeight: 1.45 }}>{ESCALA_B}</div>
 
-              {PARADAS.map((par) => {
-                const items = par.items.filter((it) => !it.soloPrincipal || puesto === "principal");
-                if (!items.length) return null;
+              {TRAMOS.map((tr) => {
+                const items = tr.items.map((id) => ITEMS[id]).filter((it) => aplica(it, puesto));
                 return (
-                  <div key={par.id} style={box}>
-                    <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: C.mutL, marginBottom: 12 }}>{par.label}</div>
+                  <div key={tr.id} style={box}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12, gap: 8 }}>
+                      <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: C.mutL }}>{tr.label}</div>
+                      <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, color: C.goldDark, whiteSpace: "nowrap" }}>min {tr.min}</div>
+                    </div>
+                    {tr.aviso && <div style={aviso}>{tr.aviso}</div>}
+                    {items.length === 0 && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginBottom: 10 }}>Aquí no se puntúa nada.</div>}
                     {items.map((it) => (
-                      <div key={it.id} style={{ marginBottom: 16 }}>
-                        <Label>{it.texto}</Label>
-                        <Anclas a1={it.a1} a4={it.a4} />
-                        <Selector value={B[it.id]} opciones={OP_14} onPick={(v) => setBk(it.id, v)} />
+                      <div key={it.cod}>
+                        {tr.avisoAntes && tr.avisoAntes[it.cod] && <div style={aviso}>{tr.avisoAntes[it.cod]}</div>}
+                        <Item it={it} value={B[it.cod]} onPick={(v) => setBk(it.cod, v)} />
                       </div>
                     ))}
-                    <textarea value={(B.notas && B.notas[par.id]) || ""} onChange={(e) => setNota(par.id, e.target.value)} placeholder="Notas de la parada (hechos concretos)…" rows={2} style={ta} />
+                    {tr.perfil && (
+                      <div style={{ marginBottom: 12 }}>
+                        <Label sub={CAMPO_PERFIL.ayuda}>{CAMPO_PERFIL.label}</Label>
+                        <textarea value={B[CAMPO_PERFIL.id] || ""} onChange={(e) => setBk(CAMPO_PERFIL.id, e.target.value)} rows={2} style={ta} />
+                        {(B.Q3 || B.Q4) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 5 }}>Q3: {OP_LABEL[`Q3:${B.Q3}`] || "—"} · Q4: {OP_LABEL[`Q4:${B.Q4}`] || "—"}</div>}
+                      </div>
+                    )}
+                    <textarea value={(B.notas && B.notas[tr.id]) || ""} onChange={(e) => setNota(tr.id, e.target.value)} placeholder="Notas de este tramo (hechos concretos)…" rows={2} style={ta} />
                   </div>
                 );
               })}
-
-              <div style={box}>
-                <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: C.mutL, marginBottom: 4 }}>{PRUEBA.label}</div>
-                <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginBottom: 12, lineHeight: 1.4 }}>{PRUEBA.ayuda}</div>
-                {PRUEBA.items.map((it) => (
-                  <div key={it.id} style={{ marginBottom: 16 }}>
-                    <Label>{it.texto}</Label>
-                    <Anclas a1={it.a1} a4={it.a4} />
-                    <Selector value={B[it.id]} opciones={OP_W} onPick={(v) => setBk(it.id, v)} />
-                  </div>
-                ))}
-              </div>
 
               {/* autoría */}
               {(ev0.parte_a_por || ev0.parte_b_por) && (
@@ -217,7 +304,7 @@ export function EvaluacionSheet({ candidato, evaluacion, currentUser, onClose, o
         </div>
 
         {/* Pie fijo: resumen en vivo + guardar */}
-        {puesto && (
+        {puesto && !anterior && (
           <div style={{ borderTop: `1px solid ${C.brdL}`, background: "#fff", padding: "12px 16px 16px" }}>
             {msg && <div style={{ fontFamily: F, fontSize: 12.5, color: C.char, background: C.gold, padding: "6px 10px", borderRadius: 9, marginBottom: 10, textAlign: "center" }}>{msg}</div>}
             {calc.descartada ? (

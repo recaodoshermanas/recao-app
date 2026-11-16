@@ -3,7 +3,7 @@ import { F, SF, C, SHADOW, avatar } from "../../lib/styles.js";
 import { sb, supabase } from "../../lib/supabase.js";
 import { EvaluacionSheet } from "./EvaluacionSheet.jsx";
 import { RankingView } from "./RankingView.jsx";
-import { calcularEvaluacion } from "../../lib/evaluacionCandidatas.js";
+import { resultadoGuardado } from "../../lib/evaluacionCandidatas.js";
 
 const CRIT = [["c_experiencia", "Experiencia", "Exp."], ["c_cercania", "Cercanía", "Cerca"], ["c_turnos", "Turnos", "Turnos"], ["c_incorporacion", "Incorporación", "Ya"]];
 const TABS = [["revisar", "Por revisar"], ["interesa", "Interesan"], ["entrevista", "Entrevista"], ["descartada", "Descartadas"]];
@@ -132,7 +132,7 @@ export function CVCandidatosView({ currentUser }) {
   const evalResumen = (c) => {
     const ev = evalsById[c.id];
     if (!ev) return null;
-    const calc = calcularEvaluacion(ev.puesto, ev.parte_a || {}, ev.parte_b || {});
+    const calc = resultadoGuardado(ev);
     return { ev, calc };
   };
 
@@ -205,7 +205,7 @@ export function CVCandidatosView({ currentUser }) {
                     {er && (er.calc.descartada
                       ? <span style={{ fontFamily: F, fontSize: 11.5, color: "#B23A2C" }}>Descartada · {er.calc.motivoDescarte}</span>
                       : er.calc.completa
-                        ? <span style={{ fontFamily: F, fontSize: 12.5, color: C.char }}>Nota <b>{er.calc.notaFinal}</b>{er.calc.etiqueta ? ` · ${er.calc.etiqueta.label}` : ""}</span>
+                        ? <span style={{ fontFamily: F, fontSize: 12.5, color: C.char }}>Nota <b>{er.calc.notaFinal}</b>{er.calc.etiqueta ? ` · ${er.calc.etiqueta.label}` : ""}{er.calc.plantillaAnterior ? " · plantilla anterior" : ""}</span>
                         : <span style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Evaluación incompleta</span>)}
                   </div>
                 )}
@@ -237,8 +237,8 @@ export function CVCandidatosView({ currentUser }) {
                   {er && (er.calc.descartada
                     ? <span style={{ fontFamily: F, fontSize: 12, color: "#B23A2C" }}>Descartada · {er.calc.motivoDescarte}</span>
                     : er.calc.completa
-                      ? <span style={{ fontFamily: F, fontSize: 13, color: C.char }}>Nota <b>{er.calc.notaFinal}</b>{er.calc.etiqueta ? ` · ${er.calc.etiqueta.label}` : ""}</span>
-                      : <span style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Incompleta · falta {er.calc.falta.join(", ")}</span>)}
+                      ? <span style={{ fontFamily: F, fontSize: 13, color: C.char }}>Nota <b>{er.calc.notaFinal}</b>{er.calc.etiqueta ? ` · ${er.calc.etiqueta.label}` : ""}{er.calc.plantillaAnterior ? " · plantilla anterior" : ""}</span>
+                      : <span style={{ fontFamily: F, fontSize: 12, color: C.mut }}>Incompleta · falta {er.calc.falta.join(", ")}{er.calc.plantillaAnterior ? " · plantilla anterior" : ""}</span>)}
                 </div>
               );
             })()}

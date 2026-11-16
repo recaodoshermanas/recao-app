@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { F, SF, C, SHADOW, avatar } from "../../lib/styles.js";
-import { PUESTOS, COMPETENCIAS, calcularEvaluacion } from "../../lib/evaluacionCandidatas.js";
+import { PUESTOS, resultadoGuardado } from "../../lib/evaluacionCandidatas.js";
+
+const TagAnterior = () => <span style={{ fontFamily: F, fontSize: 10, fontWeight: 700, color: "#6b5a8a", background: "#EEE9F5", borderRadius: 999, padding: "1px 7px", whiteSpace: "nowrap" }}>plantilla anterior</span>;
 
 function Foto({ c, size }) {
   if (c && c.foto) return <img src={c.foto} alt="" style={{ width: size, height: size, objectFit: "cover", borderRadius: "999px", display: "block", flexShrink: 0 }} />;
@@ -12,26 +14,29 @@ export function RankingView({ candidatos, evaluaciones, onOpen }) {
   const [puesto, setPuesto] = useState("apoyo");
   const byId = useMemo(() => { const m = {}; candidatos.forEach((c) => { m[c.id] = c; }); return m; }, [candidatos]);
 
-  const { rank, incompletas, descartadas } = useMemo(() => {
-    const rank = [], incompletas = [], descartadas = [];
+  const { rank, incompletas, descartadas, anteriores } = useMemo(() => {
+    const rank = [], incompletas = [], descartadas = [], anteriores = [];
     (evaluaciones || []).forEach((ev) => {
       const cand = byId[ev.candidato_id];
       if (!cand) return;
       if ((ev.puesto || "apoyo") !== puesto) return;
-      const calc = calcularEvaluacion(ev.puesto, ev.parte_a || {}, ev.parte_b || {});
+      const calc = resultadoGuardado(ev);
       const item = { cand, ev, calc };
-      if (calc.descartada) descartadas.push(item);
+      if (calc.plantillaAnterior) anteriores.push(item);
+      else if (calc.descartada) descartadas.push(item);
       else if (calc.completa) rank.push(item);
       else incompletas.push(item);
     });
-    rank.sort((a, b) => (b.calc.notaFinal - a.calc.notaFinal) || (b.calc.sumaW - a.calc.sumaW) || (b.calc.exp - a.calc.exp) || a.cand.nombre.localeCompare(b.cand.nombre));
-    return { rank, incompletas, descartadas };
+    // Empate: mejor suma de ejercicios (C + K + B + X); si sigue, mejor experiencia.
+    rank.sort((a, b) => (b.calc.notaFinal - a.calc.notaFinal) || (b.calc.sumaEjercicios - a.calc.sumaEjercicios) || (b.calc.exp - a.calc.exp) || a.cand.nombre.localeCompare(b.cand.nombre));
+    anteriores.sort((a, b) => ((b.calc.notaFinal ?? -1) - (a.calc.notaFinal ?? -1)) || a.cand.nombre.localeCompare(b.cand.nombre));
+    return { rank, incompletas, descartadas, anteriores };
   }, [evaluaciones, byId, puesto]);
 
   const mini = (calc) => {
-    const p = calc.compMedias.proactividad, t = calc.compMedias.trato;
+    const m = calc.compMedias;
     const r1 = (x) => (x == null ? "—" : Math.round(x * 10) / 10);
-    return `A ${calc.totalA}/6 · B ${calc.totalB}/${calc.maxB} · Proact. ${r1(p)} · Trato ${r1(t)}`;
+    return `A ${calc.totalA}/6 · B ${calc.totalB}/${calc.maxB} · Proact. ${r1(m.proactividad)} · Trato ${r1(m.trato)} · Equipo ${r1(m.equipo)}`;
   };
 
   return (
@@ -42,7 +47,7 @@ export function RankingView({ candidatos, evaluaciones, onOpen }) {
         ); })}
       </div>
 
-      {rank.length === 0 && incompletas.length === 0 && descartadas.length === 0 ? (
+      {rank.length === 0 && incompletas.length === 0 && descartadas.length === 0 && anteriores.length === 0 ? (
         <div style={{ fontFamily: SF, fontSize: 15, color: C.mut, textAlign: "center", padding: 34 }}>Aún no hay evaluaciones para {puesto === "apoyo" ? "Apoyo" : "Principal"}. Evalúa a las candidatas en «Entrevista».</div>
       ) : (
         <>
@@ -55,6 +60,7 @@ export function RankingView({ candidatos, evaluaciones, onOpen }) {
                   <span style={{ fontFamily: SF, fontSize: 16, color: C.char, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.cand.nombre}</span>
                   {it.calc.aviso40h && <span style={{ fontFamily: F, fontSize: 10, fontWeight: 700, color: "#8a6a1e", background: "#FBF0DA", borderRadius: 999, padding: "1px 7px", whiteSpace: "nowrap" }}>quiere 40 h</span>}
                 </div>
+                {it.calc.perfil && <div style={{ fontFamily: F, fontSize: 12, color: C.char, fontStyle: "italic", marginTop: 2, lineHeight: 1.35 }}>{it.calc.perfil}</div>}
                 <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{mini(it.calc)}</div>
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -72,7 +78,8 @@ export function RankingView({ candidatos, evaluaciones, onOpen }) {
                   <Foto c={it.cand} size={38} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: SF, fontSize: 15, color: C.char }}>{it.cand.nombre}</div>
-                    <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 1 }}>Falta: {it.calc.falta.join(" · ")}</div>
+                    {it.calc.perfil && <div style={{ fontFamily: F, fontSize: 12, color: C.char, fontStyle: "italic", marginTop: 1 }}>{it.calc.perfil}</div>}
+                    <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 1 }}>Evaluación incompleta · falta: {it.calc.falta.join(" · ")}</div>
                   </div>
                 </button>
               ))}
@@ -87,10 +94,34 @@ export function RankingView({ candidatos, evaluaciones, onOpen }) {
                   <Foto c={it.cand} size={38} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: SF, fontSize: 15, color: C.char }}>{it.cand.nombre}</div>
+                    {it.calc.perfil && <div style={{ fontFamily: F, fontSize: 12, color: C.char, fontStyle: "italic", marginTop: 1 }}>{it.calc.perfil}</div>}
                     <div style={{ fontFamily: F, fontSize: 11.5, color: "#B23A2C", marginTop: 1 }}>{it.calc.motivoDescarte}</div>
+                    {it.calc.notaFinal != null && <div style={{ fontFamily: F, fontSize: 11, color: C.mut, marginTop: 1 }}>Nota {it.calc.notaFinal} (no cuenta: descartada)</div>}
                   </div>
                 </button>
               ))}
+            </>
+          )}
+
+          {anteriores.length > 0 && (
+            <>
+              <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, margin: "18px 4px 4px" }}>Plantilla anterior ({anteriores.length})</div>
+              <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, margin: "0 4px 9px", lineHeight: 1.4 }}>Evaluadas en septiembre con la hoja antigua. Su nota es la de entonces y no es comparable con las de la plantilla nueva.</div>
+              {anteriores.map((it) => { const et = it.calc.etiqueta; return (
+                <button key={it.ev.candidato_id} onClick={() => onOpen(it.cand)} style={{ width: "100%", textAlign: "left", background: "#FAF8FC", border: `1px dashed #D9D0E6`, borderRadius: 14, padding: 12, marginBottom: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 11 }}>
+                  <Foto c={it.cand} size={38} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}><span style={{ fontFamily: SF, fontSize: 15, color: C.char }}>{it.cand.nombre}</span><TagAnterior /></div>
+                    <div style={{ fontFamily: F, fontSize: 11.5, color: it.calc.descartada ? "#B23A2C" : C.mut, marginTop: 1 }}>{it.calc.descartada ? it.calc.motivoDescarte : it.calc.completa ? `A ${it.calc.totalA}/6 · B ${it.calc.totalB}/${it.calc.maxB}` : `Evaluación incompleta · falta: ${it.calc.falta.join(" · ")}`}</div>
+                  </div>
+                  {it.calc.notaFinal != null && !it.calc.descartada && (
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontFamily: SF, fontSize: 20, color: C.mut }}>{it.calc.notaFinal}</div>
+                      {et && <div style={{ fontFamily: F, fontSize: 10, fontWeight: 700, color: et.fg, background: et.bg, borderRadius: 999, padding: "2px 8px", marginTop: 2, opacity: 0.85 }}>{et.label}</div>}
+                    </div>
+                  )}
+                </button>
+              ); })}
             </>
           )}
         </>
