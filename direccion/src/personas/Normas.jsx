@@ -35,29 +35,29 @@ export function Normas() {
   return (
     <>
       <div className="head"><div><h2>Normas y protocolos</h2><p className="sub">Se suben una sola vez y llegan a toda la plantilla ({d.plantilla.length} personas, principales y apoyos). Las eventuales no las reciben. Se pide recibí, no firma. Al subir una versión nueva, la anterior deja de verse en la app pero queda guardada con todos sus recibís.</p></div></div>
-      <div className="tabla-scroll">
-        <table className="ranking">
-          <thead><tr><th>Documento</th><th>Versión vigente</th><th>Recibís</th><th></th></tr></thead>
-          <tbody>
-            {d.normas.map((n) => {
-              const v = vigente(n.id); const r = v && resumen(v);
-              return (
-                <tr key={n.id}>
-                  <td><span className="pn">{n.titulo}</span></td>
-                  <td>{v ? <>v{v.version}<span className="pf">en vigor desde {dia(v.vigente_desde)}</span></> : <span className="pf">Sin subir</span>}</td>
-                  <td>{v ? <b style={{ color: r.ok === r.total ? "var(--up)" : "#8A5A0B" }}>{r.ok} de {r.total}</b> : "—"}</td>
-                  <td className="r"><button className="btn-l" onClick={() => setSel(n)}>{v ? "Ver / nueva versión" : "Subir"}</button></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* #208: lista en filas (no tabla) y el detalle se despliega justo debajo del documento pulsado */}
+      <div className="card" style={{ padding: 0 }}>
+        {d.normas.map((n, i) => {
+          const v = vigente(n.id); const r = v && resumen(v); const abierto = sel?.id === n.id;
+          return (
+            <div key={n.id} style={{ borderTop: i ? "1px solid var(--line)" : "none", scrollMarginTop: 72 }}>
+              <div onClick={() => setSel(abierto ? null : n)} style={{ display: "flex", gap: "4px 12px", alignItems: "center", flexWrap: "wrap", padding: "12px 14px", cursor: "pointer" }}>
+                <span style={{ flex: "1 1 200px", minWidth: 0 }}>
+                  <b style={{ display: "block" }}>{n.titulo}</b>
+                  <span className="pf">{v ? `v${v.version} · en vigor desde ${dia(v.vigente_desde)}` : "Sin subir"}</span>
+                </span>
+                {v && <b style={{ color: r.ok === r.total ? "var(--up)" : "#8A5A0B", whiteSpace: "nowrap" }}>Recibí {r.ok} de {r.total}</b>}
+                <button className="btn-l" onClick={(e) => { e.stopPropagation(); setSel(abierto ? null : n); }}>{abierto ? "Cerrar" : v ? "Ver / nueva versión" : "Subir"}</button>
+              </div>
+              {abierto && <Detalle key={n.id} norma={n} d={d} resumen={resumen} abrir={abrir} onClose={() => setSel(null)} onCambio={() => { cargar(); }} />}
+            </div>
+          );
+        })}
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 16, flexWrap: "wrap" }}>
         <label className="campo" style={{ marginBottom: 0, minWidth: 260 }}>Crear otro documento<input value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="p. ej. Protocolo de apertura y cierre" /></label>
         <button className="btn-l" disabled={nueva.trim().length < 3} onClick={crear}>Añadir</button>
       </div>
-      {sel && <Detalle norma={sel} d={d} resumen={resumen} abrir={abrir} onClose={() => setSel(null)} onCambio={() => { cargar(); }} />}
     </>
   );
 }
@@ -65,6 +65,10 @@ export function Normas() {
 function Detalle({ norma, d, resumen, abrir, onClose, onCambio }) {
   const vs = d.versiones.filter((v) => v.norma_id === norma.id);
   const actual = vs.find((v) => v.vigente);
+  const anteriores = vs.filter((v) => !v.vigente);
+  const caja = useRef(null);
+  // Al abrir, que el desplegable quede a la vista (en el móvil no se ve si no)
+  useEffect(() => { caja.current?.parentElement?.scrollIntoView({ behavior: "smooth", block: "start" }); }, []);
   const [ver, setVer] = useState("");
   const [desde, setDesde] = useState(hoy());
   const [archivo, setArchivo] = useState(null);
@@ -117,31 +121,58 @@ function Detalle({ norma, d, resumen, abrir, onClose, onCambio }) {
     return (
       <div style={{ margin: "8px 0 12px" }}>
         <p className="pf" style={{ margin: "0 0 6px", color: "inherit" }}><b>Recibí {ok} de {total}</b> · PDF {pdf} de {total}{v.video_ruta ? ` · Vídeo ${video} de ${total}` : ""}</p>
-        <div className="tabla-scroll">
-          <table className="ranking">
-            <thead><tr><th>Persona</th><th>PDF</th>{v.video_ruta && <th>Vídeo</th>}<th>Recibí</th></tr></thead>
-            <tbody>
-              {d.plantilla.map((u) => {
-                const r = por.get(u.id);
-                return (
-                  <tr key={u.id}>
-                    <td><b>{u.nombre}</b>{!u.documentos_electronicos_en && <span className="pf">Aún no ha aceptado recibir documentos en la app</span>}</td>
-                    <td>{r?.visto_en ? `Abierto ${fecha(r.visto_en)}` : <span style={{ color: "#8A5A0B" }}>Sin abrir</span>}</td>
-                    {v.video_ruta && <td>{r?.video_completo_en ? vidTxt(r) : <span style={{ color: "#8A5A0B" }}>{vidTxt(r)}</span>}</td>}
-                    <td>{r?.recibido_en ? <b style={{ color: "var(--up)" }}>Confirmado {fecha(r.recibido_en)}</b> : <span style={{ color: "#8A5A0B" }}>Pendiente</span>}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div style={{ display: "grid", gap: 6 }}>
+          {[...d.plantilla].sort((a, b) => (por.get(a.id)?.recibido_en ? 1 : 0) - (por.get(b.id)?.recibido_en ? 1 : 0)).map((u) => {
+            const r = por.get(u.id);
+            return (
+              <div key={u.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", display: "flex", gap: "2px 14px", flexWrap: "wrap", alignItems: "baseline", fontSize: 13 }}>
+                <span style={{ flex: "1 1 160px", minWidth: 0 }}>
+                  <b>{u.nombre}</b>{!u.documentos_electronicos_en && <span className="pf">Aún no ha aceptado recibir documentos en la app</span>}
+                </span>
+                <span style={{ flex: "1 1 180px" }}>{r?.recibido_en ? <b style={{ color: "var(--up)" }}>Confirmado {fecha(r.recibido_en)}</b> : <b style={{ color: "#8A5A0B" }}>Pendiente</b>}</span>
+                <span className="pf" style={{ flexBasis: "100%", margin: 0 }}>
+                  PDF: {r?.visto_en ? `abierto ${fecha(r.visto_en)}` : <span style={{ color: "#8A5A0B" }}>sin abrir</span>}
+                  {v.video_ruta && <> · Vídeo: {r?.video_completo_en ? vidTxt(r).toLowerCase() : <span style={{ color: "#8A5A0B" }}>{vidTxt(r).toLowerCase()}</span>}</>}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
   };
   return (
-    <div className="card mt" style={{ border: "1px solid var(--line)" }}>
-      <div className="head"><div><h3 style={{ margin: 0 }}>{norma.titulo}</h3></div><button className="btn-txt" onClick={onClose}>Cerrar</button></div>
-      <h4 style={{ margin: "8px 0 4px", fontSize: 14 }}>Subir {actual ? "una versión nueva" : "el documento"}</h4>
+    <div ref={caja} style={{ borderTop: "1px solid var(--line)", padding: "12px 14px 16px" }}>
+      {actual ? (
+        <div style={{ padding: "4px 0 6px" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+            <b>v{actual.version} vigente</b>
+            <span className="pf" style={{ color: "inherit", margin: 0 }}>en vigor desde {dia(actual.vigente_desde)} · subida {fecha(actual.subido_en)}</span>
+            <button className="btn-l" style={{ marginLeft: "auto" }} onClick={() => abrir(actual)}>Abrir PDF</button>
+          </div>
+          <Seguimiento v={actual} />
+          <VideoNorma v={actual} onCambio={onCambio} />
+        </div>
+      ) : <p className="pf" style={{ marginTop: 0 }}>Todavía no hay ninguna versión subida.</p>}
+      {anteriores.length > 0 && <h4 style={{ margin: "20px 0 4px", fontSize: 14 }}>Versiones anteriores</h4>}
+      {anteriores.map((v) => {
+        const r = resumen(v);
+        return (
+          <div key={v.id} style={{ borderTop: "1px solid var(--line)", padding: "10px 0", opacity: 0.85 }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+              <b>v{v.version}</b>
+              <span className="pf" style={{ color: "inherit" }}>Anterior (retirada {fecha(v.retirada_en)}) · en vigor desde {dia(v.vigente_desde)} · subida {fecha(v.subido_en)}</span>
+              <b style={{ marginLeft: "auto" }}>{r.ok} de {r.total}</b>
+              <button className="btn-l" onClick={() => abrir(v)}>Abrir PDF</button>
+            </div>
+            <VideoNorma v={v} onCambio={onCambio} />
+            <details><summary className="pf" style={{ cursor: "pointer", margin: "6px 0", color: "inherit" }}>Ver quién la confirmó</summary><Seguimiento v={v} /></details>
+            <p className="pf" style={{ margin: 0 }}>Solo se muestran quienes siguen en plantilla; los recibís de quien ya no lo está siguen guardados.</p>
+          </div>
+        );
+      })}
+      <div style={{ borderTop: "1px solid var(--line)", marginTop: 16, paddingTop: 4 }}>
+      <h4 style={{ margin: "12px 0 4px", fontSize: 14 }}>Subir {actual ? "una versión nueva" : "el documento"}</h4>
       {actual && <p className="pf" style={{ marginTop: 0 }}>La v{actual.version} dejará de verse en la app y la nueva aparecerá como pendiente para toda la plantilla.</p>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0 14px", maxWidth: 640 }}>
         <label className="campo">Versión<input value={ver} onChange={(e) => setVer(e.target.value)} placeholder="2.1" /></label>
@@ -172,23 +203,7 @@ function Detalle({ norma, d, resumen, abrir, onClose, onCambio }) {
         )}
       </div>
       <button className="btn-p" disabled={busy} onClick={subir}>{busy ? "Subiendo…" : "Subir y pedir el recibí"}</button>
-      {vs.length > 0 && <h4 style={{ margin: "20px 0 4px", fontSize: 14 }}>Versiones y seguimiento</h4>}
-      {vs.map((v) => {
-        const r = resumen(v);
-        return (
-          <div key={v.id} style={{ borderTop: "1px solid var(--line)", padding: "10px 0", opacity: v.vigente ? 1 : 0.8 }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-              <b>v{v.version}</b>
-              <span className="pf" style={{ color: "inherit" }}>{v.vigente ? "Vigente" : `Anterior (retirada ${fecha(v.retirada_en)})`} · en vigor desde {dia(v.vigente_desde)} · subida {fecha(v.subido_en)}</span>
-              <b style={{ marginLeft: "auto" }}>{r.ok} de {r.total}</b>
-              <button className="btn-l" onClick={() => abrir(v)}>Abrir PDF</button>
-            </div>
-            <VideoNorma v={v} onCambio={onCambio} />
-            <Seguimiento v={v} />
-            {!v.vigente && <p className="pf" style={{ margin: 0 }}>Solo se muestran quienes siguen en plantilla; los recibís de quien ya no lo está siguen guardados.</p>}
-          </div>
-        );
-      })}
+      </div>
     </div>
   );
 }

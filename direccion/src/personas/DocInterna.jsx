@@ -33,32 +33,31 @@ export function DocInterna() {
   return (
     <>
       <div className="head"><div><h2>Documentación interna</h2><p className="sub">Documentos de uso interno de dirección. Solo los ve dirección: no llegan a ninguna trabajadora ni eventual, no se pide recibí ni firma y no se avisa a nadie. Al subir una versión nueva, la anterior queda guardada como versión anterior.</p></div></div>
-      <div className="tabla-scroll">
-        <table className="ranking">
-          <thead><tr><th>Documento</th><th>Versión vigente</th><th>Copias firmadas</th><th></th></tr></thead>
-          <tbody>
-            {d.documentos.map((n) => {
-              const v = vigente(n.id); const c = copias(n.id).length;
-              return (
-                <tr key={n.id}>
-                  <td><span className="pn">{n.titulo}</span></td>
-                  <td>{v ? <>v{v.version}<span className="pf">en vigor desde {dia(v.vigente_desde)}</span></> : <span className="pf">Sin subir</span>}</td>
-                  <td>{c > 0 ? <b>{c}</b> : <span className="pf">—</span>}</td>
-                  <td className="r">
-                    {v && <button className="btn-l" style={{ marginRight: 6 }} onClick={() => abrirUrl(() => fn("abrir", { id: v.id }))}>Abrir PDF</button>}
-                    <button className="btn-l" onClick={() => setSel(n)}>{v ? "Ver / nueva versión" : "Subir"}</button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* #208: lista en filas y el detalle se despliega justo debajo del documento pulsado */}
+      <div className="card" style={{ padding: 0 }}>
+        {d.documentos.map((n, i) => {
+          const v = vigente(n.id); const c = copias(n.id).length; const abierto = sel?.id === n.id;
+          return (
+            <div key={n.id} style={{ borderTop: i ? "1px solid var(--line)" : "none", scrollMarginTop: 72 }}>
+              <div onClick={() => setSel(abierto ? null : n)} style={{ display: "flex", gap: "4px 12px", alignItems: "center", flexWrap: "wrap", padding: "12px 14px", cursor: "pointer" }}>
+                <span style={{ flex: "1 1 200px", minWidth: 0 }}>
+                  <b style={{ display: "block" }}>{n.titulo}</b>
+                  <span className="pf">{v ? `v${v.version} · en vigor desde ${dia(v.vigente_desde)}` : "Sin subir"}{c > 0 ? ` · ${c} ${c === 1 ? "copia firmada" : "copias firmadas"}` : ""}</span>
+                </span>
+                <span style={{ display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                  {v && <button className="btn-l" onClick={() => abrirUrl(() => fn("abrir", { id: v.id }))}>Abrir PDF</button>}
+                  <button className="btn-l" onClick={() => setSel(abierto ? null : n)}>{abierto ? "Cerrar" : v ? "Ver / nueva versión" : "Subir"}</button>
+                </span>
+              </div>
+              {abierto && <Detalle key={n.id} doc={n} d={d} copias={copias(n.id)} onClose={() => setSel(null)} onCambio={cargar} />}
+            </div>
+          );
+        })}
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 16, flexWrap: "wrap" }}>
         <label className="campo" style={{ marginBottom: 0, minWidth: 260 }}>Crear otro documento<input value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="p. ej. Registro de actividades de tratamiento" /></label>
         <button className="btn-l" disabled={nueva.trim().length < 3} onClick={crear}>Añadir</button>
       </div>
-      {sel && <Detalle doc={sel} d={d} copias={copias(sel.id)} onClose={() => setSel(null)} onCambio={cargar} />}
     </>
   );
 }
@@ -112,8 +111,7 @@ function Detalle({ doc, d, copias, onClose, onCambio }) {
     setBusy(false);
   };
   return (
-    <div className="card mt" style={{ border: "1px solid var(--line)" }}>
-      <div className="head"><div><h3 style={{ margin: 0 }}>{doc.titulo}</h3></div><button className="btn-txt" onClick={onClose}>Cerrar</button></div>
+    <div style={{ borderTop: "1px solid var(--line)", padding: "12px 14px 16px" }}>
       <h4 style={{ margin: "8px 0 4px", fontSize: 14 }}>Subir {actual ? "una versión nueva" : "el documento"}</h4>
       {actual && <p className="pf" style={{ marginTop: 0 }}>La v{actual.version} pasará a versión anterior y seguirá disponible.</p>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0 14px", maxWidth: 640 }}>
