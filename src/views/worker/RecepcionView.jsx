@@ -886,7 +886,7 @@ function Linea({ l, abono, manual, aviso, onCambio, onAsociar, marcar, normal, h
 }
 
 // ---------- revisar y confirmar ----------
-function Revisar({ datos, onHecho, onVolver }) {
+function Revisar({ datos, onHecho, onVolver, onAnadirHoja }) {
   const { recepcion: rec, proveedor: prov } = datos;
   const manual = rec.via === "manual";
   const [lineas, setLineas] = useState(() => (datos.lineas || []).map((l) => ({ ...l, via: rec.via, q: fmt(l.uds_confirmadas ?? l.uds_doc ?? 0) })));
@@ -1072,7 +1072,10 @@ function Revisar({ datos, onHecho, onVolver }) {
         <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{[tipoDoc(rec.doc_tipo), rec.doc_numero ? `${rec.doc_numero}${rec.doc_numero_generado ? " (código interno)" : ""}` : null, (rec.doc_tipo || rec.doc_numero || rec.doc_fecha) ? fechaDoc(rec.doc_fecha) : null, rec.total != null ? eur(rec.total) : null].filter(Boolean).join(" · ") || (manual ? "Sin factura: apunta lo que ha llegado" : "")}</div>
       </div>
       {rec.prueba && <div style={{ fontFamily: F, fontSize: 12.5, background: "#EAF0F8", color: "#2F5C8F", borderRadius: 12, padding: "8px 12px" }}>Modo prueba hasta el inventario: se guarda todo, pero el stock de la caja aún no cambia. Los productos nuevos sí se dan de alta en la caja.</div>}
-      <Aviso msg={msg} tipo={msg && /ya estaba/.test(msg) ? "bien" : "mal"} />
+      <Aviso msg={msg} tipo={msg && /ya estaba|^He visto/.test(msg) && !/No he podido leer/.test(msg) ? "bien" : "mal"} />
+      {onAnadirHoja && rec.via === "foto" && !abono && (
+        <button type="button" onClick={() => onAnadirHoja(lineas)} style={{ ...btnPeq, width: "100%" }}>+ Añadir hoja (falta una hoja de este documento)</button>
+      )}
 
       {!detalleAbierto ? (
         <div style={card}>
@@ -1169,6 +1172,59 @@ function Hecho({ r, onFin }) {
   );
 }
 
+// ---------- #213: varias hojas por foto ----------
+const MAX_HOJAS = 8;
+// Al añadir una hoja se vuelve a leer todo: se conserva lo corregido a mano en las líneas que siguen igual
+const claveLinea = (l) => (l.ref ? "r:" + l.ref : "d:" + claveProv(l.descripcion));
+const CAMPOS_MANO = ["producto", "product_id", "emparejado", "tipo", "unidades_por", "uds_doc", "base_unit", "coste_txt", "coste_ok", "no_producto_motivo", "no_producto_texto", "preg_no"];
+function conservarCorregido(nuevas, viejas) {
+  if (!viejas?.length) return nuevas;
+  const usadas = new Set();
+  const out = (nuevas || []).map((n) => {
+    if (n.anadida) return n;
+    const i = viejas.findIndex((v, j) => !usadas.has(j) && v.id != null && !v.anadida && claveLinea(v) === claveLinea(n) && Number(v.cant_doc) === Number(n.cant_doc));
+    if (i < 0) return n;
+    usadas.add(i);
+    const v = viejas[i];
+    const c = { uds_confirmadas: numero(v.q) };
+    for (const k of CAMPOS_MANO) if (k in v) c[k] = v[k];
+    if (v.nuevo && v.nuevo.regalo_de == null && !(n.nuevo && n.nuevo.regalo_de != null)) c.nuevo = v.nuevo;
+    return { ...n, ...c };
+  });
+  return [...out, ...viejas.filter((v) => v.id == null)];
+}
+function Hojas({ hojas, anadir, msg, onCamara, onGaleria, onQuitar, onLeer, onCancelar }) {
+  const n = hojas.length;
+  return (
+    <div style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: 12, maxWidth: 540, margin: "0 auto" }}>
+      <div style={{ fontFamily: SF, fontSize: 22 }}>{anadir ? "Añadir hoja" : "Fotos del documento"}</div>
+      <div style={{ fontFamily: F, fontSize: 13, color: C.mut }}>{anadir ? "Haz la foto de la hoja que falta. Se vuelve a leer el documento con todas sus hojas." : "Si la factura o el albarán tiene varias hojas, haz una foto de cada una. Si son varios documentos, puedes fotografiarlos seguidos: los separo yo."}</div>
+      <Aviso msg={msg} />
+      {n > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          {hojas.map((h, i) => (
+            <div key={h.k} style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${C.brdL}`, background: "#fff" }}>
+              <img src={`data:${h.mime};base64,${h.base64}`} alt={`Hoja ${i + 1}`} style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 6px" }}>
+                <span style={{ fontFamily: F, fontSize: 12, fontWeight: 700 }}>Hoja {i + 1}</span>
+                <button type="button" onClick={() => onQuitar(i)} aria-label={`Quitar la hoja ${i + 1}`} style={{ border: "none", background: "none", fontFamily: F, fontSize: 12, color: "#A3362B", textDecoration: "underline", cursor: "pointer", minHeight: 32 }}>Quitar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {n < MAX_HOJAS ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <button type="button" onClick={onCamara} style={{ ...btnPeq, borderColor: C.char }}>{n ? "+ Añadir otra hoja" : "Hacer foto"}</button>
+          <button type="button" onClick={onGaleria} style={btnPeq}>Elegir de la galería</button>
+        </div>
+      ) : <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>Como mucho {MAX_HOJAS} hojas de una vez.</div>}
+      <button type="button" disabled={!n} onClick={onLeer} style={{ ...btnDark, opacity: n ? 1 : 0.45, cursor: n ? "pointer" : "default" }}>{n ? `Ya están todas, leer (${n} hoja${n > 1 ? "s" : ""})` : "Haz al menos una foto"}</button>
+      <button type="button" onClick={onCancelar} style={{ background: "none", border: "none", fontFamily: F, fontSize: 13, color: C.mut, textDecoration: "underline", cursor: "pointer", minHeight: 40 }}>Cancelar</button>
+    </div>
+  );
+}
+
 // ---------- vista principal ----------
 // pendientes: por fecha del documento, del más antiguo al más reciente; los que aún no tienen fecha, al final
 const ordenPend = (ls) => [...ls].sort((a, b) => (a.doc_fecha && b.doc_fecha ? a.doc_fecha.localeCompare(b.doc_fecha) || a.id - b.id : a.doc_fecha ? -1 : b.doc_fecha ? 1 : 0));
@@ -1186,8 +1242,20 @@ export function RecepcionView({ onContar }) {
   const [resultado, setResultado] = useState(null);
   const [sinCodigo, setSinCodigo] = useState(0);
   const [espera, setEspera] = useState(null); // pedido que espera su factura y al que se añade un producto nuevo
-  const fotoInput = useRef(null);
-  const destinoFoto = useRef(null); // {proveedor, recepcion_id}
+  const fotoElegidaRef = useRef(null);
+  // #213: el selector de fotos se crea fuera de React, para que no se pierda al cambiar de pantalla mientras la cámara está abierta
+  const elegirFotos = (camara) => {
+    const el = document.createElement("input");
+    el.type = "file"; el.accept = "image/*"; el.style.display = "none";
+    if (camara) el.setAttribute("capture", "environment"); else el.multiple = true;
+    el.onchange = (e) => { fotoElegidaRef.current?.(e); el.remove(); };
+    document.body.appendChild(el);
+    el.click();
+  };
+  const destinoFoto = useRef(null); // {proveedor, recepcion_id, anadir, lineas, volver}
+  const [hojas, setHojas] = useState([]); // #213: fotos preparadas antes de leer
+  const [msgFotos, setMsgFotos] = useState("");
+  const [revKey, setRevKey] = useState(0);
 
   const cargar = useCallback(async () => {
     try { const r = await fn("inicio"); setLista(ordenPend(r.pendientes || [])); setProvs(r.proveedores || []); setPrueba(!!r.prueba); setSinCodigo(r.sin_codigo || 0); onContar && onContar((r.pendientes || []).length); }
@@ -1196,25 +1264,58 @@ export function RecepcionView({ onContar }) {
   useEffect(() => { cargar(); }, [cargar]);
 
   const abrir = async (id) => { setMsg(""); setVista("leyendo"); try { setDatos(await fn("abrir", { id })); setVista("revisar"); } catch (e) { setMsg(e.message); setVista("lista"); } };
-  const pedirFoto = (proveedor, recepcion_id) => { destinoFoto.current = { proveedor, recepcion_id }; setMsg(""); fotoInput.current?.click(); };
-  const fotoElegida = async (e) => {
-    const files = [...(e.target.files || [])].slice(0, 4); e.target.value = "";
-    if (!files.length) return;
-    setVista("leyendo"); setMsg("");
-    try {
-      const fotos = await Promise.all(files.map(prepararFoto));
-      const d = destinoFoto.current || {};
-      const r = await fn("leer_foto", { supplier_id: d.proveedor?.supplier_id, proveedor: d.proveedor?.nombre, recepcion_id: d.recepcion_id, fotos });
-      setDatos(r); setVista("revisar");
-    } catch (er) { setMsg(er.message || "No he podido leer la foto"); setVista(elegido ? "proveedor" : "lista"); }
+  // #213: «Hacer foto» abre la cámara y deja juntar varias hojas antes de leer
+  const pedirFoto = (proveedor, recepcion_id, extra = {}) => {
+    destinoFoto.current = { proveedor, recepcion_id, volver: extra.anadir ? "revisar" : vista, ...extra };
+    setHojas([]); setMsg(""); setMsgFotos(""); setVista("fotos");
+    elegirFotos(true);
   };
+  const fotoElegida = async (e) => {
+    const files = [...(e.target.files || [])]; e.target.value = "";
+    if (!files.length) return;
+    setMsgFotos("");
+    const sitio = Math.max(0, MAX_HOJAS - hojas.length);
+    if (files.length > sitio) setMsgFotos(`Como mucho ${MAX_HOJAS} hojas: he cogido ${sitio}.`);
+    const nuevas = [];
+    for (const f of files.slice(0, sitio)) { try { nuevas.push({ ...(await prepararFoto(f)), k: `${Date.now()}-${Math.random()}` }); } catch (er) { setMsgFotos(er.message || "No puedo abrir esa foto"); } }
+    setHojas((h) => [...h, ...nuevas].slice(0, MAX_HOJAS));
+  };
+  fotoElegidaRef.current = fotoElegida;
+  const leerHojas = async () => {
+    if (!hojas.length) return;
+    const d = destinoFoto.current || {};
+    setVista("leyendo"); setMsgFotos("");
+    try {
+      const r = await fn("leer_foto", { supplier_id: d.proveedor?.supplier_id, proveedor: d.proveedor?.nombre, recepcion_id: d.recepcion_id, anadir: !!d.anadir, fotos: hojas.map(({ mime, base64 }) => ({ mime, base64 })) });
+      if (d.anadir && d.lineas && r.recepcion?.id === d.recepcion_id) r.lineas = conservarCorregido(r.lineas, d.lineas);
+      setHojas([]); destinoFoto.current = { ...d, anadir: false, lineas: null };
+      setDatos(r); setRevKey((k) => k + 1); setVista("revisar");
+    } catch (er) { setMsgFotos(er.message || "No he podido leer la foto"); setVista("fotos"); }
+  };
+  const cancelarFotos = () => { const d = destinoFoto.current || {}; setHojas([]); setMsgFotos(""); setVista(d.anadir && datos ? "revisar" : d.volver === "proveedor" && elegido ? "proveedor" : "lista"); };
   const manual = async (p) => { setVista("leyendo"); try { setDatos(await fn("crear_manual", { supplier_id: p.supplier_id, proveedor: p.nombre })); setVista("revisar"); } catch (e) { setMsg(e.message); setVista("proveedor"); } };
   const haLlegado = async (p) => { try { await fn("ha_llegado", { supplier_id: p.supplier_id, proveedor: p.nombre }); setElegido(null); setVista("lista"); setMsg(""); cargar(); } catch (e) { setMsg(e.message); } };
 
-  const input = <input ref={fotoInput} type="file" accept="image/*" capture="environment" multiple onChange={fotoElegida} style={{ display: "none" }} aria-hidden="true" tabIndex={-1} />;
-
-  if (vista === "leyendo") return <div>{input}<Cargando texto={destinoFoto.current && !datos ? "Leyendo el documento… tarda unos 20 segundos" : "Un momento…"} /></div>;
-  if (vista === "revisar" && datos) return <div>{input}<Instrucciones pantalla="recepcion" /><Revisar datos={datos} onVolver={(recargar) => { setDatos(null); setVista("lista"); if (recargar) cargar(); }} onHecho={(r) => { setResultado(r); setDatos(null); setVista(r.sin_codigo?.length ? "sincodigo" : "hecho"); }} /></div>;
+  const input = null;
+  const leyendoHojas = hojas.length > 0;
+  const textoLeyendo = leyendoHojas ? (hojas.length > 1 ? `Leyendo ${hojas.length} hojas… tarda un poco más de un minuto` : "Leyendo el documento… tarda unos 20 segundos") : "Un momento…";
+  const pantallaHojas = <Hojas hojas={hojas} anadir={!!destinoFoto.current?.anadir} msg={msgFotos} onCamara={() => elegirFotos(true)} onGaleria={() => elegirFotos(false)}
+    onQuitar={(i) => setHojas((h) => h.filter((_, j) => j !== i))} onLeer={leerHojas} onCancelar={cancelarFotos} />;
+  // Revisar sigue montada (oculta) mientras se añade una hoja, para no perder lo que ya se ha tocado si se cancela
+  const anadiendo = !!destinoFoto.current?.anadir && (vista === "fotos" || vista === "leyendo");
+  if (datos && (vista === "revisar" || anadiendo)) return (
+    <div>{input}
+      <div style={{ display: vista === "revisar" ? "block" : "none" }}>
+        <Instrucciones pantalla="recepcion" />
+        <Revisar key={`${datos.recepcion?.id}-${revKey}`} datos={datos} onVolver={(recargar) => { setDatos(null); setVista("lista"); if (recargar) cargar(); }} onHecho={(r) => { setResultado(r); setDatos(null); setVista(r.sin_codigo?.length ? "sincodigo" : "hecho"); }}
+          onAnadirHoja={(ls) => pedirFoto({ nombre: datos.recepcion.proveedor, supplier_id: datos.recepcion.supplier_id }, datos.recepcion.id, { anadir: true, lineas: ls })} />
+      </div>
+      {vista === "fotos" && pantallaHojas}
+      {vista === "leyendo" && <Cargando texto={textoLeyendo} />}
+    </div>
+  );
+  if (vista === "fotos") return <div>{input}{pantallaHojas}</div>;
+  if (vista === "leyendo") return <div>{input}<Cargando texto={textoLeyendo} /></div>;
   if (vista === "sincodigo") return <SinCodigo productos={resultado?.sin_codigo?.length ? resultado.sin_codigo.map((a) => ({ ...a, id: a.alta_id })) : null} onTerminar={() => { if (resultado) setVista("hecho"); else { setVista("lista"); cargar(); } }} />;
   if (vista === "espera" && espera) return <FichaProducto modo="espera" recepcion={espera} proveedor={{ nombre: espera.proveedor, supplier_id: espera.supplier_id }} onCerrar={() => { setEspera(null); setVista("lista"); }}
     onListo={(r) => { setEspera(null); setVista("lista"); setMsg(""); if (r.alta) { setAvisoBien(`${r.alta.nombre} dado de alta a ${eur(r.alta.pvp)} y añadido al pedido de ${espera.proveedor}.`); cargar(); } else if (r.incidencia) setAvisoBien("Incidencia mandada a dirección."); }} />;

@@ -44,7 +44,7 @@ function Visor({ recepcionId, titulo, onClose }) {
   useEffect(() => {
     let vivo = true;
     sb.fn("recepcion", { accion: "abrir", id: recepcionId })
-      .then((r) => { const rec = r?.recepcion || {}; const u = [rec.doc_url, rec.foto_url].filter(Boolean).filter((x, k, a) => a.indexOf(x) === k); if (vivo) { if (u.length) setPaginas(u); else setFallo(true); } })
+      .then((r) => { const rec = r?.recepcion || {}; const u = [rec.doc_url, ...(rec.fotos_url?.length ? rec.fotos_url : [rec.foto_url])].filter(Boolean).filter((x, k, a) => a.indexOf(x) === k); if (vivo) { if (u.length) setPaginas(u); else setFallo(true); } })
       .catch(() => vivo && setFallo(true));
     return () => { vivo = false; };
   }, [recepcionId]);

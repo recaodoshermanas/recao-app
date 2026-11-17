@@ -23,7 +23,8 @@ const limpio = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").r
 const extDe = (url, fallo) => { try { const e = /\.([A-Za-z0-9]{2,5})$/.exec(new URL(url).pathname); return e ? e[1].toLowerCase() : fallo; } catch (_) { return fallo; } };
 
 async function urlDoc(tipo, fila) {
-  if (tipo === "compra") { const r = await sb.fn("recepcion", { accion: "abrir", id: fila.recepcion_id }); return r?.recepcion?.doc_url || r?.recepcion?.foto_url || null; }
+  // #213: una compra fotografiada puede tener varias hojas: se bajan todas
+  if (tipo === "compra") { const rec = (await sb.fn("recepcion", { accion: "abrir", id: fila.recepcion_id }))?.recepcion; if (!rec) return null; if (rec.doc_url) return rec.doc_url; return rec.fotos_url?.length > 1 ? rec.fotos_url : rec.foto_url || null; }
   const r = await sb.fn(tipo === "mantenimiento" ? "mantenimiento-foto" : "inversiones-foto", { accion: "ver", id: fila.id });
   return r?.url || null;
 }
@@ -53,16 +54,19 @@ async function armar(tipo, filas, tr, avance) {
   let hechos = 0;
   await enLotes(conDoc, 4, async (f) => {
     try {
-      const url = await urlDoc(tipo, f.raw);
-      if (!url) throw new Error("sin enlace");
-      const { blob } = await bajar(url);
-      const ext = extDe(url, blob.type === "application/pdf" ? "pdf" : "jpg");
+      const enlace = await urlDoc(tipo, f.raw);
+      const urls = (Array.isArray(enlace) ? enlace : [enlace]).filter(Boolean);
+      if (!urls.length) throw new Error("sin enlace");
+      const bajados = await Promise.all(urls.map(bajar));
       let base = [f.fecha, limpio(f.proveedor) || "sin-proveedor", limpio(f.numero) || (T.concepto ? limpio(f.concepto) : "")].filter(Boolean).join("_");
-      let nombre = `${base}.${ext}`, n = 2;
-      while (usados.has(nombre)) nombre = `${base}_${n++}.${ext}`;
-      usados.add(nombre);
-      zip.file(`documentos/${nombre}`, blob);
-      f.archivo = nombre;
+      let n = 2;
+      const libre = (b) => bajados.every(({ blob, url }, k) => !usados.has(`${b}${bajados.length > 1 ? `_hoja${k + 1}` : ""}.${extDe(url, blob.type === "application/pdf" ? "pdf" : "jpg")}`));
+      let b0 = base; while (!libre(b0)) b0 = `${base}_${n++}`;
+      const nombres = bajados.map(({ blob, url }, k) => {
+        const nombre = `${b0}${bajados.length > 1 ? `_hoja${k + 1}` : ""}.${extDe(url, blob.type === "application/pdf" ? "pdf" : "jpg")}`;
+        usados.add(nombre); zip.file(`documentos/${nombre}`, blob); return nombre;
+      });
+      f.archivo = nombres.join(", ");
     } catch (_) { f.tieneDoc = false; f.fallo = true; fallos++; }
     avance(++hechos, conDoc.length);
   });
