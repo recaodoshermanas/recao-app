@@ -246,15 +246,25 @@ function Publicar({ onClose, onHecho }) {
 
 // #57 · Lo que ha hecho la app sola con los huecos a 30 días
 const ACCION = { asignado: "Pasado a su apoyo", bolsa_plantilla: "No se pudo pasar: bolsa de plantilla", bolsa_eventuales: "Publicado a eventuales" };
+const CORTOS = 10;
+const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+function movidoEl(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const p = Object.fromEntries(new Intl.DateTimeFormat("es-ES", { timeZone: "Europe/Madrid", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(d).map((x) => [x.type, x.value]));
+  const dia = DIAS_CORTOS[new Date(d.toLocaleString("en-US", { timeZone: "Europe/Madrid" })).getDay()];
+  return `movido el ${dia} ${p.day}/${p.month} a las ${p.hour}:${p.minute}`;
+}
 function AsignadosApp() {
   const [l, setL] = useState(null);
-  useEffect(() => { sb.rpc("huecos_auto_lista", {}).then((r) => setL(Array.isArray(r) ? r : [])).catch(() => setL([])); }, []);
+  const [todos, setTodos] = useState(false);
+  useEffect(() => { sb.rpc("huecos_auto_recientes", {}).then((r) => setL(Array.isArray(r) ? r : [])).catch(() => setL([])); }, []);
   if (!l || !l.length) return null;
   return (
     <div className="card">
-      <div className="head"><div><h2>Asignados por la app</h2><p className="sub">Huecos que la app ha tratado sola (últimas 2 semanas y los que vienen)</p></div></div>
+      <div className="head"><div><h2>Asignados por la app</h2><p className="sub">Lo último que ha movido la app sola, lo más reciente arriba</p></div></div>
       <ul className="b-auto">
-        {l.map((a) => (
+        {(todos ? l : l.slice(0, CORTOS)).map((a) => (
           <li key={a.id} className={a.estado === "deshecho" ? "deshecho" : a.accion === "bolsa_plantilla" ? "sin-pasar" : ""}>
             <span className="b-auto-f">{fechaLarga(a.fecha)}</span>
             <span className="b-auto-t"><Turno t={a.turno} /></span>
@@ -263,10 +273,16 @@ function AsignadosApp() {
               {a.accion === "asignado" && <> · {a.apoyo} deja su {a.apoyo_turno}{a.horas ? ` (+${Number(a.horas).toLocaleString("es-ES")} h complementarias)` : ""}</>}
               {a.motivo && <> · {a.motivo}</>}
               {a.bolsa_turno && a.estado !== "deshecho" && <> · {a.bolsa_turno} en la bolsa: {a.bolsa_estado === "cubierto" ? `lo cubre ${a.cubierto_por || "—"}` : a.bolsa_estado === "abierto" ? "sin coger" : a.bolsa_estado}</>}
+              {a.creado_en && <span className="b-auto-m"> · {movidoEl(a.creado_en)}</span>}
             </span>
           </li>
         ))}
       </ul>
+      {l.length > CORTOS && (
+        <button type="button" className="btn-l b-auto-mas" onClick={() => setTodos(!todos)}>
+          {todos ? "Ver menos" : `Ver los últimos 30 días (${l.length})`}
+        </button>
+      )}
     </div>
   );
 }

@@ -73,6 +73,8 @@
 .b-auto li.sin-pasar .b-auto-d b { color: var(--down); }
 .b-auto li.deshecho { opacity: .6; }
 .b-auto-f { font-weight: 700; text-transform: capitalize; }
+.b-auto-m { color: var(--muted); font-size: 12.5px; }
+.b-auto-mas { margin-top: 10px; }
 @media (max-width: 640px) { .b-auto li { grid-template-columns: 1fr auto; } .b-auto-d { grid-column: 1 / -1; } }
 
 /* #197: turno sacado a la bolsa sin quitar a la titular, y devoluciones de días debidos */
