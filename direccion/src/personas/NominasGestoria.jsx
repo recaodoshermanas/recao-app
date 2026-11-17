@@ -1,4 +1,4 @@
-// Personas · Documentos · Nóminas de la gestoría (#30)
+// Personas · Documentos · Nóminas de la gestoría (#30, reorganizado en #215)
 // La gestoría manda un PDF con las nóminas de todas. Se separa solo por NIF y mes; dirección lo revisa y pulsa
 // «Aprobar y publicar»: cada nómina aparece en «Mis documentos» de su trabajadora y le llega el aviso de siempre.
 // Lo que no se puede asignar (NIF sin dar de alta, sin NIF, sin periodo) no se publica y sale aquí como aviso.
@@ -31,79 +31,82 @@ async function abrirPdf(datos) {
   catch (e) { if (w) w.close(); avisar(e.message, "mal"); }
 }
 
-export function NominasGestoria({ trabajadoras }) {
-  const [d, setD] = useState(null);
-  const [busy, setBusy] = useState(null);
-  const cargar = useCallback(async () => {
-    try {
-      const [lotes, partes, nifs] = await Promise.all([
-        sb.select("nominas_lotes", "select=*&order=recibido_en.desc&limit=60"),
-        sb.select("nominas_partes", "select=*&order=id.asc&limit=2000"),
-        sb.select("usuarios_nif", "select=usuario_id,nif"),
-      ]);
-      setD({ lotes, partes, nifs });
-    } catch (e) { avisar(e.message || "No se han podido cargar las nóminas", "mal"); setD((x) => x || { lotes: [], partes: [], nifs: [] }); }
-  }, []);
-  useEffect(() => { cargar(); }, [cargar]);
-  const nombre = useMemo(() => Object.fromEntries((trabajadoras || []).map((u) => [u.id, u.nombre])), [trabajadoras]);
-  if (!d) return <Cargando texto="Cargando nóminas…" />;
+// #215: ya no es una pestaña. Pendientes (Documentos.jsx) muestra los lotes por aprobar y las páginas sin asignar;
+// «Ajustes de documentos» muestra la subida a mano, los NIF y el correo automático. Aquí quedan las piezas y la carga.
+export async function cargarNominas() {
+  const [lotes, partes, nifs] = await Promise.all([
+    sb.select("nominas_lotes", "select=*&order=recibido_en.desc&limit=60"),
+    sb.select("nominas_partes", "select=*&order=id.asc&limit=2000"),
+    sb.select("usuarios_nif", "select=usuario_id,nif"),
+  ]);
+  return { lotes, partes, nifs };
+}
 
+// Resumen de lo que espera a dirección: lotes por aprobar, páginas sin asignar de lotes publicados y el aviso del día 10
+export function resumenNominas(d) {
+  const lotePorId = Object.fromEntries(d.lotes.map((l) => [l.id, l]));
   const porLote = (id) => d.partes.filter((p) => p.lote_id === id);
   const lotesVivos = d.lotes.filter((l) => l.estado !== "descartado");
   const porAprobar = lotesVivos.filter((l) => l.estado === "por_aprobar");
   const publicados = lotesVivos.filter((l) => l.estado === "publicado");
-  const lotePorId = Object.fromEntries(d.lotes.map((l) => [l.id, l]));
-  const problemas = d.partes.filter((p) => ["sin_asignar", "error"].includes(p.estado) && lotePorId[p.lote_id] && lotePorId[p.lote_id].estado !== "descartado");
-  // Aviso del día 10: las nóminas del mes anterior siguen sin publicar
+  const sueltas = d.partes.filter((p) => ["sin_asignar", "error"].includes(p.estado) && lotePorId[p.lote_id]?.estado === "publicado");
   const hoy = new Date();
   const mesAnt = `${mesAnterior()}-01`;
   const publicadasMesAnt = d.partes.some((p) => p.mes === mesAnt && p.estado === "publicada");
   const listasMesAnt = d.partes.some((p) => p.mes === mesAnt && p.estado === "lista");
-  const avisoDia10 = hoy.getDate() >= 10 && !publicadasMesAnt;
+  const avisoDia10 = hoy.getDate() >= 10 && !publicadasMesAnt
+    ? `Las nóminas de ${mesTxt(mesAnt)} no se han enviado. Motivo: ${listasMesAnt ? "no se ha aprobado el envío." : "no ha llegado el correo de la gestoría (o no se ha subido el PDF)."}` : null;
+  return { lotePorId, porLote, porAprobar, publicados, sueltas, avisoDia10 };
+}
 
-  const aprobar = async (l) => {
-    const n = porLote(l.id).filter((p) => ["lista", "error"].includes(p.estado) && p.usuario_id && p.mes).length;
-    if (!n) { avisar("No hay ninguna nómina asignada en este lote", "mal"); return; }
-    if (!window.confirm(l.sin_avisar ? `Se guardan ${n} nóminas en «Mis documentos» de cada trabajadora SIN avisarles (carga inicial). ¿Seguimos?` : `Se publican ${n} nóminas en la app y a cada trabajadora le llega el aviso de que tiene su nómina. ¿Seguimos?`)) return;
-    setBusy(`a${l.id}`);
-    try { const r = await fn("aprobar", { lote_id: l.id }); avisar(r.errores?.length ? `Publicadas ${r.publicadas}; ${r.errores.length} con error (se reintentan mañana)` : `Publicadas ${r.publicadas} nóminas`, r.errores?.length ? "mal" : "ok"); await cargar(); }
-    catch (e) { avisar(e.message, "mal"); }
-    setBusy(null);
-  };
-  const descartar = async (l) => {
-    if (!window.confirm("Se descarta este PDF: no se publica nada de él. ¿Seguimos?")) return;
-    setBusy(`d${l.id}`);
-    try { await fn("descartar", { lote_id: l.id }); avisar("Descartado"); await cargar(); } catch (e) { avisar(e.message, "mal"); }
-    setBusy(null);
-  };
+export const mesesDeLote = (partes) => [...new Set(partes.map((p) => p.mes).filter(Boolean))].sort().map(mesTxt).join(" y ") || "mes sin leer";
 
+export async function aprobarLote(l, partes) {
+  const n = partes.filter((p) => ["lista", "error"].includes(p.estado) && p.usuario_id && p.mes).length;
+  if (!n) { avisar("No hay ninguna nómina asignada en este lote", "mal"); return false; }
+  if (!window.confirm(l.sin_avisar ? `Se guardan ${n} nóminas en «Mis documentos» de cada trabajadora SIN avisarles (carga inicial). ¿Seguimos?` : `Se publican ${n} nóminas en la app y a cada trabajadora le llega el aviso de que tiene su nómina. ¿Seguimos?`)) return false;
+  try { const r = await fn("aprobar", { lote_id: l.id }); avisar(r.errores?.length ? `Publicadas ${r.publicadas}; ${r.errores.length} con error (se reintentan mañana)` : `Publicadas ${r.publicadas} nóminas`, r.errores?.length ? "mal" : "ok"); return true; }
+  catch (e) { avisar(e.message, "mal"); return false; }
+}
+export async function descartarLote(l) {
+  if (!window.confirm("Se descarta este PDF: no se publica nada de él. ¿Seguimos?")) return false;
+  try { await fn("descartar", { lote_id: l.id }); avisar("Descartado"); return true; } catch (e) { avisar(e.message, "mal"); return false; }
+}
+
+// «Revisar» un lote por aprobar: igual que antes en la pestaña, con la asignación de páginas sueltas
+export function RevisarLote({ l, partes, trabajadoras, nombre, onHecho }) {
+  const [busy, setBusy] = useState(null);
+  const problemas = partes.filter((p) => ["sin_asignar", "error"].includes(p.estado));
   return (
     <>
-      <div className="head"><div><h2>Nóminas de la gestoría</h2><p className="sub">La gestoría manda un PDF con todas las nóminas. Se separa solo por NIF y mes. Revísalo y pulsa «Aprobar y publicar»: cada trabajadora la verá en «Mis documentos» y le llegará el aviso. Nada se publica sin aprobarlo aquí.</p></div></div>
-
-      {(avisoDia10 || problemas.length > 0) && (
-        <div style={{ border: "1.5px solid var(--down)", borderRadius: 12, padding: "12px 14px", marginBottom: 16 }}>
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Avisos</div>
-          {avisoDia10 && <div style={{ fontSize: 13.5, marginBottom: 6 }}>Las nóminas de {mesTxt(mesAnt)} no se han enviado. Motivo: {listasMesAnt ? "no se ha aprobado el envío." : "no ha llegado el correo de la gestoría (o no se ha subido el PDF)."}</div>}
-          {problemas.map((p) => <Problema key={p.id} p={p} lote={lotePorId[p.lote_id]} trabajadoras={trabajadoras} nombre={nombre} onHecho={cargar} />)}
+      <Lote l={l} partes={partes} nombre={nombre}
+        acciones={<>
+          <button className="btn-p" disabled={!!busy} onClick={async () => { setBusy("a"); const ok = await aprobarLote(l, partes); setBusy(null); if (ok) onHecho(true); }}>{busy === "a" ? "Publicando…" : l.sin_avisar ? "Aprobar y guardar sin avisar" : "Aprobar y publicar"}</button>
+          <button className="btn-txt" disabled={!!busy} onClick={async () => { setBusy("d"); const ok = await descartarLote(l); setBusy(null); if (ok) onHecho(true); }}>Descartar</button>
+        </>} />
+      {problemas.length > 0 && (
+        <div style={{ border: "1.5px solid var(--down)", borderRadius: 12, padding: "12px 14px", marginTop: 12 }}>
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>Páginas sin asignar ({problemas.length})</div>
+          {problemas.map((p) => <Problema key={p.id} p={p} lote={l} trabajadoras={trabajadoras} nombre={nombre} onHecho={() => onHecho(false)} />)}
         </div>
       )}
+    </>
+  );
+}
 
-      {porAprobar.length === 0 ? <p className="empty">No hay nóminas pendientes de aprobar.</p> : porAprobar.map((l) => (
-        <Lote key={l.id} l={l} partes={porLote(l.id)} nombre={nombre}
-          acciones={<>
-            <button className="btn-p" disabled={!!busy} onClick={() => aprobar(l)}>{busy === `a${l.id}` ? "Publicando…" : l.sin_avisar ? "Aprobar y guardar sin avisar" : "Aprobar y publicar"}</button>
-            <button className="btn-txt" disabled={!!busy} onClick={() => descartar(l)}>Descartar</button>
-          </>} />
-      ))}
-
-      <Subir onHecho={cargar} />
-      <Nifs trabajadoras={trabajadoras} nifs={d.nifs} onHecho={cargar} />
+// «Ajustes de documentos»: subida a mano del PDF de la gestoría, NIF, correo automático y el histórico de lotes publicados
+export function AjustesNominas({ d, trabajadoras, onHecho }) {
+  const nombre = useMemo(() => Object.fromEntries((trabajadoras || []).map((u) => [u.id, u.nombre])), [trabajadoras]);
+  const { porLote, publicados } = resumenNominas(d);
+  return (
+    <>
+      <p className="pf" style={{ marginTop: 0 }}>La gestoría manda un PDF con todas las nóminas. Se separa solo por NIF y mes y queda en «Pendientes» hasta que pulsas «Aprobar y publicar». Nada se publica sin aprobarlo.</p>
+      <Nifs trabajadoras={trabajadoras} nifs={d.nifs} onHecho={onHecho} />
       <Correo />
-
+      <Subir onHecho={onHecho} />
       {publicados.length > 0 && (
-        <details style={{ marginTop: 18 }}>
-          <summary style={{ cursor: "pointer", fontWeight: 700 }}>Publicadas ({publicados.length})</summary>
+        <details style={{ borderTop: "1px solid var(--line)", marginTop: 18, paddingTop: 14 }}>
+          <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 15 }}>Lotes ya publicados ({publicados.length})</summary>
           {publicados.map((l) => <Lote key={l.id} l={l} partes={porLote(l.id)} nombre={nombre} />)}
         </details>
       )}
@@ -111,7 +114,7 @@ export function NominasGestoria({ trabajadoras }) {
   );
 }
 
-function Lote({ l, partes, nombre, acciones }) {
+export function Lote({ l, partes, nombre, acciones }) {
   const meses = [...new Set(partes.map((p) => p.mes).filter(Boolean))].sort();
   return (
     <div style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 14, margin: "12px 0" }}>
@@ -143,7 +146,7 @@ function Lote({ l, partes, nombre, acciones }) {
   );
 }
 
-function Problema({ p, lote, trabajadoras, nombre, onHecho }) {
+export function Problema({ p, lote, trabajadoras, nombre, onHecho }) {
   const [abierto, setAbierto] = useState(false);
   const [usuario, setUsuario] = useState(p.usuario_id || "");
   const [mes, setMes] = useState(p.mes ? p.mes.slice(0, 7) : mesAnterior());

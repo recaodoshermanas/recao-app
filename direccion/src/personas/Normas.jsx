@@ -10,9 +10,11 @@ const fecha = (ts) => (ts ? new Date(ts).toLocaleString("es-ES", { day: "numeric
 const dia = (d) => (d ? new Date(d + "T12:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "—");
 const hoy = () => new Date().toISOString().slice(0, 10);
 
-export function Normas() {
+export function Normas({ abrirId, onCambio: avisarCambio } = {}) {
   const [d, setD] = useState(null);
   const [sel, setSel] = useState(null);
+  // #215: desde «Pendientes» → «Ver en Normas» se abre directamente la norma pulsada
+  useEffect(() => { if (d && abrirId) setSel(d.normas.find((n) => n.id === abrirId) || null); }, [d, abrirId]);
   const [nueva, setNueva] = useState("");
   const cargar = useCallback(async () => { try { setD(await fn("panel")); } catch (e) { avisar(e.message || "No se han podido cargar las normas", "mal"); setD((x) => x || { normas: [], versiones: [], recibos: [], plantilla: [] }); } }, []);
   useEffect(() => { cargar(); }, [cargar]);
@@ -49,7 +51,7 @@ export function Normas() {
                 {v && <b style={{ color: r.ok === r.total ? "var(--up)" : "#8A5A0B", whiteSpace: "nowrap" }}>Recibí {r.ok} de {r.total}</b>}
                 <button className="btn-l" onClick={(e) => { e.stopPropagation(); setSel(abierto ? null : n); }}>{abierto ? "Cerrar" : v ? "Ver / nueva versión" : "Subir"}</button>
               </div>
-              {abierto && <Detalle key={n.id} norma={n} d={d} resumen={resumen} abrir={abrir} onClose={() => setSel(null)} onCambio={() => { cargar(); }} />}
+              {abierto && <Detalle key={n.id} norma={n} d={d} resumen={resumen} abrir={abrir} onClose={() => setSel(null)} onCambio={() => { cargar(); avisarCambio?.(); }} />}
             </div>
           );
         })}

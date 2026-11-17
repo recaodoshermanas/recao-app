@@ -227,7 +227,7 @@ export function PersonasResumen() {
   if (!E("bolsa")) franja.push({ k: "bolsa", c: urg.length ? "rojo" : "ok", n: urg.length, t: "Bolsa urgente", d: urg[0] ? `${urg[0].turno}, ${diaCorto(urg[0].fecha)}` : `a ${DIAS_URGENTE} días o menos`, ruta: "personas/bolsa" });
   if (!E("vacSol") && !E("cambios")) franja.push({ k: "rev", c: vacSol + camb ? "ama" : "ok", n: vacSol + camb, t: "Vacaciones y cambios por revisar", d: vacSol + camb ? `${pl(vacSol, "vacación", "vacaciones")} · ${pl(camb, "cambio", "cambios")}` : "Al día", ruta: "personas/solicitudes" });
   if (!E("fichPanel")) franja.push({ k: "fich", c: incs.length ? "ama" : "ok", n: incs.length, t: "Fichajes con incidencia", d: incs.length ? pl(solFich.length, "corrección pendiente", "correcciones pendientes") : "Al día", ruta: "personas/fichajes" });
-  if (!E("docs") && !E("nomPartes") && !E("usuarios")) franja.push({ k: "nom", c: nomFalta ? "ama" : "ok", n: nomFalta, t: `Nóminas de ${nomMes(mesNomina)} sin publicar`, d: nomFalta ? `${nomPub.size} de ${esperadas} publicadas` : "Todas publicadas", ruta: "personas/documentos" });
+  if (!E("docs") && !E("nomPartes") && !E("usuarios")) franja.push({ k: "nom", c: nomFalta ? "ama" : "ok", n: nomFalta, t: `Nóminas de ${nomMes(mesNomina)} sin publicar`, d: nomFalta ? `${nomPub.size} de ${esperadas} publicadas` : "Todas publicadas", ruta: nomFalta ? "personas/documentos/pendientes:nominas" : "personas/documentos" });
   const hayUrgente = franja.some((f) => f.c !== "ok");
   const cargandoFranja = ["sinCerrar", "horarios", "bolsa", "vacSol", "fichPanel", "docs"].some(L);
 
@@ -320,7 +320,7 @@ export function PersonasResumen() {
       <Ventana {...P("documentos")} icono="📄" nombre="Documentos" cargando={L("docs")} error={E("docs")} ruta="personas/documentos" rutaTxt="Documentos"
         clave={`Nóminas de ${nomMes(mesNomina)}: ${nomPub.size} publicadas`}
         etiquetas={[sinAcuse > 0 && <Etiqueta key="a" c="ama">{sinAcuse} sin acuse</Etiqueta>]}>
-        <Cifras items={[{ n: nomPub.size, t: "nóminas publicadas" }, { n: nomVistas, t: "vistas por la trabajadora" }, { n: sinAcuse, t: "documentos sin acuse", c: "ama", ruta: "personas/documentos" }]} />
+        <Cifras items={[{ n: nomPub.size, t: "nóminas publicadas" }, { n: nomVistas, t: "vistas por la trabajadora" }, { n: sinAcuse, t: "documentos sin acuse", c: "ama", ruta: "personas/documentos/pendientes:recibi" }]} />
         <h3>Contratos y prórrogas · próximos 60 días</h3>
         <p className="empty">Todavía no hay fechas de contrato, prórroga o periodo de prueba guardadas; cuando se guarden, saldrán aquí.</p>
       </Ventana>),

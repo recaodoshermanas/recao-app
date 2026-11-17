@@ -263,7 +263,7 @@ export default function App() {
   else if (area.id === "personas" && sub.id === "horarios") contenido = <Horarios extra={extra} />;
   else if (area.id === "personas" && sub.id === "bolsa") contenido = <Bolsa />;
   else if (area.id === "personas" && sub.id === "fichajes") contenido = <Fichajes />;
-  else if (area.id === "personas" && sub.id === "documentos") contenido = <Documentos />;
+  else if (area.id === "personas" && sub.id === "documentos") contenido = <Documentos extra={extra} />;
   else if (area.id === "personas" && sub.id === "solicitudes") contenido = <Solicitudes />;
   else if (area.id === "personas" && sub.id === "seguimiento") contenido = <Seguimiento sub={extra} />;
   else if (area.id === "personas" && sub.id === "equipo") contenido = <Equipo user={user} extra={extra} />;
