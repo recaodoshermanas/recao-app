@@ -9,6 +9,9 @@ const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 
 const wrap = { padding: "16px 16px 28px", maxWidth: 540, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 };
 const FORMAS = { whatsapp: "WhatsApp", app: "App del proveedor", comercial: "Comercial" };
 const num = (x) => (x == null ? "–" : Number(x).toLocaleString("es-ES", { maximumFractionDigits: 1 }));
+// #214 Listas de productos que no se piden hoy (todas se pueden corregir de stock). Todo producto del proveedor sale en alguna.
+const LISTAS = ["no_hace_falta", "esperando_direccion", "en_observacion", "con_stock_suficiente"];
+const TITULOS = { no_hace_falta: "No hace falta todavía", esperando_direccion: "Esperando a dirección", en_observacion: "En observación", con_stock_suficiente: "Con stock suficiente" };
 const fechaCorta = (f) => (f ? new Date(f).toLocaleDateString("es-ES", { day: "numeric", month: "short" }) : "nunca");
 
 export function HacerPedidoView() {
@@ -175,7 +178,11 @@ function Proveedor({ p: p0, onVolver }) {
     if (!Number.isFinite(n) || n < 0 || n > 100000) { setErr("Pon un stock válido: un número de 0 en adelante."); return; }
     const antes = x.stock == null ? "sin registro" : fmtStock(x);
     const nuevoTxt = x.al_peso ? `${num(n)} g` : num(n);
-    if (!window.confirm(`¿Guardar stock de ${x.nombre}: ${nuevoTxt} (antes ${antes})?`)) return;
+    // #214 Aviso suave si el stock es más de 4 semanas de venta (errores de tecleo o dobles conteos)
+    const vs = Number(x.venta_semana) || 0;
+    const semanas = vs > 0 ? n / vs : 0;
+    const ojo = semanas > 4 ? `\n\n¿Seguro? Son ${num(semanas)} semanas de venta.` : "";
+    if (!window.confirm(`¿Guardar stock de ${x.nombre}: ${nuevoTxt} (antes ${antes})?${ojo}`)) return;
     setStockBusy(x.product_id); setErr(""); setAviso("");
     try {
       await sb.fn("pedido-stock", { product_id: x.product_id, stock: n, stock_antes: x.stock, supplier_id: p.supplier_id });
@@ -187,15 +194,16 @@ function Proveedor({ p: p0, onVolver }) {
       // líneas que ya estaban y que no deben desaparecer: añadidas a mano o con cantidad cambiada a mano
       const conservar = (d.lineas || []).filter(l => !ids.has(l.product_id) && (manual[l.product_id] || !l.clase || l.clase === "–")).map(l => {
         if (l.product_id !== x.product_id) return l;
-        const b = ["no_hace_falta", "esperando_direccion", "en_observacion"].map(k => (r[k] || []).find(y => y.product_id === x.product_id)).find(Boolean);
+        const b = LISTAS.map(k => (r[k] || []).find(y => y.product_id === x.product_id)).find(Boolean);
         return { ...l, stock: b ? b.stock : n, corregido: true, dudoso: false };
       });
       const quitar = new Set(conservar.map(l => l.product_id));
       const limpiar = (arr) => (arr || []).filter(y => !quitar.has(y.product_id));
-      setD({ ...r, lineas: [...nuevas, ...conservar], no_hace_falta: limpiar(r.no_hace_falta), esperando_direccion: limpiar(r.esperando_direccion), en_observacion: limpiar(r.en_observacion) });
+      setD({ ...r, lineas: [...nuevas, ...conservar], ...Object.fromEntries(LISTAS.map(k => [k, limpiar(r[k])])) });
       setCant(c => { const o = {}; for (const l of [...nuevas, ...conservar]) o[l.product_id] = manual[l.product_id] || !ids.has(l.product_id) ? (c[l.product_id] || 0) : Number(l.cantidad) || 0; return o; });
       const ahora = nuevas.find(l => l.product_id === x.product_id);
-      setAviso(`Stock de «${x.nombre}» guardado en Epos: ${nuevoTxt}.` + (manual[x.product_id] ? " Se mantiene la cantidad que habías puesto." : ahora ? ` Ahora se piden ${ahora.cantidad}.` : quitar.has(x.product_id) ? "" : " Ahora no hace falta pedirlo."));
+      const donde = LISTAS.find(k => (r[k] || []).some(y => y.product_id === x.product_id));
+      setAviso(`Stock de «${x.nombre}» guardado en Epos: ${nuevoTxt}.` + (manual[x.product_id] ? " Se mantiene la cantidad que habías puesto." : ahora ? ` Ahora se piden ${ahora.cantidad}.` : quitar.has(x.product_id) ? "" : donde ? ` Ahora no hace falta pedirlo: está en «${TITULOS[donde]}».` : " Ahora no hace falta pedirlo."));
     } catch (e) { setAviso(`Stock de «${x.nombre}» guardado en Epos. No se ha podido recalcular: vuelve a entrar en el proveedor.`); }
     setStockAbierto(null); setStockBusy(null);
   };
@@ -276,7 +284,7 @@ function Proveedor({ p: p0, onVolver }) {
           )}
           {visibles.map(l => (
             <div key={l.product_id} style={{ ...card, display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ fontFamily: F, fontSize: 14.5, fontWeight: 700, color: C.char }}>{l.nombre} <span style={{ fontWeight: 600, fontSize: 11.5, color: C.mut }}>· clase {l.clase}</span></div>
+              <div style={{ fontFamily: F, fontSize: 14.5, fontWeight: 700, color: C.char }}>{l.nombre} <span style={{ fontWeight: 600, fontSize: 11.5, color: C.mut }}>· clase {l.clase}</span>{l.nuevo && <span style={{ fontWeight: 700, fontSize: 11.5, color: "#B5651D" }}> · producto nuevo</span>}</div>
               {(l.nombre_proveedor || l.ref) && <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{l.nombre_proveedor}{l.ref ? ` · ref ${l.ref}` : ""}</div>}
               <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.4 }}>Venta semanal {num(l.venta_semana)} · {stockDe(l)}{l.dudoso ? " ⚠ stock dudoso" : ""}<br />{l.motivo}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -317,9 +325,10 @@ function Proveedor({ p: p0, onVolver }) {
                 </div>); })}
             </div>
           )}
-          {bloque("Esperando a dirección", d.esperando_direccion, true)}
-          {bloque("En observación", d.en_observacion, true)}
-          {bloque("No hace falta todavía", d.no_hace_falta, true)}
+          {bloque(TITULOS.esperando_direccion, d.esperando_direccion, true)}
+          {bloque(TITULOS.en_observacion, d.en_observacion, true)}
+          {bloque(TITULOS.no_hace_falta, d.no_hace_falta, true)}
+          {bloque(TITULOS.con_stock_suficiente, d.con_stock_suficiente, true)}
           {bloque("No se piden", d.no_se_piden)}
           {lineas.length > 0 && (
             <div style={{ ...card, display: "flex", flexDirection: "column", gap: 8 }}>
