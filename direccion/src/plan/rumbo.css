@@ -39,7 +39,7 @@
 .rb-tablero.uno { grid-template-columns: 1fr; }
 .rb-col { background: var(--grid); border-radius: var(--r-m); padding: 14px; min-height: 160px; border: 2px dashed transparent; transition: border-color .12s, background .12s; }
 .rb-col.c-ahora { background: #FBF1D6; }
-@media (prefers-color-scheme: dark) { .rb-col.c-ahora { background: #2D2A1E; } }
+
 .rb-col.encima { border-color: var(--amarillo-hondo); }
 .rb-col header { margin: 0 2px 10px; }
 .rb-col h3 { margin: 0; font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
