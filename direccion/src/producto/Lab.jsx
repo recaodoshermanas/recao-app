@@ -1,11 +1,13 @@
 // Producto · Lab (#140): pruebas de producto con ficha, métricas automáticas desde Epos y calendario de lanzamientos.
 // Las métricas las calcula la base de datos (lab_metricas); el semáforo orienta, no decide.
+// #216: fase «Preparando» (en la base de datos sigue llamándose 'evaluando') con análisis y búsqueda de proveedor, y vista «Distribuidores y catálogos».
 import { useCallback, useEffect, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { Cargando, Panel, Pestanas, avisar, confirmar, hoyStr, masDias } from "../ui.jsx";
 import { eur, num } from "../fmt.js";
+import { Preparando, Distribuidores, MOTIVOS_DESCARTE, faltaProgramar } from "./LabPreparando.jsx";
 
-const FASES = [["idea", "Idea"], ["evaluando", "Evaluando"], ["programado", "Programado"], ["en_prueba", "En prueba"], ["decision", "Decisión"], ["cerrada", "Cerrada"]];
+const FASES = [["idea", "Idea"], ["evaluando", "Preparando"], ["programado", "Programado"], ["en_prueba", "En prueba"], ["decision", "Decisión"], ["cerrada", "Cerrada"]];
 const FASE_T = Object.fromEntries([...FASES, ["descartada", "Descartada"]]);
 const SALIDAS = [["escalar", "Escalar"], ["mantener", "Mantener"], ["retirar", "Retirar"]];
 const SALIDAS_T = [["repetir_ampliar", "Repetir y ampliar"], ["repetir_igual", "Repetir igual"], ["repetir_cambios", "Repetir con cambios"], ["no_repetir", "No repetir"]];
@@ -53,7 +55,7 @@ export function Lab() {
           <div><h2>Lab de producto</h2><p className="sub">Cada novedad se registra, se mide con las ventas de Epos y se decide con un criterio común. El semáforo orienta, no decide.</p></div>
           <button className="btn-p" onClick={() => setSel("nueva")}>Nueva prueba</button>
         </div>
-        <Pestanas etiqueta="Vista" valor={vista} onChange={setVista} opciones={[{ id: "pruebas", label: "Pruebas" }, { id: "calendario", label: "Calendario" }, { id: "umbrales", label: "Umbrales del semáforo" }]} />
+        <Pestanas etiqueta="Vista" valor={vista} onChange={setVista} opciones={[{ id: "pruebas", label: "Pruebas" }, { id: "calendario", label: "Calendario" }, { id: "distribuidores", label: "Distribuidores y catálogos" }, { id: "umbrales", label: "Umbrales del semáforo" }]} />
       </div>
       {vista === "pruebas" && (
         <div className="card mt">
@@ -64,7 +66,7 @@ export function Lab() {
               <tbody>{visibles.map((p) => (
                 <tr key={p.id} onClick={() => setSel(p)} style={{ cursor: "pointer" }}>
                   <td><b>{p.nombre}</b>{p.proveedor && <small className="pf">{p.proveedor}</small>}</td>
-                  <td>{FASE_T[p.fase]}{p.salida && <small className="pf">{SALIDAS.find((s) => s[0] === p.salida)?.[1]}</small>}{p.salida_temporada && <small className="pf">{SALIDAS_T.find((s) => s[0] === p.salida_temporada)?.[1]}</small>}</td>
+                  <td>{FASE_T[p.fase]}{p.fase === "evaluando" && <small className="pf">{p.analisis ? "análisis hecho" : "análisis pendiente"}{p.n_contactos ? ` · ${p.n_contactos} contacto${p.n_contactos === 1 ? "" : "s"}${p.n_respondidos ? `, ${p.n_respondidos} con respuesta` : ""}` : ""}</small>}{p.salida && <small className="pf">{SALIDAS.find((s) => s[0] === p.salida)?.[1]}</small>}{p.salida_temporada && <small className="pf">{SALIDAS_T.find((s) => s[0] === p.salida_temporada)?.[1]}</small>}</td>
                   <td>{p.tipo === "temporada" ? "Temporada" : "Normal"}</td>
                   <td>{fdia(p.f_lanzamiento)}</td><td>{fdia(p.f_decision)}</td>
                   <td>{p.productos.length ? `${p.productos.length}` : <span className="pf">sin vincular</span>}</td>
@@ -74,6 +76,7 @@ export function Lab() {
         </div>
       )}
       {vista === "calendario" && <Calendario lista={lista} onAbrir={setSel} />}
+      {vista === "distribuidores" && <Distribuidores lista={lista} onAbrir={setSel} />}
       {vista === "umbrales" && <Umbrales />}
       {sel && <FichaPrueba p={sel === "nueva" ? null : sel} lista={lista} onClose={() => setSel(null)} onGuardado={() => { cargar(); }} />}
     </>
@@ -142,7 +145,7 @@ function Umbrales() {
   );
 }
 
-const VACIA = { nombre: "", fase: "idea", tipo: "normal", proveedor: "", fuente: "", fuente_url: "", hipotesis: "", f_lanzamiento: "", duracion_dias: "", f_fin: "", f_decision: "", zona_codigo: "", subzona_id: "", pedido_inicial_uds: "", pedido_inicial_nota: "", coste_prueba: "", precio_mercado: "", precio_mercado_url: "", producto_parecido_id: null, pvp_elegido: "", notas: "", salida: "", salida_temporada: "", motivo_descarte: "" };
+const VACIA = { nombre: "", fase: "idea", tipo: "normal", proveedor: "", fuente: "", fuente_url: "", hipotesis: "", f_lanzamiento: "", duracion_dias: "", f_fin: "", f_decision: "", zona_codigo: "", subzona_id: "", pedido_inicial_uds: "", pedido_inicial_nota: "", modo: "", motivo_descarte_tipo: "", coste_prueba: "", precio_mercado: "", precio_mercado_url: "", producto_parecido_id: null, pvp_elegido: "", notas: "", salida: "", salida_temporada: "", motivo_descarte: "" };
 const CAMPOS_NUM = ["duracion_dias", "pedido_inicial_uds", "coste_prueba", "precio_mercado", "pvp_elegido"];
 
 function FichaPrueba({ p, lista, onClose, onGuardado }) {
@@ -190,18 +193,32 @@ function FichaPrueba({ p, lista, onClose, onGuardado }) {
     setGuardando(true);
     try {
       const o = { ...cuerpo(), ...extra };
+      let pid = id;
       if (id) { await sb.update("lab_pruebas", `id=eq.${id}`, o); }
-      else { const r = await sb.insert("lab_pruebas", { ...o, creado_por: "Dirección" }); setId(r[0].id); }
-      avisar("Guardado"); onGuardado(); return true;
+      else { const r = await sb.insert("lab_pruebas", { ...o, creado_por: "Dirección" }); pid = r[0].id; setId(pid); }
+      avisar("Guardado"); onGuardado(); return pid;
     } catch (e) { avisar(msg(e), "mal"); return false; } finally { setGuardando(false); }
   };
   const cambiarFase = async (nueva) => {
     if (nueva === "cerrada" && !(f.salida || f.salida_temporada)) { avisar("Para cerrar elige antes la salida", "mal"); return; }
+    if ((f.fase === "idea" || f.fase === "evaluando") && ["programado", "en_prueba", "decision", "cerrada"].includes(nueva)) {
+      const falta = faltaProgramar(f);
+      if (falta.length) { avisar(`Para pasar a Programado falta: ${falta.join(", ")}`, "mal"); return; }
+    }
     if (await guardar({ fase: nueva })) setF((x) => ({ ...x, fase: nueva }));
   };
   const descartar = async () => {
-    if (!f.motivo_descarte.trim()) { avisar("Escribe el motivo del descarte", "mal"); return; }
-    if (await guardar({ fase: "descartada" })) { setF((x) => ({ ...x, fase: "descartada" })); }
+    if (!f.motivo_descarte.trim() && !f.motivo_descarte_tipo) { avisar("Elige o escribe el motivo del descarte", "mal"); return; }
+    const tipo = MOTIVOS_DESCARTE.find((m) => m[0] === f.motivo_descarte_tipo)?.[1];
+    const det = f.motivo_descarte.trim();
+    const motivo = tipo && !det.startsWith(tipo) ? [tipo, det].filter(Boolean).join(": ") : det || tipo || "";
+    if (await guardar({ fase: "descartada", motivo_descarte: motivo })) { setF((x) => ({ ...x, fase: "descartada", motivo_descarte: motivo })); }
+  };
+  const empezarPreparar = async () => {
+    const pid = await guardar();
+    if (!pid) return;
+    try { await sb.rpc("lab_empezar_preparar", { p_id: pid }); setF((x) => ({ ...x, fase: "evaluando" })); avisar("Pasa a Preparando. El agente de producto hará el análisis y propondrá a quién preguntar."); onGuardado(); }
+    catch (e) { avisar(msg(e), "mal"); }
   };
   const vincular = async (x) => {
     if (!id && !(await guardar())) return;
@@ -228,6 +245,7 @@ function FichaPrueba({ p, lista, onClose, onGuardado }) {
   };
 
   const temporada = f.tipo === "temporada";
+  const modo = f.modo || (p?.modo_radar === "fabricar" ? "fabricar" : "comprar");
   const subs = zonas.s.filter((s) => s.zona_codigo === f.zona_codigo);
   return (
     <Panel titulo={id ? f.nombre || "Prueba" : "Nueva prueba"} sub={FASE_T[f.fase]} onClose={onClose} ancho={720}
@@ -239,7 +257,17 @@ function FichaPrueba({ p, lista, onClose, onGuardado }) {
         <label className="campo">Fuente<select value={f.fuente} onChange={set("fuente")}><option value="">–</option>{FUENTES.map(([i, t]) => <option key={i} value={i}>{t}</option>)}</select></label>
         <label className="campo">Enlace de la fuente<input value={f.fuente_url} onChange={set("fuente_url")} placeholder="https://…" /></label>
       </div>
+      <div className="fila-campos">
+        <label className="campo">¿Cómo se consigue?<select value={modo} onChange={set("modo")}><option value="comprar">Se compra a proveedor</option><option value="fabricar">Hay que fabricarlo (obrador)</option></select></label>
+      </div>
       <label className="campo">Hipótesis<textarea rows={2} value={f.hipotesis} onChange={set("hipotesis")} placeholder="Qué esperamos que pase" /></label>
+      {f.fase === "idea" && <div className="card" style={{ background: "var(--bg)", padding: 12, margin: "8px 0 4px" }}>
+        <p className="sub" style={{ marginTop: 0 }}>Al empezar a preparar, el agente de producto analiza si nos diferencia y propone a quién preguntar.</p>
+        <button className="btn-p" disabled={guardando} onClick={empezarPreparar}>Empezar a preparar</button>
+      </div>}
+      {id && f.fase === "evaluando" && <Preparando id={id} f={f} setF={setF} modo={modo} guardando={guardando}
+        onProgramar={() => cambiarFase("programado")} onDescartar={descartar} onCambio={onGuardado} />}
+      {f.fase === "evaluando" && <h3 style={{ marginTop: 24 }}>Resto de la ficha</h3>}
 
       <h3>Fechas</h3>
       <div className="fila-campos">
@@ -252,7 +280,7 @@ function FichaPrueba({ p, lista, onClose, onGuardado }) {
       </div>
 
       <h3>Productos de Epos</h3>
-      <p className="sub">Cada producto de la prueba (p. ej. cada sabor) debe tener su propio producto en Epos. Los genéricos «Producto 1€» no se pueden vincular. En Idea/Evaluando puede no haber ninguno.</p>
+      <p className="sub">Cada producto de la prueba (p. ej. cada sabor) debe tener su propio producto en Epos. Los genéricos «Producto 1€» no se pueden vincular. En Idea/Preparando puede no haber ninguno.</p>
       {prods.length > 0 && <ul className="movers">{prods.map((x) => <li key={x.id}><span className="mv-n"><b>{x.nombre}</b></span><button className="btn-txt" onClick={() => quitar(x)}>Quitar</button></li>)}</ul>}
       <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar producto de Epos para vincular…" aria-label="Buscar producto" style={{ width: "100%", marginBottom: 8 }} />
       {res.map((x) => <button key={x.id} type="button" className="btn-l" style={{ display: "block", textAlign: "left", marginBottom: 4 }} onClick={() => vincular(x)}>{x.nombre} · {eur(x.pvp, 2)}</button>)}
@@ -296,7 +324,8 @@ function FichaPrueba({ p, lista, onClose, onGuardado }) {
         {temporada
           ? <label className="campo">Salida de la campaña<select value={f.salida_temporada} onChange={set("salida_temporada")}><option value="">–</option>{SALIDAS_T.map(([i, t]) => <option key={i} value={i}>{t}</option>)}</select></label>
           : <label className="campo">Salida<select value={f.salida} onChange={set("salida")}><option value="">–</option>{SALIDAS.map(([i, t]) => <option key={i} value={i}>{t}</option>)}</select></label>}
-        <label className="campo">Motivo del descarte<input value={f.motivo_descarte} onChange={set("motivo_descarte")} placeholder="Solo si se descarta" /></label>
+        <label className="campo">Motivo del descarte<select value={f.motivo_descarte_tipo} onChange={set("motivo_descarte_tipo")}><option value="">–</option>{MOTIVOS_DESCARTE.map(([i, t]) => <option key={i} value={i}>{t}</option>)}</select></label>
+        <label className="campo">Motivo · detalle<input value={f.motivo_descarte} onChange={set("motivo_descarte")} placeholder="Solo si se descarta" /></label>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="btn-l" onClick={descartar}>Descartar prueba</button>
