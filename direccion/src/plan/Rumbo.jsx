@@ -6,6 +6,7 @@ import { eur, pct, num, nombreMes } from "../fmt.js";
 import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO, atrasada, actualizarProyecto } from "./datos.js";
 import { ChipArea, resumenProyecto } from "./Tareas.jsx";
 import { EditarProyecto } from "./Plan.jsx";
+import { ProyectoPanel, equipoProyecto, proximaTarea } from "./Ejecucion.jsx";
 import { COLUMNAS, MAX_AHORA, DIAS_GRIS, METRICA, useMetricas, guardarConfig, diasDesde } from "./rumbo.js";
 import "./rumbo.css";
 
@@ -86,6 +87,8 @@ function Tarjeta({ p, tareas, onEditar, onMover, arrastrando, setArrastrando, ho
   const pasoTarde = p.siguiente_paso_fecha && p.siguiente_paso_fecha < hoy;
   const objTarde = p.fecha_objetivo && p.fecha_objetivo < hoy;
   const met = METRICA[p.metrica];
+  const prox = proximaTarea(p, tareas);
+  const equipo = equipoProyecto(p, tareas);
   const i = COLUMNAS.findIndex((c) => c.id === p.columna);
   return (
     <li className={`rb-card ${gris ? "gris" : ""} ${arrastrando === p.id ? "arrastrando" : ""}`} draggable
@@ -94,12 +97,15 @@ function Tarjeta({ p, tareas, onEditar, onMover, arrastrando, setArrastrando, ho
       <button className="rb-card-cuerpo" onClick={() => onEditar(p)}>
         <span className="rb-card-cab"><ChipArea id={p.area} />{met ? <span className={`rb-met-chip ${met.principal ? "principal" : ""}`}>↗ {met.corta}</span> : <span className="rb-met-chip falta">Sin métrica</span>}</span>
         <b className="rb-card-tit">{p.nombre}</b>
-        {p.siguiente_paso
-          ? <span className={`rb-paso ${pasoTarde ? "mal" : ""}`}><i>Siguiente paso</i>{p.siguiente_paso}{p.siguiente_paso_fecha && <em> · {fechaCorta(p.siguiente_paso_fecha)}</em>}</span>
-          : <span className="rb-paso falta"><i>Siguiente paso</i>Sin definir</span>}
+        {prox
+          ? <span className={`rb-paso ${prox.fecha_fin && prox.fecha_fin < hoy ? "mal" : ""}`}><i>Próxima tarea</i>{prox.titulo}{prox.fecha_fin && <em> · {fechaCorta(prox.fecha_fin)}</em>}{(prox.propietarios || []).length > 0 && <em> · {(prox.propietarios || []).map(nombreSocio).join(", ")}</em>}</span>
+          : p.siguiente_paso
+            ? <span className={`rb-paso ${pasoTarde ? "mal" : ""}`}><i>Siguiente paso</i>{p.siguiente_paso}{p.siguiente_paso_fecha && <em> · {fechaCorta(p.siguiente_paso_fecha)}</em>}</span>
+            : <span className="rb-paso falta"><i>Próxima tarea</i>Sin tareas todavía</span>}
+        <span className="rb-avance"><span className="barra-p"><i style={{ width: `${r.pct}%` }} /></span><small>{r.total ? `${r.hechas}/${r.total} tareas` : "0 tareas"}{r.atrasadas ? <em> · {r.atrasadas} atrasadas</em> : ""}{objTarde ? <em> · objetivo vencido</em> : ""}</small></span>
         <span className="rb-card-pie">
-          {p.responsable ? <span className="rb-resp"><Avatar nombre={nombreSocio(p.responsable)} size={22} />{nombreSocio(p.responsable)}</span> : <span className="rb-resp falta">Sin responsable</span>}
-          <span className="rb-info">{r.total ? `${r.hechas}/${r.total} tareas` : ""}{objTarde ? <em> · objetivo vencido</em> : ""}</span>
+          {p.responsable ? <span className="rb-resp" title="Responsable"><Avatar nombre={nombreSocio(p.responsable)} size={22} />{nombreSocio(p.responsable)}</span> : <span className="rb-resp falta">Sin responsable</span>}
+          {equipo.length > 0 && <span className="rb-equipo" title={`Equipo: ${equipo.map(nombreSocio).join(", ")}`}>{equipo.map((x) => <Avatar key={x} nombre={nombreSocio(x)} size={20} />)}</span>}
         </span>
         {gris && <span className="rb-gris">Sin actualizar desde hace {dias} días</span>}
       </button>
@@ -113,7 +119,7 @@ function Tarjeta({ p, tareas, onEditar, onMover, arrastrando, setArrastrando, ho
 }
 
 // ---------- el tablero en tres columnas ----------
-export function TableroRumbo({ quien = "", soloAhora = false, compacto = false }) {
+export function TableroRumbo({ quien = "", soloAhora = false, compacto = false, user }) {
   const { tareas, proyectos } = usePlan();
   const [editar, setEditar] = useState(null);
   const [arrastrando, setArrastrando] = useState(null);
@@ -182,7 +188,7 @@ export function TableroRumbo({ quien = "", soloAhora = false, compacto = false }
           )}
         </div>
       )}
-      {editar && <EditarProyecto p={editar} onClose={() => setEditar(null)} onGuardado={() => { setEditar(null); cargarPlan(); }} onBorrado={() => setEditar(null)} />}
+      {editar && <ProyectoPanel p={editar} user={user} onClose={() => setEditar(null)} />}
     </>
   );
 }
@@ -239,7 +245,7 @@ function FotoPlan({ quien }) {
 }
 
 // ---------- la página ----------
-export function PlanRumbo() {
+export function PlanRumbo({ user }) {
   const { proyectos } = usePlan();
   const { m } = useMetricas();
   const [quien, setQuien] = useState("");
@@ -269,7 +275,7 @@ export function PlanRumbo() {
         </div>
       </div>
       {proyectos && <AvisosReglas proyectos={proyectos} />}
-      <TableroRumbo quien={quien} />
+      <TableroRumbo quien={quien} user={user} />
       <p className="rb-leyenda">Arrastra las tarjetas entre columnas (o usa las flechas). Una tarjeta sin tocar en {DIAS_GRIS} días se pone gris: actualízala o pulsa «Sigue igual».</p>
       {ajustes && <AjustesRumbo onClose={() => setAjustes(false)} />}
       {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: quien || "" }} onClose={() => setNuevo(false)} onGuardado={() => { setNuevo(false); cargarPlan(); }} />}

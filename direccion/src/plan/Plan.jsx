@@ -223,7 +223,7 @@ export function EditarProyecto({ p, onClose, onGuardado, onBorrado }) {
       <label className="campo">Objetivo<input value={f.objetivo} onChange={set("objetivo")} placeholder="Qué tiene que estar conseguido al terminar" /></label>
       <div className="fila-campos">
         <label className="campo">Área<select value={f.area} onChange={set("area")}><option value="">Sin área</option>{AREAS_PLAN.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}</select></label>
-        <label className="campo">Responsable<select value={f.responsable} onChange={set("responsable")}><option value="">Sin asignar</option>{SOCIOS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></label>
+        <label className="campo">Responsable (rinde cuentas)<select value={f.responsable} onChange={set("responsable")}><option value="">Sin asignar</option>{SOCIOS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></label>
       </div>
       <div className="fila-campos">
         <label className="campo">Estado<select value={f.estado} onChange={set("estado")}>{ESTADOS_P.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}</select></label>
@@ -239,7 +239,7 @@ export function EditarProyecto({ p, onClose, onGuardado, onBorrado }) {
       </div>
       <label className="campo">Cómo la mueve<input value={f.como_mueve} onChange={set("como_mueve")} placeholder="Ej: sin roturas de los más vendidos se vende más" /></label>
       <div className="fila-campos">
-        <label className="campo">Siguiente paso<input value={f.siguiente_paso} onChange={set("siguiente_paso")} placeholder="Lo próximo que hay que hacer" /></label>
+        <label className="campo">Siguiente paso (si aún no hay tareas)<input value={f.siguiente_paso} onChange={set("siguiente_paso")} placeholder="Lo próximo que hay que hacer" /></label>
         <label className="campo">Para cuándo<input type="date" value={f.siguiente_paso_fecha} onChange={set("siguiente_paso_fecha")} /></label>
       </div>
       <label className="campo">Descripción<textarea rows={4} value={f.descripcion} onChange={set("descripcion")} placeholder="Contexto, decisiones, enlaces…" /></label>
