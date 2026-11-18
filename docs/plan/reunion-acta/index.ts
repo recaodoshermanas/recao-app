@@ -13,6 +13,9 @@ const BUCKET_SB = "reuniones";
 const BUCKET_GCS = "recao-audios-formacion";
 const UBICACION = "eu";
 const MODELOS = ["chirp_3", "long"]; // si el primero no está disponible en la región, se usa el siguiente
+// chirp_3 solo admite audios de hasta 60 minutos; «long» admite reuniones más largas
+const MODELOS_LARGO = ["long"];
+const esMuyLargo = (m: string) => /too long|60 minutes/i.test(m || "");
 const CLAUDE = "claude-sonnet-5";
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (d: unknown, status = 200) => new Response(JSON.stringify(d), { status, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -56,7 +59,7 @@ async function tokenGoogle(saJson: string) {
 
 const MIME: Record<string, string> = { webm: "audio/webm", ogg: "audio/ogg", m4a: "audio/mp4", mp4: "audio/mp4", mp3: "audio/mpeg", wav: "audio/wav", flac: "audio/flac", aac: "audio/aac" };
 
-async function empezar(id: number) {
+async function empezar(id: number, modelos: string[] = MODELOS) {
   const { data: r } = await sb.from("dir_reuniones").select("id,audio_path,acta_estado").eq("id", id).maybeSingle();
   if (!r) throw new Fallo("Reunión no encontrada", 404);
   if (!r.audio_path) throw new Fallo("Primero sube o graba el audio de la reunión");
@@ -77,7 +80,7 @@ async function empezar(id: number) {
 
   // 2) transcripción larga (asíncrona)
   let ultimo = "";
-  for (const modelo of MODELOS) {
+  for (const modelo of modelos) {
     const resp = await fetch(`https://${UBICACION}-speech.googleapis.com/v2/projects/${proyecto}/locations/${UBICACION}/recognizers/_:batchRecognize`, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -170,6 +173,11 @@ async function comprobar(id: number, forzar = false) {
     }
     const res = Object.values(d.response?.results ?? {})[0] as any;
     if (res?.error) {
+      // reunión de más de una hora: se vuelve a lanzar sola con el modelo para audios largos
+      if (esMuyLargo(res.error.message) && !String(d.metadata?.batchRecognizeRequest?.config?.model || "").startsWith("long")) {
+        await empezar(id, MODELOS_LARGO);
+        return { estado: "transcribiendo", relanzado: "long" };
+      }
       await sb.from("dir_reuniones").update({ acta_estado: "error", acta_error: `Transcripción: ${res.error.message}`.slice(0, 500) }).eq("id", id);
       return { estado: "error", error: res.error.message };
     }
@@ -200,7 +208,10 @@ Deno.serve(async (req) => {
     const b = await req.json().catch(() => ({}));
     const id = Number(b.id);
     if (!id) throw new Fallo("Falta la reunión");
-    if (b.accion === "empezar") return json(await empezar(id));
+    if (b.accion === "empezar") {
+      const { data: r0 } = await sb.from("dir_reuniones").select("acta_error").eq("id", id).maybeSingle();
+      return json(await empezar(id, esMuyLargo(r0?.acta_error ?? "") ? MODELOS_LARGO : MODELOS));
+    }
     if (b.accion === "comprobar") return json(await comprobar(id));
     if (b.accion === "redactar_otra_vez") {
       const { data: r } = await sb.from("dir_reuniones").select("transcripcion").eq("id", id).maybeSingle();
