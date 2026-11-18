@@ -152,3 +152,8 @@ button.ls-gnom:hover { text-decoration: underline; text-underline-offset: 3px; }
 .rn-p-kpis div { background: #F6F5F1; }
 .rn-p-kpis div.mal { background: #FDECEA; }
 @media (max-width: 900px) { .rn2-acuerdos { position: static; } }
+.rn2-inicio { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; background: var(--card); border: 1px solid #E7E4DC; border-radius: 16px; padding: 20px 22px; }
+.rn2-inicio > div { flex: 1 1 420px; }
+.rn2-inicio h2 { margin: 0 0 4px; font-size: 20px; font-weight: 800; }
+.rn2-inicio p { margin: 0; color: #4A5359; font-size: 14px; line-height: 1.5; }
+.ls-btn.grande { padding: 13px 20px; font-size: 15px; }

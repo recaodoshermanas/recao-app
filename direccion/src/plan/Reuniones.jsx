@@ -36,34 +36,14 @@ export function PlanReuniones({ user, extra }) {
   };
   return (
     <>
-      <section className="rb-hero">
+      <div className="rn2-inicio">
         <div>
-          <p className="rb-eyebrow">Reunión de dirección · 45 minutos</p>
-          <h1>Se viene a decidir, no a contar lo hecho.</h1>
-          <p className="rb-regla">El estado de cada uno lo enseña la pantalla. En la reunión solo se habla de lo que está en rojo y de lo que alguien necesita de los demás.</p>
+          <h2>Reunión de dirección</h2>
+          <p>Tres pasos: <b>métricas</b>, <b>cada uno</b> (solo lo que está en rojo y lo que necesita de los demás) y <b>acuerdos</b>, que al cerrar pasan a tareas. Los bloqueos sin resolver de la anterior aparecen solos.</p>
         </div>
-      </section>
-      <div className="grid">
-        <div className="card c7 rn-empezar">
-          {abierta ? (
-            <>
-              <h2>Hay una reunión abierta</h2>
-              <p className="sub">Empezó el {fechaCorta(abierta.fecha)}. Ciérrala al terminar para que los acuerdos pasen a Tareas.</p>
-              <p><button className="btn-p" onClick={() => ir(`plan/reuniones/${abierta.id}`)}>Continuar la reunión →</button></p>
-            </>
-          ) : (
-            <>
-              <h2>Reunión de dirección</h2>
-              <p className="sub">Empezadla cuando os sentéis, el día que sea. Los bloqueos que quedaron sin resolver en la anterior aparecen solos.</p>
-              <p><button className="btn-p" disabled={creando} onClick={empezar}>Empezar una reunión</button></p>
-            </>
-          )}
-        </div>
-        <div className="card c5">
-          <h2>Orden del día</h2>
-          <ol className="rn-orden">{PASOS.map((p) => <li key={p.id}><b>{p.label}</b> <span>{p.min} min</span><small>{p.ayuda}</small></li>)}</ol>
-          <p className="sub">Una vez al mes, revisión: ¿las métricas van bien? Repriorizar en Rumbo. Cada trimestre: elegir las métricas del siguiente.</p>
-        </div>
+        {abierta
+          ? <button className="ls-btn osc grande" onClick={() => ir(`plan/reuniones/${abierta.id}`)}>Continuar la reunión del {fechaCorta(abierta.fecha)} →</button>
+          : <button className="ls-btn osc grande" disabled={creando} onClick={empezar}>Empezar una reunión</button>}
       </div>
       <div className="card" style={{ marginTop: 16 }}>
         <h2>Historial</h2>
