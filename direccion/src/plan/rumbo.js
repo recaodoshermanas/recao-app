@@ -102,7 +102,7 @@ export async function subirAudio(reunionId, blob, nombre) {
   const path = `${reunionId}/${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from("reuniones").upload(path, blob, { contentType: blob.type || "audio/webm", upsert: false });
   if (error) throw new Error(error.message);
-  await reuniones.guardar(reunionId, { audio_path: path, audio_nombre: nombre || `grabacion.${ext}`, acta_estado: "subido", acta_error: null, acta_operacion: null });
+  await reuniones.guardar(reunionId, { audio_path: path, audio_nombre: nombre || `grabacion.${ext}`, acta_estado: "subido", acta_error: null, acta_operacion: null, transcripcion: null, acta: null });
   return path;
 }
 export async function urlAudio(path) {

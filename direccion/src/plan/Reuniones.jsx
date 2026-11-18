@@ -433,7 +433,7 @@ function Grabacion({ r, setR, recargar, puntos, setPuntos, yo, proyectos }) {
         {r.audio_path && r.acta_estado === "subido" && <p><button className="btn-p" disabled={lanzando} onClick={() => lanzar("empezar")}>{lanzando ? "Enviando…" : "Sacar el acta"}</button></p>}
         {r.acta_estado === "transcribiendo" && <p className="rn-proceso">Transcribiendo el audio… Una reunión de 45 minutos tarda unos minutos. Puedes seguir con otra cosa.</p>}
         {r.acta_estado === "redactando" && <p className="rn-proceso">Redactando el acta…{" "}<button className="btn-txt" disabled={lanzando} onClick={() => lanzar("redactar_otra_vez")}>¿Se ha atascado? Reintentar</button></p>}
-        {r.acta_estado === "error" && <div className="rn-error"><p>No ha salido: {r.acta_error}</p><button className="btn-l" disabled={lanzando} onClick={() => lanzar(r.transcripcion ? "redactar_otra_vez" : "empezar")}>Reintentar</button></div>}
+        {r.acta_estado === "error" && <div className="rn-error"><p>No ha salido: {r.acta_error}</p><button className="btn-l" disabled={lanzando} onClick={() => lanzar(r.transcripcion && !String(r.acta_error || "").startsWith("Transcripción") ? "redactar_otra_vez" : "empezar")}>Reintentar</button></div>}
         {r.acta_estado === "lista" && a && (
           <div className="rn-acta-c">
             {a.resumen && <p className="rn-resumen">{a.resumen}</p>}

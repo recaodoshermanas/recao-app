@@ -91,7 +91,7 @@ async function empezar(id: number, modelos: string[] = MODELOS) {
     });
     const d = await resp.json().catch(() => ({}));
     if (resp.ok && d.name) {
-      await sb.from("dir_reuniones").update({ acta_estado: "transcribiendo", acta_operacion: d.name, acta_error: null }).eq("id", id);
+      await sb.from("dir_reuniones").update({ acta_estado: "transcribiendo", acta_operacion: d.name, acta_error: null, transcripcion: null, acta: null }).eq("id", id);
       return { estado: "transcribiendo", modelo };
     }
     ultimo = d?.error?.message ?? String(resp.status);
