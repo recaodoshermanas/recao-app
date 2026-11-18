@@ -283,7 +283,8 @@ const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "
 export function PlanCalendario({ user }) {
   const { tareas, proyectos } = usePlan();
   const hoy = hoyISO();
-  const [vista, setVista] = useState("mes");
+  const [vista, setVista] = useState("semana");
+  const [semana, setSemana] = useState(() => { const d = new Date(`${hoyISO()}T12:00:00`); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
   const [mes, setMes] = useState(hoy.slice(0, 7));
   const [abierta, setAbierta] = useState(null);
   const [persona, setPersona] = useState("");
@@ -301,10 +302,10 @@ export function PlanCalendario({ user }) {
   return (
     <>
       <div className="barra-sec">
-        <Pestanas valor={vista} onChange={setVista} etiqueta="Vista" opciones={[{ id: "mes", label: "Mes" }, { id: "cronograma", label: "Cronograma" }]} />
+        <Pestanas valor={vista} onChange={setVista} etiqueta="Vista" opciones={[{ id: "semana", label: "Semana" }, { id: "mes", label: "Mes" }, { id: "cronograma", label: "Cronograma" }]} />
         <div className="acciones"><select value={persona} onChange={(e) => setPersona(e.target.value)} aria-label="Persona"><option value="">Todos</option>{SOCIOS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
       </div>
-      {vista === "mes" ? (
+      {vista === "semana" ? <SemanaCal lunes={semana} setLunes={setSemana} porDia={porDia} hitos={hitos} proyectos={proyectos} onAbrir={setAbierta} /> : vista === "mes" ? (
         <div className="card">
           <div className="head"><h2>{MESES[m - 1]} {a}</h2><div className="nav-sem"><button className="btn-l" onClick={() => mover(-1)} aria-label="Mes anterior">‹</button>{mes !== hoy.slice(0, 7) && <button className="btn-l" onClick={() => setMes(hoy.slice(0, 7))}>Hoy</button>}<button className="btn-l" onClick={() => mover(1)} aria-label="Mes siguiente">›</button></div></div>
           <div className="cal">
@@ -314,7 +315,10 @@ export function PlanCalendario({ user }) {
                 <span className="cal-n">{Number(f.slice(8))}</span>
                 {(hitos[f] || []).map((p) => <button key={`p${p.id}`} className="cal-hito" onClick={() => ir(`plan/proyectos/${p.id}`)}>◆ {p.nombre}</button>)}
                 {(porDia[f] || []).sort(ordenTareas).slice(0, 4).map((t) => (
-                  <button key={t.id} className={`cal-t e-${t.estado} ${atrasada(t, hoy) ? "mal" : ""}`} onClick={() => setAbierta(t.id)} title={t.titulo}>{t.titulo}</button>
+                  <button key={t.id} className={`cal-t e-${t.estado} p-${t.prioridad} ${atrasada(t, hoy) ? "mal" : ""}`} onClick={() => setAbierta(t.id)} title={tituloCal(t, proyectos)}>
+                    <span className="cal-t-tit">{t.titulo}</span>
+                    {(t.propietarios || []).length > 0 && <span className="cal-t-ini">{(t.propietarios || []).map((x) => (SOCIO[x]?.label || x)[0]).join("")}</span>}
+                  </button>
                 ))}
                 {(porDia[f] || []).length > 4 && <span className="cal-mas">+{porDia[f].length - 4}</span>}
               </div>
@@ -324,6 +328,49 @@ export function PlanCalendario({ user }) {
       ) : <Cronograma proyectos={proyectos} tareas={ts} onAbrir={setAbierta} />}
       {abierta && <TareaPanel id={abierta} user={user} onClose={() => setAbierta(null)} />}
     </>
+  );
+}
+
+const PRIO_TXT = { alta: "Prioridad alta", media: "Prioridad media", baja: "Prioridad baja" };
+const EST_TXT = { pendiente: "Por hacer", en_curso: "En curso", bloqueada: "Bloqueada", hecha: "Hecha" };
+const tituloCal = (t, proyectos) => [t.titulo, (t.propietarios || []).map(nombreSocio).join(", ") || "Sin responsable", PRIO_TXT[t.prioridad], EST_TXT[t.estado], proyectos.find((p) => p.id === t.proyecto_id)?.nombre].filter(Boolean).join(" · ");
+
+// Vista de semana: cada día con sus tareas en tarjeta completa (quién, prioridad, proyecto, estado)
+function SemanaCal({ lunes, setLunes, porDia, hitos, proyectos, onAbrir }) {
+  const hoy = hoyISO();
+  const dias = Array.from({ length: 7 }, (_, i) => masDiasISO(lunes, i));
+  const DOW = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+  const lunesHoy = (() => { const d = new Date(`${hoy}T12:00:00`); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return masDiasISO(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, 0); })();
+  return (
+    <div className="card">
+      <div className="head"><h2>Semana del {fechaCorta(lunes)}</h2><div className="nav-sem"><button className="btn-l" onClick={() => setLunes(masDiasISO(lunes, -7))} aria-label="Semana anterior">‹</button>{lunes !== lunesHoy && <button className="btn-l" onClick={() => setLunes(lunesHoy)}>Hoy</button>}<button className="btn-l" onClick={() => setLunes(masDiasISO(lunes, 7))} aria-label="Semana siguiente">›</button></div></div>
+      <div className="cal-sem">
+        {dias.map((f, i) => {
+          const ts = (porDia[f] || []).sort(ordenTareas);
+          return (
+            <div key={f} className={`cal-sem-dia ${f === hoy ? "hoy" : ""}`}>
+              <h3>{DOW[i]} <span>{Number(f.slice(8))}</span></h3>
+              {(hitos[f] || []).map((p) => <button key={`p${p.id}`} className="cal-hito" onClick={() => ir(`plan/proyectos/${p.id}`)}>◆ Objetivo: {p.nombre}</button>)}
+              {ts.map((t) => {
+                const proy = proyectos.find((p) => p.id === t.proyecto_id);
+                return (
+                  <button key={t.id} className={`cal-card e-${t.estado} p-${t.prioridad} ${atrasada(t, hoy) ? "mal" : ""}`} onClick={() => onAbrir(t.id)}>
+                    <span className="cal-card-tit">{t.prioridad === "alta" && t.estado !== "hecha" && <i className="prio-alta">!</i>}{t.titulo}</span>
+                    {proy && <span className="cal-card-proy">◆ {proy.nombre}</span>}
+                    <span className="cal-card-pie">
+                      <Responsables ids={t.propietarios} size={20} />
+                      <span className={`cal-card-est e-${t.estado}`}>{EST_TXT[t.estado]}</span>
+                      <span className={`cal-card-prio p-${t.prioridad}`}>{t.prioridad === "alta" ? "Alta" : t.prioridad === "baja" ? "Baja" : "Media"}</span>
+                    </span>
+                  </button>
+                );
+              })}
+              {!ts.length && !(hitos[f] || []).length && <p className="cal-vacio">—</p>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

@@ -1,13 +1,14 @@
-// Plan → Reuniones: la reunión semanal de dirección con orden del día fijo.
-// 1 Métricas (5') · 2 Decisiones y bloqueos (25') · 3 Roadmap (10') · 4 Acuerdos (5').
-// Antes de la reunión cada socio apunta lo que necesita decidir o desbloquear; al cerrar, los acuerdos pasan a Tareas
-// y lo que quede sin resolver pasa a la siguiente. Se puede grabar y la app saca el acta sola.
+// Plan → Reuniones: la reunión semanal de dirección, en tres pasos y sin preparación.
+// 1 Métricas · 2 Estado por persona (lo enseña la pantalla con sus tareas; solo se comenta lo que está en rojo
+// y lo que cada uno necesita de los demás) · 3 Acuerdos (al cerrar pasan a Tareas; los bloqueos sin resolver, a la siguiente).
+// Se puede grabar y la app saca el acta sola.
 import { useEffect, useRef, useState } from "react";
 import { Panel, Avatar, avisar, fechaCorta, hace, Cargando, ir } from "../ui.jsx";
 import { eur, pct } from "../fmt.js";
-import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO } from "./datos.js";
-import { BloqueMetricas, TableroRumbo, AvisosReglas, avisosRumbo } from "./Rumbo.jsx";
-import { PASOS, TIPOS_PUNTO, reuniones as R, socioDe, useMetricas, fotoMetricas, subirAudio, urlAudio, acta as llamarActa, DIAS_GRIS } from "./rumbo.js";
+import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO, atrasada, ordenTareas } from "./datos.js";
+import { TareaPanel } from "./Tareas.jsx";
+import { BloqueMetricas } from "./Rumbo.jsx";
+import { PASOS, TIPOS_PUNTO, reuniones as R, socioDe, useMetricas, fotoMetricas, subirAudio, urlAudio, acta as llamarActa, DIAS_GRIS, diasDesde } from "./rumbo.js";
 import "./rumbo.css";
 
 const TIPOS_R = { semanal: "Semanal", mensual: "Revisión mensual", trimestral: "Revisión trimestral" };
@@ -35,18 +36,18 @@ export function PlanReuniones({ user, extra }) {
         <div>
           <p className="rb-eyebrow">Reunión de dirección · 45 minutos</p>
           <h1>Se viene a decidir, no a contar lo hecho.</h1>
-          <p className="rb-regla">Antes de la reunión: cada uno actualiza sus tarjetas del roadmap y apunta lo que necesita de los demás.</p>
+          <p className="rb-regla">El estado de cada uno lo enseña la pantalla. En la reunión solo se habla de lo que está en rojo y de lo que alguien necesita de los demás.</p>
         </div>
       </section>
       <div className="grid">
         <div className="card c7">
-          <h2>{abiertas.length ? "Próxima reunión" : "No hay ninguna reunión preparada"}</h2>
+          <h2>{abiertas.length ? "Próxima reunión" : "No hay ninguna reunión abierta"}</h2>
           {abiertas.length === 0 ? (
-            <><p className="sub">Prepárala para que cada socio pueda apuntar sus bloqueos y decisiones.</p><p><button className="btn-p" disabled={creando} onClick={preparar}>Preparar la próxima reunión</button></p></>
+            <><p className="sub">Ábrela cuando os sentéis (o antes, si alguien quiere apuntar un bloqueo).</p><p><button className="btn-p" disabled={creando} onClick={preparar}>Abrir una reunión</button></p></>
           ) : (
             <ul className="rn-lista">{abiertas.map((r) => (
               <li key={r.id}><button onClick={() => ir(`plan/reuniones/${r.id}`)}>
-                <b>{fechaCorta(r.fecha)}</b><span>{TIPOS_R[r.tipo]}</span><span className={`est-p e-${r.estado === "en_curso" ? "activo" : "idea"}`}>{r.estado === "en_curso" ? "En curso" : "Preparando"}</span><span className="rn-ir">Abrir →</span>
+                <b>{fechaCorta(r.fecha)}</b><span>{TIPOS_R[r.tipo]}</span><span className="est-p e-activo">Abierta</span><span className="rn-ir">Abrir →</span>
               </button></li>
             ))}</ul>
           )}
@@ -54,7 +55,7 @@ export function PlanReuniones({ user, extra }) {
         <div className="card c5">
           <h2>Orden del día</h2>
           <ol className="rn-orden">{PASOS.map((p) => <li key={p.id}><b>{p.label}</b> <span>{p.min} min</span><small>{p.ayuda}</small></li>)}</ol>
-          <p className="sub">Una vez al mes, revisión: ¿las métricas van bien? Repriorizar. Cada trimestre: elegir las métricas del siguiente.</p>
+          <p className="sub">Una vez al mes, revisión: ¿las métricas van bien? Repriorizar en Rumbo. Cada trimestre: elegir las métricas del siguiente.</p>
         </div>
       </div>
       <div className="card" style={{ marginTop: 16 }}>
@@ -75,10 +76,12 @@ export function PlanReuniones({ user, extra }) {
 function Reunion({ id, user }) {
   const [r, setR] = useState(null);
   const [puntos, setPuntos] = useState(null);
-  const [paso, setPaso] = useState(null);
+  const [anterior, setAnterior] = useState(undefined); // reunión cerrada justo antes (para «hecho desde la última»)
+  const [paso, setPaso] = useState("metricas");
   const [cerrar, setCerrar] = useState(false);
   const [noExiste, setNoExiste] = useState(false);
-  const { proyectos } = usePlan();
+  const [abierta, setAbierta] = useState(null);
+  const { proyectos, tareas } = usePlan();
   const yo = socioDe(user);
   const cargar = async () => {
     try {
@@ -89,22 +92,23 @@ function Reunion({ id, user }) {
   };
   useEffect(() => {
     cargar();
+    R.lista().then((l) => setAnterior(l.filter((x) => x.estado === "cerrada" && x.id !== id).sort((a, b) => b.fecha.localeCompare(a.fecha))[0] || null)).catch(() => setAnterior(null));
     const t = setInterval(() => { if (!document.hidden) cargar(); }, 20000);
     return () => clearInterval(t);
   }, [id]);
   if (noExiste) return <div className="card"><p className="empty">Esta reunión no existe. <button className="btn-txt" onClick={() => ir("plan/reuniones")}>Volver</button></p></div>;
   if (!r || !puntos) return <Cargando />;
   const cerrada = r.estado === "cerrada";
-  const pasoActual = paso || (r.estado === "preparando" ? "preparar" : "metricas");
   const guardar = async (patch) => { setR({ ...r, ...patch }); try { await R.guardar(id, patch); } catch (e) { avisar("No se ha podido guardar", "mal"); cargar(); } };
-  const n = (t) => puntos.filter((p) => p.tipo === t && p.estado === "abierto").length;
+  const nBloq = puntos.filter((p) => p.tipo !== "acuerdo" && p.estado === "abierto").length;
+  const nAcu = puntos.filter((p) => p.tipo === "acuerdo").length;
 
   return (
     <>
       <button className="volver" onClick={() => ir("plan/reuniones")}>← Reuniones</button>
       <section className="rn-cab">
         <div>
-          <p className="rb-eyebrow">{TIPOS_R[r.tipo]} · {cerrada ? `cerrada ${hace(r.cerrada_en)}` : r.estado === "en_curso" ? "en curso" : "preparando"}</p>
+          <p className="rb-eyebrow">{TIPOS_R[r.tipo]} · {cerrada ? `cerrada ${hace(r.cerrada_en)}` : "abierta"}</p>
           <h1>Reunión del {fechaCorta(r.fecha)}</h1>
           {!cerrada && (
             <div className="rn-cab-campos">
@@ -114,53 +118,40 @@ function Reunion({ id, user }) {
           )}
         </div>
         <div className="rn-cab-acc">
-          {r.estado === "en_curso" && <Cronometro desde={r.empezada_en} />}
-          {r.estado === "preparando" && <button className="btn-p" onClick={() => { guardar({ estado: "en_curso", empezada_en: new Date().toISOString() }); setPaso("metricas"); }}>Empezar la reunión</button>}
-          {r.estado === "en_curso" && <button className="btn-p" onClick={() => setCerrar(true)}>Cerrar la reunión</button>}
-          {r.estado === "preparando" && <button className="btn-txt peligro" onClick={async () => { if (window.confirm("¿Borrar esta reunión y lo apuntado en ella?")) { await R.borrar(id); ir("plan/reuniones"); } }}>Borrar</button>}
+          {!cerrada && <button className="btn-p" onClick={() => setCerrar(true)}>Cerrar la reunión</button>}
+          {!cerrada && !puntos.length && <button className="btn-txt peligro" onClick={async () => { if (window.confirm("¿Borrar esta reunión?")) { await R.borrar(id); ir("plan/reuniones"); } }}>Borrar</button>}
         </div>
       </section>
 
       <nav className="rn-pasos" aria-label="Orden del día">
-        {!cerrada && <button aria-current={pasoActual === "preparar" ? "step" : undefined} onClick={() => setPaso("preparar")}><b>0</b>Preparación</button>}
         {PASOS.map((p) => (
-          <button key={p.id} aria-current={pasoActual === p.id ? "step" : undefined} onClick={() => setPaso(p.id)}>
-            <b>{p.n}</b>{p.label}<small>{p.min}′{p.id === "decisiones" && n("bloqueo") + n("decision") ? ` · ${n("bloqueo") + n("decision")}` : ""}{p.id === "acuerdos" && puntos.filter((x) => x.tipo === "acuerdo").length ? ` · ${puntos.filter((x) => x.tipo === "acuerdo").length}` : ""}</small>
+          <button key={p.id} aria-current={paso === p.id ? "step" : undefined} onClick={() => setPaso(p.id)}>
+            <b>{p.n}</b>{p.label}<small>{p.min}′{p.id === "personas" && nBloq ? ` · ${nBloq} bloqueos` : ""}{p.id === "acuerdos" && nAcu ? ` · ${nAcu}` : ""}</small>
           </button>
         ))}
-        <button aria-current={pasoActual === "acta" ? "step" : undefined} onClick={() => setPaso("acta")}><b>🎙</b>Grabación y acta</button>
+        <button aria-current={paso === "acta" ? "step" : undefined} onClick={() => setPaso("acta")}><b>🎙</b>Grabación y acta</button>
       </nav>
+      {PASOS.find((p) => p.id === paso) && <p className="rn-ayuda">{PASOS.find((p) => p.id === paso).ayuda}</p>}
 
-      {pasoActual === "preparar" && <Preparacion puntos={puntos} proyectos={proyectos} />}
-      {pasoActual === "metricas" && (cerrada && r.metricas ? <FotoMetricas f={r.metricas} /> : <BloqueMetricas compacto />)}
-      {pasoActual === "decisiones" && <Puntos r={r} puntos={puntos} setPuntos={setPuntos} yo={yo} tipos={["bloqueo", "decision"]} proyectos={proyectos} cerrada={cerrada} />}
-      {pasoActual === "roadmap" && (
-        <>
-          <p className="rn-ayuda">{PASOS[2].ayuda}</p>
-          {proyectos && <AvisosReglas proyectos={proyectos} />}
-          <TableroRumbo compacto />
-        </>
+      {paso === "metricas" && (cerrada && r.metricas ? <FotoMetricas f={r.metricas} /> : <BloqueMetricas compacto />)}
+      {paso === "personas" && (
+        <EstadoPersonas r={r} tareas={tareas} proyectos={proyectos} puntos={puntos} setPuntos={setPuntos} yo={yo} cerrada={cerrada}
+          desde={anterior === undefined ? null : (anterior?.cerrada_en || new Date(Date.now() - 7 * 86400000).toISOString())} desdeTexto={anterior ? `desde la reunión del ${fechaCorta(anterior.fecha)}` : "en los últimos 7 días"} onAbrir={setAbierta} />
       )}
-      {pasoActual === "acuerdos" && <Puntos r={r} puntos={puntos} setPuntos={setPuntos} yo={yo} tipos={["acuerdo"]} proyectos={proyectos} cerrada={cerrada} />}
-      {pasoActual === "acta" && <Grabacion r={r} setR={setR} recargar={cargar} puntos={puntos} setPuntos={setPuntos} yo={yo} proyectos={proyectos} />}
+      {paso === "acuerdos" && <Puntos r={r} puntos={puntos} setPuntos={setPuntos} yo={yo} tipos={["acuerdo"]} proyectos={proyectos} cerrada={cerrada} />}
+      {paso === "acta" && <Grabacion r={r} setR={setR} recargar={cargar} puntos={puntos} setPuntos={setPuntos} yo={yo} proyectos={proyectos} />}
 
-      {!cerrada && pasoActual !== "acta" && (
+      {!cerrada && paso !== "acta" && (
         <div className="card rn-notas">
           <h2>Notas</h2>
           <textarea rows={3} defaultValue={r.notas || ""} placeholder="Lo que no encaja en otro sitio…" onBlur={(e) => e.target.value !== (r.notas || "") && guardar({ notas: e.target.value })} />
         </div>
       )}
       {cerrada && r.notas && <div className="card rn-notas"><h2>Notas</h2><p className="rn-texto">{r.notas}</p></div>}
-      {cerrar && <CerrarReunion r={r} puntos={puntos} onClose={() => setCerrar(false)} onCerrada={(res) => { setCerrar(false); cargarPlan(); avisar(`Reunión cerrada · ${res.tareas} tareas creadas${res.arrastrados ? ` · ${res.arrastrados} puntos pasan a la siguiente` : ""}`); cargar(); setPaso("acuerdos"); }} />}
+      {abierta && <TareaPanel id={abierta} user={user} onClose={() => setAbierta(null)} />}
+      {cerrar && <CerrarReunion r={r} puntos={puntos} onClose={() => setCerrar(false)} onCerrada={(res) => { setCerrar(false); cargarPlan(); avisar(`Reunión cerrada · ${res.tareas} tareas creadas${res.arrastrados ? ` · ${res.arrastrados} bloqueos pasan a la siguiente` : ""}`); cargar(); setPaso("acuerdos"); }} />}
     </>
   );
-}
-
-function Cronometro({ desde }) {
-  const [, setT] = useState(0);
-  useEffect(() => { const t = setInterval(() => setT((x) => x + 1), 1000); return () => clearInterval(t); }, []);
-  const s = desde ? (Date.now() - new Date(desde).getTime()) / 1000 : 0;
-  return <span className={`rn-crono ${s > 45 * 60 ? "mal" : ""}`} title="Tiempo desde que empezó">⏱ {mmss(s)} / 45:00</span>;
 }
 
 function FotoMetricas({ f }) {
@@ -172,37 +163,85 @@ function FotoMetricas({ f }) {
   );
 }
 
-// ---------- 0. preparación: quién llega con los deberes hechos ----------
-function Preparacion({ puntos, proyectos }) {
-  if (!proyectos) return <Cargando />;
-  const a = avisosRumbo(proyectos);
+// ---------- 2. estado por persona: lo enseña la pantalla, sale de sus tareas y proyectos ----------
+function EstadoPersonas({ r, tareas, proyectos, puntos, setPuntos, yo, cerrada, desde, desdeTexto, onAbrir }) {
+  if (!tareas || !proyectos) return <Cargando />;
+  const hoy = hoyISO(); const en7 = masDias(hoy, 7);
+  const sinDueno = tareas.filter((t) => t.estado !== "hecha" && !(t.propietarios || []).length);
   return (
-    <div className="card">
-      <h2>Antes de empezar</h2>
-      <p className="sub">Cada socio llega con sus tarjetas al día y con lo que necesita de los demás apuntado. Así la reunión solo sirve para decidir.</p>
-      <ul className="rn-prep">
-        {SOCIOS.map((s) => {
-          const mias = proyectos.filter((p) => p.responsable === s.id && p.estado !== "terminado" && !p.permanente && (p.columna === "ahora" || p.columna === "siguiente"));
-          const grises = a.grises.filter((p) => p.responsable === s.id);
-          const sinPaso = mias.filter((p) => p.columna === "ahora" && !p.siguiente_paso);
-          const apuntados = puntos.filter((p) => p.autor === s.id && p.tipo !== "acuerdo").length;
-          const ok = grises.length === 0 && sinPaso.length === 0;
-          return (
-            <li key={s.id} className={ok ? "ok" : ""}>
-              <Avatar nombre={s.label} size={34} />
-              <span className="rn-prep-n"><b>{s.label}</b><small>{s.lleva}</small></span>
-              <span className="rn-prep-e">{ok ? "✓ Tarjetas al día" : <>{grises.length ? `${grises.length} sin actualizar en ${DIAS_GRIS} días` : ""}{grises.length && sinPaso.length ? " · " : ""}{sinPaso.length ? `${sinPaso.length} sin siguiente paso` : ""}</>}</span>
-              <span className="rn-prep-p">{apuntados ? `${apuntados} ${apuntados === 1 ? "punto apuntado" : "puntos apuntados"}` : "Nada apuntado"}</span>
-            </li>
-          );
-        })}
-      </ul>
-      <p className="rn-ayuda">Las tarjetas se actualizan en <button className="btn-txt" onClick={() => ir("plan/resumen")}>Plan → Rumbo</button>. Los bloqueos y decisiones se apuntan en el paso 2.</p>
-    </div>
+    <>
+      <div className="rn-personas">
+        {SOCIOS.map((s) => <Persona key={s.id} s={s} r={r} hoy={hoy} en7={en7} desde={desde} desdeTexto={desdeTexto} tareas={tareas} proyectos={proyectos} puntos={puntos} setPuntos={setPuntos} yo={yo} cerrada={cerrada} onAbrir={onAbrir} />)}
+      </div>
+      {sinDueno.length > 0 && <p className="rn-ayuda">Hay {sinDueno.length} tareas abiertas sin responsable. <button className="btn-txt" onClick={() => ir("plan/proyectos")}>Asignarlas</button></p>}
+    </>
   );
 }
 
-// ---------- 2 y 4. puntos: bloqueos, decisiones y acuerdos ----------
+function Persona({ s, r, hoy, en7, desde, desdeTexto, tareas, proyectos, puntos, setPuntos, yo, cerrada, onAbrir }) {
+  const [txt, setTxt] = useState("");
+  const [verHechas, setVerHechas] = useState(false);
+  const mias = tareas.filter((t) => (t.propietarios || []).includes(s.id));
+  const abiertas = mias.filter((t) => t.estado !== "hecha");
+  const atras = abiertas.filter((t) => atrasada(t, hoy)).sort(ordenTareas);
+  const semana = abiertas.filter((t) => t.fecha_fin && t.fecha_fin >= hoy && t.fecha_fin <= en7).sort(ordenTareas);
+  const hechas = desde ? mias.filter((t) => t.estado === "hecha" && String(t.completada_en || "") >= desde) : [];
+  const ahora = proyectos.filter((p) => p.responsable === s.id && p.estado !== "terminado" && !p.permanente && p.columna === "ahora");
+  const bloqueos = puntos.filter((p) => p.tipo !== "acuerdo" && p.autor === s.id);
+  const rojo = atras.length > 0 || ahora.some((p) => diasDesde(p.actualizado_en) >= DIAS_GRIS) || ahora.length > 2 || bloqueos.some((b) => b.estado === "abierto");
+  const anadir = async () => {
+    if (!txt.trim()) return;
+    try { const n = await R.nuevoPunto({ reunion_id: r.id, tipo: "bloqueo", texto: txt.trim(), autor: s.id, responsable: s.id }); setPuntos([...puntos, n]); setTxt(""); }
+    catch (e) { avisar("No se ha podido apuntar", "mal"); }
+  };
+  const cambiar = async (p, patch) => { setPuntos(puntos.map((x) => (x.id === p.id ? { ...x, ...patch } : x))); try { await R.guardarPunto(p.id, patch); } catch (e) { avisar("No se ha podido guardar", "mal"); } };
+  const aAcuerdo = async (p) => {
+    try {
+      const n = await R.nuevoPunto({ reunion_id: r.id, tipo: "acuerdo", texto: p.texto, autor: yo, responsable: null, proyecto_id: p.proyecto_id || null });
+      setPuntos([...puntos.map((x) => (x.id === p.id ? { ...x, estado: "resuelto", resolucion: "Pasa a acuerdo" } : x)), n]);
+      await R.guardarPunto(p.id, { estado: "resuelto", resolucion: "Pasa a acuerdo" });
+      avisar("Añadido a acuerdos: ponle responsable y fecha");
+    } catch (e) { avisar("No se ha podido", "mal"); }
+  };
+  const Lista = ({ ts, clase }) => <ul className={`rn-p-tareas ${clase || ""}`}>{ts.map((t) => <li key={t.id}><button onClick={() => onAbrir(t.id)}><span>{t.prioridad === "alta" && <i className="prio-alta">!</i>}{t.titulo}</span>{t.fecha_fin && <em>{fechaCorta(t.fecha_fin)}</em>}</button></li>)}</ul>;
+  return (
+    <section className={`card rn-persona ${rojo ? "rojo" : ""}`}>
+      <header>
+        <Avatar nombre={s.label} size={36} />
+        <span><b>{s.label}</b><small>{s.lleva}</small></span>
+        <span className={`rn-p-sem ${rojo ? "mal" : "ok"}`}>{rojo ? "A comentar" : "✓ Al día"}</span>
+      </header>
+      <dl className="rn-p-kpis">
+        <div className={atras.length ? "mal" : ""}><dt>Atrasadas</dt><dd>{atras.length}</dd></div>
+        <div><dt>Esta semana</dt><dd>{semana.length}</dd></div>
+        <div className="ok"><dt>Hechas</dt><dd>{hechas.length}</dd></div>
+        <div className={ahora.length > 2 ? "mal" : ""}><dt>En «Ahora»</dt><dd>{ahora.length}</dd></div>
+      </dl>
+      {atras.length > 0 && <><h4 className="mal">Atrasadas</h4><Lista ts={atras} clase="mal" /></>}
+      {semana.length > 0 && <><h4>Vencen esta semana</h4><Lista ts={semana} /></>}
+      {ahora.length > 0 && (
+        <><h4>Proyectos en «Ahora»</h4>
+          <ul className="rn-p-proys">{ahora.map((p) => { const gris = diasDesde(p.actualizado_en) >= DIAS_GRIS; return (
+            <li key={p.id} className={gris ? "gris" : ""}><button onClick={() => ir(`plan/proyectos/${p.id}`)}><b>{p.nombre}</b><small>{gris ? `sin actualizar hace ${diasDesde(p.actualizado_en)} días` : p.siguiente_paso ? `→ ${p.siguiente_paso}` : "sin siguiente paso"}</small></button></li>
+          ); })}</ul></>
+      )}
+      {hechas.length > 0 && <button className="btn-txt rn-p-hechas" onClick={() => setVerHechas(!verHechas)}>{verHechas ? "Ocultar" : "Ver"} {hechas.length} hechas {desdeTexto}</button>}
+      {verHechas && <Lista ts={hechas} clase="hechas" />}
+      {abiertas.length === 0 && ahora.length === 0 && <p className="empty">Sin tareas abiertas.</p>}
+      <h4>Necesita de los demás</h4>
+      {bloqueos.length === 0 && cerrada && <p className="empty">Nada.</p>}
+      <ul className="rn-p-bloq">{bloqueos.map((b) => (
+        <li key={b.id} className={b.estado === "resuelto" ? "resuelto" : ""}>
+          <span>⛔ {b.texto}{b.origen === "arrastrado" && <em> · de la reunión anterior</em>}</span>
+          {!cerrada && b.estado === "abierto" && <span className="rn-p-bloq-acc"><button className="btn-l" onClick={() => cambiar(b, { estado: "resuelto" })}>Resuelto</button><button className="btn-txt" onClick={() => aAcuerdo(b)}>→ Acuerdo</button></span>}
+        </li>
+      ))}</ul>
+      {!cerrada && <div className="rn-p-alta"><input value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && anadir()} placeholder={`¿${s.label} necesita algo de alguien?`} aria-label={`Bloqueo de ${s.label}`} /><button className="btn-l" disabled={!txt.trim()} onClick={anadir}>Apuntar</button></div>}
+    </section>
+  );
+}
+
+// ---------- 3. acuerdos ----------
 function Puntos({ r, puntos, setPuntos, yo, tipos, proyectos, cerrada }) {
   const esAcuerdos = tipos[0] === "acuerdo";
   const [f, setF] = useState({ tipo: tipos[0], texto: "", responsable: "", fecha: "", proyecto_id: "" });

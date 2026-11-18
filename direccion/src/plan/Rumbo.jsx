@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Panel, Pestanas, Avatar, avisar, fechaCorta, Cargando, ir } from "../ui.jsx";
 import { eur, pct, num, nombreMes } from "../fmt.js";
-import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO, actualizarProyecto } from "./datos.js";
+import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO, atrasada, actualizarProyecto } from "./datos.js";
 import { ChipArea, resumenProyecto } from "./Tareas.jsx";
 import { EditarProyecto } from "./Plan.jsx";
 import { COLUMNAS, MAX_AHORA, DIAS_GRIS, METRICA, useMetricas, guardarConfig, diasDesde } from "./rumbo.js";
@@ -214,6 +214,30 @@ export function AvisosReglas({ proyectos }) {
   return <ul className="rb-avisos">{items.map((x) => <li key={x.k} className={x.mal ? "mal" : ""}>{x.t}</li>)}</ul>;
 }
 
+// ---------- la foto de la ejecución: cómo van proyectos y tareas ----------
+function FotoPlan({ quien }) {
+  const { tareas, proyectos } = usePlan();
+  if (!tareas || !proyectos) return null;
+  const hoy = hoyISO();
+  const en7 = (() => { const d = new Date(`${hoy}T12:00:00`); d.setDate(d.getDate() + 7); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
+  const hace7 = new Date(Date.now() - 7 * 86400000).toISOString();
+  const ts = tareas.filter((t) => !quien || (t.propietarios || []).includes(quien));
+  const abiertas = ts.filter((t) => t.estado !== "hecha");
+  const atras = abiertas.filter((t) => atrasada(t, hoy)).length;
+  const semana = abiertas.filter((t) => t.fecha_fin && t.fecha_fin >= hoy && t.fecha_fin <= en7).length;
+  const hechas = ts.filter((t) => t.estado === "hecha" && String(t.completada_en || "") >= hace7).length;
+  const ahora = proyectos.filter((p) => p.estado !== "terminado" && !p.permanente && p.columna === "ahora" && (!quien || p.responsable === quien)).length;
+  const K = ({ t, v, sub, cls }) => <button className={`card rb-kpi ${cls || ""}`} onClick={() => ir("plan/proyectos/personas")}><h2>{t}</h2><p className="num">{v}</p><p className="sub">{sub}</p></button>;
+  return (
+    <div className="rb-foto">
+      <K t="Proyectos en «Ahora»" v={ahora} sub={quien ? `de ${nombreSocio(quien)}` : "de los cuatro socios"} />
+      <K t="Tareas atrasadas" v={atras} sub="con la fecha pasada" cls={atras ? "mal" : ""} />
+      <K t="Vencen esta semana" v={semana} sub="en los próximos 7 días" />
+      <K t="Hechas en 7 días" v={hechas} sub={hechas ? "buen ritmo" : "ninguna todavía"} cls="ok" />
+    </div>
+  );
+}
+
 // ---------- la página ----------
 export function PlanRumbo() {
   const { proyectos } = usePlan();
@@ -236,10 +260,11 @@ export function PlanRumbo() {
         </div>
       </section>
       <BloqueMetricas onAjustar={() => setAjustes(true)} />
+      <FotoPlan quien={quien} />
       <div className="barra-sec rb-barra">
         <Pestanas valor={quien} onChange={setQuien} etiqueta="Ver de" opciones={[{ id: "", label: "Todos" }, ...SOCIOS.map((s) => ({ id: s.id, label: s.label, n: (proyectos || []).filter((p) => p.estado !== "terminado" && !p.permanente && p.columna === "ahora" && p.responsable === s.id).length }))]} />
         <div className="acciones">
-          <button className="btn-l" onClick={() => ir("plan/proyectos")}>Lista de proyectos</button>
+          <button className="btn-l" onClick={() => ir("plan/proyectos")}>Proyectos y tareas</button>
           <button className="btn-p" onClick={() => setNuevo(true)}>+ Proyecto</button>
         </div>
       </div>

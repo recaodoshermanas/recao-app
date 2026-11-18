@@ -72,9 +72,8 @@ export const TIPOS_PUNTO = {
 };
 export const PASOS = [
   { id: "metricas", n: 1, label: "Métricas", min: 5, ayuda: "Se miran aquí. Nadie las cuenta." },
-  { id: "decisiones", n: 2, label: "Decisiones y bloqueos", min: 25, ayuda: "Lo que cada uno necesita de los demás. No «qué he hecho»." },
-  { id: "roadmap", n: 3, label: "Roadmap", min: 10, ayuda: "Qué cambia de columna. Las tarjetas en gris, primero." },
-  { id: "acuerdos", n: 4, label: "Acuerdos", min: 5, ayuda: "Cada uno con responsable y fecha. Al cerrar, pasan a Tareas." },
+  { id: "personas", n: 2, label: "Estado por persona", min: 30, ayuda: "La pantalla enseña el estado de cada uno. Solo se comenta lo que está en rojo y lo que alguien necesita de los demás." },
+  { id: "acuerdos", n: 3, label: "Acuerdos", min: 10, ayuda: "Cada uno con responsable y fecha. Al cerrar, pasan a Tareas." },
 ];
 
 export const reuniones = {
