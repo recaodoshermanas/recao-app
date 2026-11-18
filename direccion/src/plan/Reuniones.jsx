@@ -19,15 +19,19 @@ const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart
 export function PlanReuniones({ user, extra }) {
   const [lista, setLista] = useState(null);
   const [creando, setCreando] = useState(false);
-  const cargar = () => R.lista().then(setLista).catch(() => setLista([]));
+  const cargar = () => R.lista().then((l) => {
+    setLista(l);
+    // actas a medias (se cerró la pantalla mientras Google transcribía): se rematan al volver
+    l.filter((x) => ["transcribiendo", "redactando"].includes(x.acta_estado)).forEach((x) => llamarActa("comprobar", x.id).catch(() => {}));
+  }).catch(() => setLista([]));
   useEffect(() => { if (!extra) cargar(); }, [extra]);
   if (extra) return <Reunion id={Number(extra)} user={user} />;
   if (!lista) return <Cargando />;
-  const abiertas = lista.filter((r) => r.estado !== "cerrada").sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const abierta = lista.find((r) => r.estado !== "cerrada");
   const cerradas = lista.filter((r) => r.estado === "cerrada");
-  const preparar = async () => {
+  const empezar = async () => {
     setCreando(true);
-    try { const n = await R.crear({ fecha: hoyISO(), tipo: "semanal" }); ir(`plan/reuniones/${n.id}`); } catch (e) { avisar("No se ha podido crear", "mal"); }
+    try { const id = await R.nueva(); ir(`plan/reuniones/${id}`); } catch (e) { avisar("No se ha podido empezar", "mal"); }
     setCreando(false);
   };
   return (
@@ -40,16 +44,19 @@ export function PlanReuniones({ user, extra }) {
         </div>
       </section>
       <div className="grid">
-        <div className="card c7">
-          <h2>{abiertas.length ? "Próxima reunión" : "No hay ninguna reunión abierta"}</h2>
-          {abiertas.length === 0 ? (
-            <><p className="sub">Ábrela cuando os sentéis (o antes, si alguien quiere apuntar un bloqueo).</p><p><button className="btn-p" disabled={creando} onClick={preparar}>Abrir una reunión</button></p></>
+        <div className="card c7 rn-empezar">
+          {abierta ? (
+            <>
+              <h2>Hay una reunión abierta</h2>
+              <p className="sub">Empezó el {fechaCorta(abierta.fecha)}. Ciérrala al terminar para que los acuerdos pasen a Tareas.</p>
+              <p><button className="btn-p" onClick={() => ir(`plan/reuniones/${abierta.id}`)}>Continuar la reunión →</button></p>
+            </>
           ) : (
-            <ul className="rn-lista">{abiertas.map((r) => (
-              <li key={r.id}><button onClick={() => ir(`plan/reuniones/${r.id}`)}>
-                <b>{fechaCorta(r.fecha)}</b><span>{TIPOS_R[r.tipo]}</span><span className="est-p e-activo">Abierta</span><span className="rn-ir">Abrir →</span>
-              </button></li>
-            ))}</ul>
+            <>
+              <h2>Reunión de dirección</h2>
+              <p className="sub">Empezadla cuando os sentéis, el día que sea. Los bloqueos que quedaron sin resolver en la anterior aparecen solos.</p>
+              <p><button className="btn-p" disabled={creando} onClick={empezar}>Empezar una reunión</button></p>
+            </>
           )}
         </div>
         <div className="card c5">
@@ -91,6 +98,11 @@ function Reunion({ id, user }) {
     } catch (e) { /* se reintenta en la siguiente vuelta */ }
   };
   useEffect(() => {
+    if (!["transcribiendo", "redactando"].includes(r?.acta_estado)) return;
+    const t = setInterval(async () => { try { const x = await llamarActa("comprobar", id); if (x?.estado !== r.acta_estado) cargar(); } catch (e) { /* siguiente vuelta */ } }, 10000);
+    return () => clearInterval(t);
+  }, [r?.acta_estado, id]);
+  useEffect(() => {
     cargar();
     R.lista().then((l) => setAnterior(l.filter((x) => x.estado === "cerrada" && x.id !== id).sort((a, b) => b.fecha.localeCompare(a.fecha))[0] || null)).catch(() => setAnterior(null));
     const t = setInterval(() => { if (!document.hidden) cargar(); }, 20000);
@@ -119,7 +131,7 @@ function Reunion({ id, user }) {
         </div>
         <div className="rn-cab-acc">
           {!cerrada && <button className="btn-p" onClick={() => setCerrar(true)}>Cerrar la reunión</button>}
-          {!cerrada && !puntos.length && <button className="btn-txt peligro" onClick={async () => { if (window.confirm("¿Borrar esta reunión?")) { await R.borrar(id); ir("plan/reuniones"); } }}>Borrar</button>}
+          <button className="btn-txt peligro" onClick={async () => { if (window.confirm("¿Borrar esta reunión, con lo apuntado y su audio? Las tareas que ya salieron de sus acuerdos no se borran.")) { try { await R.borrar(id, r.audio_path); avisar("Reunión borrada"); ir("plan/reuniones"); } catch (e) { avisar("No se ha podido borrar", "mal"); } } }}>Borrar reunión</button>
         </div>
       </section>
 
@@ -149,7 +161,7 @@ function Reunion({ id, user }) {
       )}
       {cerrada && r.notas && <div className="card rn-notas"><h2>Notas</h2><p className="rn-texto">{r.notas}</p></div>}
       {abierta && <TareaPanel id={abierta} user={user} onClose={() => setAbierta(null)} />}
-      {cerrar && <CerrarReunion r={r} puntos={puntos} onClose={() => setCerrar(false)} onCerrada={(res) => { setCerrar(false); cargarPlan(); avisar(`Reunión cerrada · ${res.tareas} tareas creadas${res.arrastrados ? ` · ${res.arrastrados} bloqueos pasan a la siguiente` : ""}`); cargar(); setPaso("acuerdos"); }} />}
+      {cerrar && <CerrarReunion r={r} puntos={puntos} onClose={() => setCerrar(false)} onCerrada={(res) => { setCerrar(false); cargarPlan(); avisar(`Reunión cerrada · ${res.tareas} tareas creadas`); cargar(); setPaso("acuerdos"); }} />}
     </>
   );
 }
@@ -336,7 +348,6 @@ function Punto({ p, esAcuerdos, cerrada, proyectos, onCambiar, onQuitar, onAcuer
 // ---------- cerrar ----------
 function CerrarReunion({ r, puntos, onClose, onCerrada }) {
   const { m } = useMetricas();
-  const [sig, setSig] = useState(masDias(r.fecha, 7));
   const [busy, setBusy] = useState(false);
   const acuerdos = puntos.filter((p) => p.tipo === "acuerdo");
   const sinResp = acuerdos.filter((p) => !p.responsable);
@@ -344,15 +355,14 @@ function CerrarReunion({ r, puntos, onClose, onCerrada }) {
   const abiertos = puntos.filter((p) => p.tipo !== "acuerdo" && p.estado === "abierto");
   return (
     <Panel titulo="Cerrar la reunión" onClose={onClose} ancho="520px"
-      pie={<div className="pie-t"><span /><button className="btn-p" disabled={busy} onClick={async () => { setBusy(true); try { onCerrada(await R.cerrar(r.id, fotoMetricas(m), sig)); } catch (e) { avisar(String(e.message || "No se ha podido cerrar").replace(/^RPC[^:]*:\s*\d+\s*/, ""), "mal"); setBusy(false); } }}>Cerrar la reunión</button></div>}>
+      pie={<div className="pie-t"><span /><button className="btn-p" disabled={busy} onClick={async () => { setBusy(true); try { onCerrada(await R.cerrar(r.id, fotoMetricas(m))); } catch (e) { avisar(String(e.message || "No se ha podido cerrar").replace(/^RPC[^:]*:\s*\d+\s*/, ""), "mal"); setBusy(false); } }}>Cerrar la reunión</button></div>}>
       <ul className="rn-cierre">
         <li><b>{acuerdos.length - sinResp.length}</b> acuerdos pasan a Tareas del Plan, cada uno a su responsable.</li>
         {sinResp.length > 0 && <li className="mal"><b>{sinResp.length}</b> acuerdos sin responsable: no se convierten en tarea. Vuelve y asígnalos.</li>}
         {sinFecha.length > 0 && <li className="mal"><b>{sinFecha.length}</b> acuerdos sin fecha.</li>}
-        <li><b>{abiertos.length}</b> bloqueos o decisiones sin resolver pasan a la siguiente reunión.</li>
+        {abiertos.length > 0 && <li><b>{abiertos.length}</b> bloqueos sin resolver aparecerán en la próxima reunión que abráis.</li>}
         <li>Se guarda la foto de las métricas de hoy.</li>
       </ul>
-      <label className="campo">Siguiente reunión<input type="date" value={sig} onChange={(e) => setSig(e.target.value)} /></label>
     </Panel>
   );
 }
@@ -373,13 +383,6 @@ function Grabacion({ r, setR, recargar, puntos, setPuntos, yo, proyectos }) {
   const formato = elegirFormato();
 
   useEffect(() => { if (r.audio_path) urlAudio(r.audio_path).then(setAudioUrl); else setAudioUrl(null); }, [r.audio_path]);
-  // mientras Google transcribe o Claude redacta, se pregunta cada 10 s
-  useEffect(() => {
-    if (!["transcribiendo", "redactando"].includes(r.acta_estado)) return;
-    let vivo = true;
-    const t = setInterval(async () => { try { const x = await llamarActa("comprobar", r.id); if (vivo && x?.estado !== r.acta_estado) recargar(); } catch (e) { /* siguiente vuelta */ } }, 10000);
-    return () => { vivo = false; clearInterval(t); };
-  }, [r.acta_estado, r.id]);
   useEffect(() => () => { flujo.current?.getTracks().forEach((t) => t.stop()); }, []);
   useEffect(() => {
     if (!grabando) return;

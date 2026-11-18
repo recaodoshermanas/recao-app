@@ -81,13 +81,19 @@ export const reuniones = {
   una: async (id) => (await sb.select("dir_reuniones", `select=*&id=eq.${id}`))[0] || null,
   crear: async (datos) => { const r = await sb.insert("dir_reuniones", datos); return Array.isArray(r) ? r[0] : r; },
   guardar: (id, patch) => sb.update("dir_reuniones", `id=eq.${id}`, patch),
-  borrar: (id) => sb.delete("dir_reuniones", `id=eq.${id}`),
+  borrar: async (id, audioPath) => {
+    if (audioPath) { try { await supabase.storage.from("reuniones").remove([audioPath]); } catch (_) { /* el audio se queda; no impide borrar */ } }
+    return sb.delete("dir_reuniones", `id=eq.${id}`);
+  },
   puntos: (id) => sb.select("dir_reunion_puntos", `select=*&reunion_id=eq.${id}&order=creado_en.asc`),
   todosAbiertos: () => sb.select("dir_reunion_puntos", "select=id,tipo,reunion_id,estado&estado=eq.abierto&tipo=in.(bloqueo,decision)"),
   nuevoPunto: async (datos) => { const r = await sb.insert("dir_reunion_puntos", datos); return Array.isArray(r) ? r[0] : r; },
   guardarPunto: (id, patch) => sb.update("dir_reunion_puntos", `id=eq.${id}`, patch),
   borrarPunto: (id) => sb.delete("dir_reunion_puntos", `id=eq.${id}`),
-  cerrar: (id, metricas, siguiente) => sb.rpc("dir_reunion_cerrar", { p_id: id, p_metricas: metricas, p_siguiente: siguiente || null }),
+  // Una reunión se abre cuando se quiera (fecha de hoy); si ya hay una abierta, se devuelve esa.
+  // Los bloqueos que quedaron sin resolver en reuniones cerradas pasan a la nueva.
+  nueva: () => sb.rpc("dir_reunion_nueva"),
+  cerrar: (id, metricas) => sb.rpc("dir_reunion_cerrar", { p_id: id, p_metricas: metricas }),
 };
 
 // Audio de la reunión: se sube al almacén privado «reuniones» y la función reunion-acta lo transcribe y redacta el acta.
