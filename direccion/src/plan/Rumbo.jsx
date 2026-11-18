@@ -40,7 +40,7 @@ export function BloqueMetricas({ compacto = false, onAjustar }) {
   const dFact = mes.por_dia && ant.por_dia ? ((mes.por_dia - ant.por_dia) / ant.por_dia) * 100 : null;
   const dMarg = mes.margen_pct != null && ant.margen_pct != null ? mes.margen_pct - ant.margen_pct : null;
   const sobreSuelo = mes.margen_pct != null ? mes.margen_pct >= suelo : null;
-  const semanas = m.semanas || [];
+  const semanas = (m.semanas || []).filter((s) => s.dias >= 5); // la semana en curso, a medias, no cuenta
   const clase = (d) => (d == null ? "flat" : d > 0.05 ? "up" : d < -0.05 ? "down" : "flat");
   return (
     <div className={`rb-metricas ${compacto ? "compacto" : ""}`}>
