@@ -199,7 +199,7 @@ export function PlanLista({ user }) {
 
       {abierta && <TareaPanel id={abierta} user={user} onClose={() => setAbierta(null)} />}
       {proy && <ProyectoPanel p={proy} user={user} onClose={() => setProy(null)} />}
-      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: persona || "" }} onClose={() => setNuevo(false)} onGuardado={() => setNuevo(false)} />}
+      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: persona || "" }} onClose={() => setNuevo(false)} onGuardado={(n) => { setNuevo(false); if (n?.id) setProy(n); }} />}
     </div>
   );
 }

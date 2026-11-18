@@ -3,10 +3,10 @@ import { useMemo, useState } from "react";
 import { Panel, Pestanas, Avatar, avisar, fechaCorta, Cargando, ir } from "../ui.jsx";
 import {
   usePlan, AREAS_PLAN, AREA, SOCIOS, SOCIO, nombreSocio, ESTADOS_P, ESTADO_P, PRIORIDADES, hoyISO, atrasada, ordenTareas,
-  crearProyecto, actualizarProyecto, borrarProyecto,
+  crearProyecto, actualizarProyecto, borrarProyecto, crearTarea,
 } from "./datos.js";
 import {
-  ChipArea, Responsables, FilaTarea, AltaRapida, ListaAgrupada, Tablero, TareaPanel, useFiltros, BarraFiltros, defaultsDeFiltros, resumenProyecto,
+  ChipArea, Responsables, FilaTarea, AltaRapida, ListaAgrupada, Tablero, TareaPanel, useFiltros, BarraFiltros, defaultsDeFiltros, resumenProyecto, leerAltaRapida,
 } from "./Tareas.jsx";
 import { Roadmap } from "./Roadmap.jsx";
 import { COLUMNAS, METRICAS } from "./rumbo.js";
@@ -198,6 +198,7 @@ function ProyectoDetalle({ p, tareas, user }) {
 
 export function EditarProyecto({ p, onClose, onGuardado, onBorrado }) {
   const nuevo = !p.id;
+  const [tareasTxt, setTareasTxt] = useState("");
   const [f, setF] = useState({ nombre: p.nombre || "", objetivo: p.objetivo || "", descripcion: p.descripcion || "", area: p.area || "", responsable: p.responsable || "", estado: p.estado || "activo", prioridad: p.prioridad || "media", fecha_inicio: p.fecha_inicio || "", fecha_objetivo: p.fecha_objetivo || "",
     columna: p.permanente ? "permanente" : (p.columna || (nuevo ? "siguiente" : "")), metrica: p.metrica || "", como_mueve: p.como_mueve || "", siguiente_paso: p.siguiente_paso || "", siguiente_paso_fecha: p.siguiente_paso_fecha || "" });
   const [busy, setBusy] = useState(false);
@@ -211,7 +212,15 @@ export function EditarProyecto({ p, onClose, onGuardado, onBorrado }) {
     if (!perm && f.columna === "ahora" && datos.estado === "idea") datos.estado = "activo";
     try {
       let n = null;
-      if (nuevo) n = await crearProyecto(datos); else await actualizarProyecto(p.id, datos);
+      if (nuevo) {
+        n = await crearProyecto(datos);
+        // tareas escritas al crear el proyecto (una por línea; admite @persona !alta)
+        const lineas = tareasTxt.split("\n").map((x) => x.trim()).filter(Boolean);
+        for (const l of lineas) {
+          const r = leerAltaRapida(l, []);
+          if (r.titulo) await crearTarea({ proyecto_id: n.id, area: datos.area, propietarios: datos.responsable ? [datos.responsable] : [], ...r });
+        }
+      } else await actualizarProyecto(p.id, datos);
       avisar(nuevo ? "Proyecto creado" : "Proyecto guardado"); onGuardado(n);
     } catch (e) { avisar("No se ha podido guardar", "mal"); }
     setBusy(false);
@@ -220,6 +229,7 @@ export function EditarProyecto({ p, onClose, onGuardado, onBorrado }) {
     <Panel titulo={nuevo ? "Nuevo proyecto" : "Editar proyecto"} onClose={onClose} ancho="560px"
       pie={<div className="pie-t">{!nuevo ? <button className="btn-txt peligro" onClick={async () => { if (window.confirm("¿Eliminar el proyecto? Sus tareas se quedan, sin proyecto.")) { await borrarProyecto(p.id); avisar("Proyecto eliminado"); onClose(); onBorrado && onBorrado(); } }}>Eliminar</button> : <span />}<button className="btn-p" disabled={!f.nombre.trim() || busy} onClick={guardar}>{nuevo ? "Crear proyecto" : "Guardar"}</button></div>}>
       <label className="campo">Nombre<input autoFocus value={f.nombre} onChange={set("nombre")} placeholder="Ej: Inventario completo en Epos" /></label>
+      {nuevo && <label className="campo">Tareas (una por línea; puedes poner @persona y !alta)<textarea rows={4} value={tareasTxt} onChange={(e) => setTareasTxt(e.target.value)} placeholder={"Contar los productos clase A @javi\nCargar el recuento en Epos !alta"} /></label>}
       <label className="campo">Objetivo<input value={f.objetivo} onChange={set("objetivo")} placeholder="Qué tiene que estar conseguido al terminar" /></label>
       <div className="fila-campos">
         <label className="campo">Área<select value={f.area} onChange={set("area")}><option value="">Sin área</option>{AREAS_PLAN.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}</select></label>

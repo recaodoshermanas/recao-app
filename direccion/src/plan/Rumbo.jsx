@@ -295,7 +295,8 @@ export function PlanRumbo({ user }) {
       <TableroRumbo quien={quien} user={user} />
       <p className="rb-leyenda">Arrastra las tarjetas entre columnas (o usa las flechas). Una tarjeta sin tocar en {DIAS_GRIS} días se pone gris: actualízala o pulsa «Sigue igual».</p>
       {ajustes && <AjustesRumbo onClose={() => setAjustes(false)} />}
-      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: quien || "" }} onClose={() => setNuevo(false)} onGuardado={() => { setNuevo(false); cargarPlan(); }} />}
+      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: quien || "" }} onClose={() => setNuevo(false)} onGuardado={(n) => { setNuevo(false); cargarPlan(); if (n?.id) setRecien(n); }} />}
+      {recien && <ProyectoPanel p={recien} user={user} onClose={() => setRecien(null)} />}
     </>
   );
 }
@@ -306,6 +307,7 @@ export function PlanTableroProyectos({ user }) {
   const [quien, setQuien] = useState("");
   const [nuevo, setNuevo] = useState(false);
   const [ajustes, setAjustes] = useState(false);
+  const [recien, setRecien] = useState(null);
   return (
     <>
       <div className="ls-cab">
@@ -325,7 +327,8 @@ export function PlanTableroProyectos({ user }) {
       <TableroRumbo quien={quien} user={user} />
       <p className="rb-leyenda">Arrastra las tarjetas entre columnas (o usa las flechas). Al pulsar un proyecto se abre con sus tareas. <button className="btn-txt" onClick={() => setAjustes(true)}>Ajustar suelo de margen y horizonte</button></p>
       {ajustes && <AjustesRumbo onClose={() => setAjustes(false)} />}
-      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: quien || "" }} onClose={() => setNuevo(false)} onGuardado={() => { setNuevo(false); cargarPlan(); }} />}
+      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: quien || "" }} onClose={() => setNuevo(false)} onGuardado={(n) => { setNuevo(false); cargarPlan(); if (n?.id) setRecien(n); }} />}
+      {recien && <ProyectoPanel p={recien} user={user} onClose={() => setRecien(null)} />}
     </>
   );
 }
