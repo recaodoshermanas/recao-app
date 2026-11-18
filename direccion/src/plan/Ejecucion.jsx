@@ -3,12 +3,13 @@
 //    hechas en 7 días), con contadores que filtran y alta rápida en cada grupo que ya pone la fecha.
 //  · Proyectos: cada proyecto se despliega con sus tareas; se marcan, se añaden y se abren sin cambiar de pantalla.
 //  · Todas las tareas: la lista y el tablero de siempre, con filtros.
-import { useEffect, useState } from "react";
-import { Panel, Pestanas, Avatar, fechaCorta, Cargando, ir } from "../ui.jsx";
-import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO, atrasada, ordenTareas } from "./datos.js";
-import { ChipArea, FilaTarea, AltaRapida, TareaPanel, resumenProyecto } from "./Tareas.jsx";
+import { useEffect, useRef, useState } from "react";
+import { Panel, Pestanas, Avatar, fechaCorta, Cargando, ir, avisar } from "../ui.jsx";
+import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO, atrasada, ordenTareas, crearProyecto, actualizarProyecto, borrarProyecto, crearTarea, AREAS_PLAN, PRIORIDADES } from "./datos.js";
+import { ChipArea, FilaTarea, AltaRapida, TareaPanel, resumenProyecto, leerAltaRapida } from "./Tareas.jsx";
+import { Fila, Bola } from "./Lista.jsx";
 import { Proyectos, PlanTareas, EditarProyecto } from "./Plan.jsx";
-import { COLUMNAS, METRICA, DIAS_GRIS, diasDesde } from "./rumbo.js";
+import { COLUMNAS, METRICA, METRICAS, DIAS_GRIS, diasDesde, socioDe } from "./rumbo.js";
 
 const PESTANAS = [{ id: "foco", label: "Foco" }, { id: "proyectos", label: "Proyectos" }, { id: "todas", label: "Tablero y lista" }];
 const masDias = (f, n) => { const d = new Date(`${f}T12:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -250,40 +251,94 @@ export function proximaTarea(p, tareas) {
   return (tareas || []).filter((t) => t.proyecto_id === p.id && t.estado !== "hecha").sort(ordenTareas)[0] || null;
 }
 
+// Proyecto en un panel lateral, como en el Roadmap de Impulser: todo se edita en el sitio y se guarda solo
+// (nombre, columna, responsable, área, métrica, fecha, prioridad, objetivo) y debajo sus tareas, editables en la fila,
+// con una caja para añadir que ya pregunta quién, cuándo y prioridad.
+export async function nuevoProyecto(user, extra = {}) {
+  const yo = socioDe(user);
+  return crearProyecto({ nombre: "Proyecto nuevo", estado: "idea", prioridad: "media", columna: "siguiente", responsable: yo, ...extra });
+}
+
+const Chips = ({ opciones, valor, onChange, etiqueta }) => (
+  <div className="pp2-chips" role="group" aria-label={etiqueta}>
+    {opciones.map((o) => <button key={o.id} className={valor === o.id ? "on" : ""} aria-pressed={valor === o.id} onClick={() => onChange(o.id)} style={o.color && valor === o.id ? { background: o.color, borderColor: o.color, color: "#fff" } : undefined}>{o.label}</button>)}
+  </div>
+);
+
 export function ProyectoPanel({ p, user, onClose }) {
-  const { tareas, proyectos, nComentarios } = usePlan();
+  const { tareas, proyectos } = usePlan();
+  const vivo = (proyectos || []).find((x) => x.id === p.id) || p;
+  const [nombre, setNombre] = useState(vivo.nombre || "");
+  const [obj, setObj] = useState(vivo.objetivo || "");
+  const [guardado, setGuardado] = useState(false);
   const [abierta, setAbierta] = useState(null);
-  const [editar, setEditar] = useState(false);
   const [verHechas, setVerHechas] = useState(false);
-  const vivo = (proyectos || []).find((x) => x.id === p.id) || p; // refresca al guardar
+  const [borrar, setBorrar] = useState(false);
+  const [nt, setNt] = useState({ titulo: "", quien: vivo.responsable || socioDe(user) || "", fecha: "", prio: "media" });
+  const nombreRef = useRef(null);
+  useEffect(() => { setNombre(vivo.nombre || ""); setObj(vivo.objetivo || ""); }, [p.id]); // eslint-disable-line
+  useEffect(() => { if (vivo.nombre === "Proyecto nuevo") setTimeout(() => { nombreRef.current?.focus(); nombreRef.current?.select(); }, 250); }, [p.id]); // eslint-disable-line
+  const sv = async (patch) => {
+    try { await actualizarProyecto(vivo.id, patch); setGuardado(true); setTimeout(() => setGuardado(false), 1500); }
+    catch (e) { avisar("No se ha podido guardar", "mal"); }
+  };
   const ts = (tareas || []).filter((t) => t.proyecto_id === vivo.id).sort(ordenTareas);
   const abiertas = ts.filter((t) => t.estado !== "hecha");
   const hechas = ts.filter((t) => t.estado === "hecha");
-  const r = resumenProyecto(vivo, tareas || []);
-  const equipo = equipoProyecto(vivo, tareas);
-  const met = METRICA[vivo.metrica];
-  const col = COLUMNAS.find((c) => c.id === vivo.columna);
+  const hoy = hoyISO();
+  const anadir = async () => {
+    const r = leerAltaRapida(nt.titulo, proyectos);
+    if (!r.titulo) return;
+    try {
+      await crearTarea({ proyecto_id: vivo.id, area: vivo.area || null, propietarios: nt.quien ? [nt.quien] : [], fecha_fin: nt.fecha || null, prioridad: nt.prio, ...r });
+      setNt({ ...nt, titulo: "" });
+    } catch (e) { avisar("No se ha podido añadir", "mal"); }
+  };
+  const columna = vivo.permanente ? "permanente" : (vivo.columna || "");
   return (
     <>
-      <Panel titulo={vivo.nombre} sub={[col ? `Roadmap: ${col.label}` : vivo.permanente ? "Responsabilidad permanente" : "Sin colocar en el roadmap", vivo.fecha_objetivo ? `objetivo ${fechaCorta(vivo.fecha_objetivo)}` : ""].filter(Boolean).join(" · ")} onClose={onClose} ancho="560px"
-        pie={<div className="pie-t"><button className="btn-txt" onClick={() => { onClose(); ir(`plan/proyectos/${vivo.id}`); }}>Abrir la ficha completa →</button><button className="btn-p" onClick={() => setEditar(true)}>Editar proyecto</button></div>}>
-        <div className="pp-cab">
-          <span className="ej-proy-chips"><ChipArea id={vivo.area} />{met ? <span className={`rb-met-chip ${met.principal ? "principal" : ""}`}>↗ {met.label}</span> : <span className="rb-met-chip falta">Sin métrica</span>}</span>
-          {vivo.objetivo && <p className="ej-obj"><b>Objetivo:</b> {vivo.objetivo}</p>}
-          <div className="pp-gente">
-            <div><small>Responsable</small>{vivo.responsable ? <span className="rb-resp"><Avatar nombre={nombreSocio(vivo.responsable)} size={26} />{nombreSocio(vivo.responsable)}</span> : <span className="rb-resp falta">Sin responsable</span>}</div>
-            <div><small>Equipo</small>{equipo.length ? <span className="pp-equipo">{equipo.map((x) => <span key={x} className="rb-resp"><Avatar nombre={nombreSocio(x)} size={22} />{nombreSocio(x)}</span>)}</span> : <span className="rb-resp falta">solo el responsable</span>}</div>
+      <Panel titulo={<textarea ref={nombreRef} className="pp2-nombre" rows={1} value={nombre} onChange={(e) => setNombre(e.target.value)} onBlur={() => nombre.trim() && nombre !== vivo.nombre && sv({ nombre: nombre.trim() })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }} aria-label="Nombre del proyecto" />}
+        sub={<span className="pp2-sub">Proyecto · {hechas.length}/{ts.length} tareas hechas{guardado && <b> · Guardado ✓</b>}</span>} onClose={onClose} ancho="600px"
+        pie={<div className="pie-t">
+          <button className={`btn-txt peligro ${borrar ? "armado" : ""}`} onClick={async () => { if (!borrar) { setBorrar(true); setTimeout(() => setBorrar(false), 3000); return; } try { await borrarProyecto(vivo.id); avisar("Proyecto borrado"); onClose(); } catch (e) { avisar("No se ha podido borrar", "mal"); } }}>{borrar ? "¿Seguro? Pulsa otra vez" : "Borrar proyecto"}</button>
+          <button className="btn-p" onClick={onClose}>Listo</button>
+        </div>}>
+        <div className="pp2-campos">
+          <span>Columna</span>
+          <Chips etiqueta="Columna" valor={columna} onChange={(c) => sv(c === "permanente" ? { permanente: true, columna: null } : { permanente: false, columna: c, ...(c === "ahora" && vivo.estado !== "activo" ? { estado: "activo" } : {}) })}
+            opciones={[...COLUMNAS.map((c) => ({ id: c.id, label: c.label })), { id: "permanente", label: "Permanente" }]} />
+          <span>Responsable</span>
+          <div className="pp2-chips" role="group" aria-label="Responsable">
+            {SOCIOS.map((s) => <button key={s.id} className={vivo.responsable === s.id ? "on" : ""} aria-pressed={vivo.responsable === s.id} onClick={() => sv({ responsable: vivo.responsable === s.id ? null : s.id })}><Bola id={s.id} size={22} />{s.label}</button>)}
           </div>
-          <div className="pp-avance"><span className="barra-p"><i style={{ width: `${r.pct}%` }} /></span><small>{r.total ? `${r.hechas} de ${r.total} tareas hechas` : "Todavía sin tareas"}{r.atrasadas ? <em> · {r.atrasadas} atrasadas</em> : ""}</small></div>
+          <span>Área</span>
+          <Chips etiqueta="Área" valor={vivo.area || ""} onChange={(a) => sv({ area: vivo.area === a ? null : a })} opciones={AREAS_PLAN.map((a) => ({ id: a.id, label: a.label, color: a.color }))} />
+          <span>Métrica</span>
+          <Chips etiqueta="Métrica" valor={vivo.metrica || ""} onChange={(m) => sv({ metrica: vivo.metrica === m ? null : m })} opciones={METRICAS.map((m) => ({ id: m.id, label: m.corta }))} />
+          <span>Prioridad</span>
+          <Chips etiqueta="Prioridad" valor={vivo.prioridad || "media"} onChange={(x) => sv({ prioridad: x })} opciones={PRIORIDADES} />
+          <span>Fecha objetivo</span>
+          <input type="date" className="pp2-fecha" value={vivo.fecha_objetivo || ""} onChange={(e) => sv({ fecha_objetivo: e.target.value || null })} />
         </div>
-        <h3 className="pp-h">Tareas</h3>
-        {abiertas.length ? <ul className="lista-t">{abiertas.map((t) => <FilaTarea key={t.id} t={t} proyectos={proyectos} onAbrir={setAbierta} nCom={nComentarios?.[t.id]} mostrarProyecto={false} />)}</ul> : <p className="empty">No hay tareas abiertas. Añade la primera: un proyecto avanza a base de tareas.</p>}
-        <AltaRapida defaults={{ proyecto_id: vivo.id, area: vivo.area || null, propietarios: vivo.responsable ? [vivo.responsable] : [] }} placeholder="Añadir tarea… (luego le cambias quién la lleva)" onCreada={(n) => setAbierta(n.id)} />
-        {hechas.length > 0 && <button className="btn-txt" onClick={() => setVerHechas(!verHechas)}>{verHechas ? "Ocultar" : "Ver"} {hechas.length} hechas</button>}
-        {verHechas && <ul className="lista-t">{hechas.map((t) => <FilaTarea key={t.id} t={t} proyectos={proyectos} onAbrir={setAbierta} nCom={nComentarios?.[t.id]} mostrarProyecto={false} />)}</ul>}
+        <textarea className="pp2-obj" rows={2} value={obj} onChange={(e) => setObj(e.target.value)} onBlur={() => obj !== (vivo.objetivo || "") && sv({ objetivo: obj.trim() || null })} placeholder="Objetivo: por qué importa y cómo sabremos que está hecho…" />
+
+        <h3 className="pp2-h">Tareas <span>{abiertas.length} abiertas</span></h3>
+        <div className="pp2-tareas">
+          {abiertas.map((t) => <Fila key={t.id} t={t} hoy={hoy} onAbrir={setAbierta} compacta />)}
+          {verHechas && hechas.map((t) => <Fila key={t.id} t={t} hoy={hoy} onAbrir={setAbierta} compacta />)}
+        </div>
+        {hechas.length > 0 && <button className="btn-txt pp2-hechas" onClick={() => setVerHechas(!verHechas)}>{verHechas ? "Ocultar" : "Ver"} {hechas.length} hechas</button>}
+        <div className="pp2-nueva">
+          <input value={nt.titulo} onChange={(e) => setNt({ ...nt, titulo: e.target.value })} onKeyDown={(e) => e.key === "Enter" && anadir()} placeholder="Nueva tarea en este proyecto…" aria-label="Nueva tarea" />
+          <div className="pp2-nueva-fila">
+            <select value={nt.quien} onChange={(e) => setNt({ ...nt, quien: e.target.value })} aria-label="Responsable"><option value="">Sin responsable</option>{SOCIOS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
+            <input type="date" value={nt.fecha} onChange={(e) => setNt({ ...nt, fecha: e.target.value })} aria-label="Fecha límite" />
+            <select value={nt.prio} onChange={(e) => setNt({ ...nt, prio: e.target.value })} aria-label="Prioridad">{PRIORIDADES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select>
+            <button className="btn-p" disabled={!nt.titulo.trim()} onClick={anadir}>Añadir</button>
+          </div>
+        </div>
       </Panel>
       {abierta && <TareaPanel id={abierta} user={user} onClose={() => setAbierta(null)} />}
-      {editar && <EditarProyecto p={vivo} onClose={() => setEditar(false)} onGuardado={() => { setEditar(false); cargarPlan(); }} onBorrado={() => { setEditar(false); onClose(); cargarPlan(); }} />}
     </>
   );
 }

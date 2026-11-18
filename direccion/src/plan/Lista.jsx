@@ -6,8 +6,7 @@ import { Cargando, ir, avisar } from "../ui.jsx";
 import { eur, pct, num } from "../fmt.js";
 import { usePlan, SOCIOS, nombreSocio, hoyISO, atrasada, ordenTareas, actualizarTarea, ESTADOS_T, PRIORIDADES, AREA } from "./datos.js";
 import { AltaRapida, TareaPanel } from "./Tareas.jsx";
-import { ProyectoPanel } from "./Ejecucion.jsx";
-import { EditarProyecto } from "./Plan.jsx";
+import { ProyectoPanel, nuevoProyecto } from "./Ejecucion.jsx";
 import { COLUMNAS, METRICA, useMetricas } from "./rumbo.js";
 import "./lista.css";
 
@@ -78,13 +77,13 @@ function CeldaPersonas({ t }) {
   );
 }
 
-function Fila({ t, hoy, onAbrir }) {
+export function Fila({ t, hoy, onAbrir, compacta = false }) {
   const g = (patch) => actualizarTarea(t.id, patch).catch(() => avisar("No se ha podido guardar", "mal"));
   const hecha = t.estado === "hecha";
   const tarde = atrasada(t, hoy);
   const ck = Array.isArray(t.checklist) ? t.checklist : [];
   return (
-    <div className={`ls-fila ${hecha ? "hecha" : ""}`}>
+    <div className={`ls-fila ${hecha ? "hecha" : ""} ${compacta ? "compacta" : ""}`}>
       <button className={`ls-check ${hecha ? "on" : ""}`} onClick={() => g({ estado: hecha ? "pendiente" : "hecha" })} aria-label={hecha ? "Reabrir" : "Marcar como hecha"}>{hecha ? "✓" : ""}</button>
       <button className="ls-tit" onClick={() => onAbrir(t.id)} title="Abrir: notas, pasos y comentarios">
         <span>{t.titulo || "Sin título"}</span>
@@ -142,7 +141,7 @@ export function PlanLista({ user }) {
   const [q, setQ] = useState("");
   const [abierta, setAbierta] = useState(null);
   const [proy, setProy] = useState(null);
-  const [nuevo, setNuevo] = useState(false);
+  const crear = async () => { try { setProy(await nuevoProyecto(user)); } catch (e) { avisar("No se ha podido crear el proyecto", "mal"); } };
   if (!tareas || !proyectos) return <Cargando />;
   const hoy = hoyISO();
   const en7 = (() => { const d = new Date(`${hoy}T12:00:00`); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10); })();
@@ -166,7 +165,7 @@ export function PlanLista({ user }) {
         <TiraMetricas />
         <span className="ls-esp" />
         <button className="ls-btn" onClick={() => ir("plan/reuniones")}>Reunión</button>
-        <button className="ls-btn" onClick={() => setNuevo(true)}>+ Proyecto</button>
+        <button className="ls-btn" onClick={crear}>+ Proyecto</button>
       </div>
 
       <div className="ls-filtros">
@@ -186,7 +185,7 @@ export function PlanLista({ user }) {
 
       <div className="ls-colcab" aria-hidden="true"><span /><span>Tarea</span><span>Responsables</span><span>Fecha</span><span>Prioridad</span><span>Estado</span></div>
       {vivos.length === 0 && sueltas.length === 0 && (
-        <div className="ls-vacio"><b>Empezad por los proyectos</b><p>Cread cada uno los vuestros con «+ Proyecto» y añadid sus tareas aquí mismo.</p><button className="ls-btn osc" onClick={() => setNuevo(true)}>+ Proyecto</button></div>
+        <div className="ls-vacio"><b>Empezad por los proyectos</b><p>Cread cada uno los vuestros con «+ Proyecto» y añadid sus tareas aquí mismo.</p><button className="ls-btn osc" onClick={crear}>+ Proyecto</button></div>
       )}
       <div className="ls-grupos">
         {vivos.map((p) => (
@@ -199,7 +198,6 @@ export function PlanLista({ user }) {
 
       {abierta && <TareaPanel id={abierta} user={user} onClose={() => setAbierta(null)} />}
       {proy && <ProyectoPanel p={proy} user={user} onClose={() => setProy(null)} />}
-      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: persona || "" }} onClose={() => setNuevo(false)} onGuardado={(n) => { setNuevo(false); if (n?.id) setProy(n); }} />}
     </div>
   );
 }

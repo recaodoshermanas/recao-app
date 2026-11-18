@@ -6,7 +6,7 @@ import { eur, pct, num, nombreMes } from "../fmt.js";
 import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO, atrasada, actualizarProyecto, AREA } from "./datos.js";
 import { ChipArea, resumenProyecto } from "./Tareas.jsx";
 import { EditarProyecto } from "./Plan.jsx";
-import { ProyectoPanel, equipoProyecto, proximaTarea, pedirFiltroFoco } from "./Ejecucion.jsx";
+import { ProyectoPanel, equipoProyecto, proximaTarea, pedirFiltroFoco, nuevoProyecto } from "./Ejecucion.jsx";
 import { COLUMNAS, MAX_AHORA, DIAS_GRIS, METRICA, useMetricas, guardarConfig, diasDesde } from "./rumbo.js";
 import "./rumbo.css";
 import { TiraMetricas, Bola } from "./Lista.jsx";
@@ -304,7 +304,6 @@ export function PlanRumbo({ user }) {
 export function PlanTableroProyectos({ user }) {
   const { proyectos } = usePlan();
   const [quien, setQuien] = useState("");
-  const [nuevo, setNuevo] = useState(false);
   const [ajustes, setAjustes] = useState(false);
   const [recien, setRecien] = useState(null);
   return (
@@ -313,7 +312,7 @@ export function PlanTableroProyectos({ user }) {
         <TiraMetricas />
         <span className="ls-esp" />
         <button className="ls-btn" onClick={() => ir("plan/reuniones")}>Reunión</button>
-        <button className="ls-btn osc" onClick={() => setNuevo(true)}>+ Proyecto</button>
+        <button className="ls-btn osc" onClick={async () => { try { setRecien(await nuevoProyecto(user, quien ? { responsable: quien } : {})); } catch (e) { avisar("No se ha podido crear el proyecto", "mal"); } }}>+ Proyecto</button>
       </div>
       <div className="ls-filtros">
         <div className="ls-quien" role="group" aria-label="Ver proyectos de">
@@ -326,7 +325,6 @@ export function PlanTableroProyectos({ user }) {
       <TableroRumbo quien={quien} user={user} />
       <p className="rb-leyenda">Arrastra las tarjetas entre columnas (o usa las flechas). Al pulsar un proyecto se abre con sus tareas. <button className="btn-txt" onClick={() => setAjustes(true)}>Ajustar suelo de margen y horizonte</button></p>
       {ajustes && <AjustesRumbo onClose={() => setAjustes(false)} />}
-      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: quien || "" }} onClose={() => setNuevo(false)} onGuardado={(n) => { setNuevo(false); cargarPlan(); if (n?.id) setRecien(n); }} />}
       {recien && <ProyectoPanel p={recien} user={user} onClose={() => setRecien(null)} />}
     </>
   );
