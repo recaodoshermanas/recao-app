@@ -9,6 +9,7 @@ import { EditarProyecto } from "./Plan.jsx";
 import { ProyectoPanel, equipoProyecto, proximaTarea, pedirFiltroFoco } from "./Ejecucion.jsx";
 import { COLUMNAS, MAX_AHORA, DIAS_GRIS, METRICA, useMetricas, guardarConfig, diasDesde } from "./rumbo.js";
 import "./rumbo.css";
+import { TiraMetricas, Bola } from "./Lista.jsx";
 
 // ---------- gráfico mínimo de evolución semanal ----------
 function Linea({ valores, suelo, etiqueta, fmt }) {
@@ -279,6 +280,36 @@ export function PlanRumbo({ user }) {
       {proyectos && <AvisosReglas proyectos={proyectos} />}
       <TableroRumbo quien={quien} user={user} />
       <p className="rb-leyenda">Arrastra las tarjetas entre columnas (o usa las flechas). Una tarjeta sin tocar en {DIAS_GRIS} días se pone gris: actualízala o pulsa «Sigue igual».</p>
+      {ajustes && <AjustesRumbo onClose={() => setAjustes(false)} />}
+      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: quien || "" }} onClose={() => setNuevo(false)} onGuardado={() => { setNuevo(false); cargarPlan(); }} />}
+    </>
+  );
+}
+
+// ---------- Plan → Proyectos: el tablero Ahora / Siguiente / Más adelante, con la tira de métricas ----------
+export function PlanTableroProyectos({ user }) {
+  const { proyectos } = usePlan();
+  const [quien, setQuien] = useState("");
+  const [nuevo, setNuevo] = useState(false);
+  const [ajustes, setAjustes] = useState(false);
+  return (
+    <>
+      <div className="ls-cab">
+        <TiraMetricas />
+        <span className="ls-esp" />
+        <button className="ls-btn" onClick={() => ir("plan/reuniones")}>Reunión</button>
+        <button className="ls-btn osc" onClick={() => setNuevo(true)}>+ Proyecto</button>
+      </div>
+      <div className="ls-filtros">
+        <div className="ls-quien" role="group" aria-label="Ver proyectos de">
+          <span>Ver de</span>
+          {SOCIOS.map((s) => <button key={s.id} className={quien === s.id ? "on" : ""} onClick={() => setQuien(quien === s.id ? "" : s.id)} aria-pressed={quien === s.id} title={s.label}><Bola id={s.id} size={30} borde={quien === s.id ? "#F1BE49" : "#fff"} /></button>)}
+          {quien && <button className="ls-chip" onClick={() => setQuien("")}>Todos ✕</button>}
+        </div>
+      </div>
+      {proyectos && <AvisosReglas proyectos={proyectos} />}
+      <TableroRumbo quien={quien} user={user} />
+      <p className="rb-leyenda">Arrastra las tarjetas entre columnas (o usa las flechas). Al pulsar un proyecto se abre con sus tareas. <button className="btn-txt" onClick={() => setAjustes(true)}>Ajustar suelo de margen y horizonte</button></p>
       {ajustes && <AjustesRumbo onClose={() => setAjustes(false)} />}
       {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: quien || "" }} onClose={() => setNuevo(false)} onGuardado={() => { setNuevo(false); cargarPlan(); }} />}
     </>

@@ -1,0 +1,99 @@
+/* Plan → Lista (estilo Asana/Monday) */
+.ls { --linea: #E7E4DC; --suave: #F0EEE8; --gris: #6B7278; }
+.ls-cab { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.ls-esp { flex: 1; }
+.ls-tira { display: flex; gap: 8px; flex-wrap: wrap; }
+.ls-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--linea); border-radius: 999px; padding: 7px 14px; font-size: 13.5px; }
+.ls-pill > span { color: var(--gris); }
+.ls-pill b { font-weight: 800; }
+.ls-pill em { font-style: normal; font-weight: 700; }
+.ls-pill em.up { color: #2E7D4F; } .ls-pill em.down { color: #B42318; }
+.ls-pill.suave { background: transparent; border-color: transparent; color: var(--gris); }
+.ls-btn { border: 1px solid #D9D5CB; background: var(--card); color: var(--text); border-radius: 10px; padding: 9px 14px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.ls-btn:hover { border-color: #B9B4A8; }
+.ls-btn.osc { background: #1E272E; color: #fff; border-color: #1E272E; }
+
+.ls-filtros { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 4px 0 12px; }
+.ls-quien { display: flex; align-items: center; gap: 2px; }
+.ls-quien > span { font-size: 12.5px; font-weight: 700; color: var(--gris); margin-right: 8px; }
+.ls-quien > button:not(.ls-chip) { border: 0; background: none; padding: 0; margin-left: -4px; cursor: pointer; border-radius: 50%; }
+.ls-quien > button:not(.ls-chip):not(.on) { opacity: .55; }
+.ls-quien > button.on { opacity: 1; position: relative; z-index: 1; }
+.ls-chip { border: 1px solid #E2DED4; background: var(--card); color: #4A5359; border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; margin-left: 6px; }
+.ls-chip.on { background: #1E272E; border-color: #1E272E; color: #fff; }
+.ls-aviso { font-size: 13px; font-weight: 800; color: #B42318; background: #FDECEA; border-radius: 8px; padding: 6px 10px; }
+.ls-buscar { border: 1px solid #E2DED4; background: var(--card); color: var(--text); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13.5px; min-width: 180px; }
+
+.ls-alta-top { background: var(--card); border: 1px solid #E2DED4; border-radius: 12px; padding: 4px 8px; }
+.ls-alta-top .alta-rapida { border: 0; background: transparent; }
+
+.ls-colcab, .ls-fila { display: grid; grid-template-columns: 34px minmax(0, 1fr) 150px 104px 100px 128px; align-items: center; }
+.ls-colcab { padding: 16px 12px 6px; font-size: 11.5px; font-weight: 800; color: var(--gris); text-transform: uppercase; letter-spacing: .05em; }
+.ls-colcab span:last-child { text-align: center; }
+.ls-grupos { display: flex; flex-direction: column; gap: 16px; }
+.ls-grupo { background: var(--card); border: 1px solid var(--linea); border-radius: 14px; overflow: visible; }
+.ls-gcab { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-left: 5px solid var(--g); border-radius: 14px 14px 0 0; flex-wrap: wrap; }
+.ls-pleg { border: 0; background: none; color: var(--gris); cursor: pointer; font-size: 13px; padding: 2px 4px; }
+.ls-gnom { border: 0; background: none; padding: 0; font: inherit; font-size: 15.5px; font-weight: 800; color: var(--text); cursor: pointer; text-align: left; }
+button.ls-gnom:hover { text-decoration: underline; text-underline-offset: 3px; }
+.ls-col { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 10px; background: #EEECE6; color: #4A5359; }
+.ls-col.ahora { background: #1E272E; color: #F1BE49; }
+.ls-area { font-size: 12.5px; color: var(--gris); }
+.ls-met { font-size: 12.5px; font-weight: 700; color: #317039; }
+.ls-prog { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: #4A5359; }
+.ls-prog i { width: 110px; height: 7px; border-radius: 99px; background: #EEECE6; overflow: hidden; display: inline-block; }
+.ls-prog i b { display: block; height: 100%; background: var(--g); }
+
+.ls-fila { min-height: 44px; padding: 0 0 0 12px; border-top: 1px solid var(--suave); font-size: 14px; }
+.ls-fila:hover { background: #FBFAF7; }
+.ls-check { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid #C9C5BA; background: var(--card); display: grid; place-items: center; font-size: 12px; font-weight: 800; color: #fff; cursor: pointer; padding: 0; }
+.ls-check:hover { border-color: #2E7D4F; }
+.ls-check.on { background: #2E7D4F; border-color: #2E7D4F; }
+.ls-tit { display: flex; align-items: baseline; gap: 10px; min-width: 0; border: 0; background: none; padding: 10px 12px 10px 0; font: inherit; font-weight: 600; color: var(--text); text-align: left; cursor: pointer; }
+.ls-tit span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-tit small { color: var(--gris); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ls-tit:hover span { text-decoration: underline; text-underline-offset: 3px; }
+.ls-fila.hecha .ls-tit span { color: #8A9095; text-decoration: line-through; }
+
+.ls-celda-p { position: relative; }
+.ls-personas { display: flex; align-items: center; border: 0; background: none; padding: 6px 4px; cursor: pointer; min-height: 36px; }
+.ls-personas .ls-bola { margin-right: -6px; }
+.ls-nadie { width: 26px; height: 26px; border-radius: 50%; border: 1.5px dashed #C9C5BA; color: var(--gris); display: grid; place-items: center; font-weight: 800; }
+.ls-bola { border-radius: 50%; display: inline-grid; place-items: center; font-weight: 800; color: #fff; flex: 0 0 auto; }
+.ls-pop { position: absolute; z-index: 30; top: 100%; left: 0; background: var(--card); border: 1px solid var(--linea); border-radius: 12px; box-shadow: 0 10px 30px rgba(30,39,46,.14); padding: 6px; min-width: 190px; display: grid; gap: 2px; }
+.ls-pop button { display: flex; align-items: center; gap: 10px; border: 0; background: none; border-radius: 8px; padding: 7px 8px; font: inherit; font-size: 14px; color: var(--text); cursor: pointer; text-align: left; }
+.ls-pop button:hover { background: var(--bg); }
+.ls-pop button span { flex: 1; }
+.ls-pop button i { font-style: normal; font-weight: 800; color: #2E7D4F; }
+
+.ls-fecha { position: relative; font-size: 13.5px; font-weight: 600; color: #4A5359; cursor: pointer; padding: 6px 0; }
+.ls-fecha input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.ls-fecha.tarde { color: #B42318; font-weight: 800; }
+.ls-fecha.vacia span { color: #A3A8AC; font-weight: 500; }
+.ls-fecha:hover span { text-decoration: underline; text-underline-offset: 3px; }
+
+.ls-prio, .ls-est { appearance: none; -webkit-appearance: none; border: 0; font: inherit; cursor: pointer; text-align: center; text-align-last: center; }
+.ls-prio { justify-self: start; border-radius: 6px; padding: 4px 10px; font-size: 12.5px; font-weight: 700; }
+.ls-prio.p-alta { background: #FDECEA; color: #B42318; }
+.ls-prio.p-media { background: #FFF4D6; color: #7A5200; }
+.ls-prio.p-baja { background: #EEF0F3; color: #475467; }
+.ls-est { align-self: stretch; height: 100%; min-height: 44px; font-size: 13px; font-weight: 700; border-left: 2px solid var(--card); }
+.ls-est.e-pendiente { background: #E4E2DC; color: #1E272E; }
+.ls-est.e-en_curso { background: #F1BE49; color: #1E272E; }
+.ls-est.e-bloqueada { background: #C0392B; color: #fff; }
+.ls-est.e-hecha { background: #2E7D4F; color: #fff; }
+.ls-grupo > .ls-fila:last-of-type .ls-est { }
+.ls-alta { border-top: 1px solid var(--suave); padding: 2px 8px 2px 40px; }
+.ls-alta .alta-rapida { border: 0; background: transparent; }
+.ls-vacio { text-align: center; background: var(--card); border: 1.5px dashed #D9D5CB; border-radius: 14px; padding: 34px; margin-bottom: 16px; }
+.ls-vacio p { color: var(--gris); margin: 6px 0 14px; }
+.ls-pie { margin: 16px 4px 0; font-size: 12.5px; color: var(--gris); }
+
+@media (max-width: 900px) {
+  .ls-colcab { display: none; }
+  .ls-fila { grid-template-columns: 30px minmax(0, 1fr) auto; grid-template-areas: "c t t" ". p f" ". pr e"; row-gap: 4px; padding: 8px 10px; }
+  .ls-check { grid-area: c; } .ls-tit { grid-area: t; padding: 2px 0; } .ls-celda-p { grid-area: p; } .ls-fecha { grid-area: f; justify-self: end; }
+  .ls-prio { grid-area: pr; } .ls-est { grid-area: e; min-height: 30px; border-radius: 8px; padding: 0 12px; border: 0; }
+  .ls-prog i { width: 70px; }
+  .ls-buscar { min-width: 0; flex: 1; }
+}

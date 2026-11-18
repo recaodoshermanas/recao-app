@@ -50,10 +50,10 @@ export const AREAS = [
   {
     id: "plan", label: "Plan",
     subs: [
-      { id: "resumen", label: "Rumbo" }, // métricas del trimestre + roadmap en columnas (la URL sigue siendo plan/resumen)
-      { id: "reuniones", label: "Reuniones" },
-      { id: "proyectos", label: "Proyectos y tareas" }, // pestañas Proyectos / Por persona / Todas las tareas; #/plan/tareas lleva a la última
+      { id: "resumen", label: "Lista" }, // tareas por proyecto, editables en la fila (la URL sigue siendo plan/resumen)
+      { id: "proyectos", label: "Proyectos" }, // tablero Ahora / Siguiente / Más adelante; plan/proyectos/<id> = ficha
       { id: "calendario", label: "Calendario" },
+      { id: "reuniones", label: "Reuniones" },
     ],
   },
   {
@@ -118,7 +118,7 @@ export function leerRuta(hash) {
   let [a, s0, extra, extra2] = String(hash || "").split("?")[0].replace(/^#\/?/, "").split("/"); // #81: «?mes=…» no cuenta para la ruta
   const grupo = a === "producto" && PROD_GRUPOS.find((g) => g.id === s0); // #205: #/producto/control[/revisar[/precio]]
   if (grupo) { if (grupo.subs.includes(extra)) { s0 = extra; extra = extra2; } else { s0 = grupo.subs[0]; extra = undefined; } }
-  if (a === "plan" && s0 === "tareas") { s0 = "proyectos"; extra = "todas"; } // Tareas va dentro de «Proyectos y tareas»
+  if (a === "plan" && s0 === "tareas") { s0 = "resumen"; extra = undefined; } // las tareas viven en la Lista
   const area = AREAS.find((x) => x.id === a && !x.pronto) || AREAS[0];
   if (area.id === "finanzas") {
     let subId = s0, pedida = extra;
