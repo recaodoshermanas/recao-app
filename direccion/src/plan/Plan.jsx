@@ -9,6 +9,7 @@ import {
   ChipArea, Responsables, FilaTarea, AltaRapida, ListaAgrupada, Tablero, TareaPanel, useFiltros, BarraFiltros, defaultsDeFiltros, resumenProyecto,
 } from "./Tareas.jsx";
 import { Roadmap } from "./Roadmap.jsx";
+import { COLUMNAS, METRICAS } from "./rumbo.js";
 
 const masDiasISO = (f, n) => { const d = new Date(`${f}T12:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
@@ -195,14 +196,19 @@ function ProyectoDetalle({ p, tareas, user }) {
   );
 }
 
-function EditarProyecto({ p, onClose, onGuardado, onBorrado }) {
+export function EditarProyecto({ p, onClose, onGuardado, onBorrado }) {
   const nuevo = !p.id;
-  const [f, setF] = useState({ nombre: p.nombre || "", objetivo: p.objetivo || "", descripcion: p.descripcion || "", area: p.area || "", responsable: p.responsable || "", estado: p.estado || "activo", prioridad: p.prioridad || "media", fecha_inicio: p.fecha_inicio || "", fecha_objetivo: p.fecha_objetivo || "" });
+  const [f, setF] = useState({ nombre: p.nombre || "", objetivo: p.objetivo || "", descripcion: p.descripcion || "", area: p.area || "", responsable: p.responsable || "", estado: p.estado || "activo", prioridad: p.prioridad || "media", fecha_inicio: p.fecha_inicio || "", fecha_objetivo: p.fecha_objetivo || "",
+    columna: p.permanente ? "permanente" : (p.columna || (nuevo ? "siguiente" : "")), metrica: p.metrica || "", como_mueve: p.como_mueve || "", siguiente_paso: p.siguiente_paso || "", siguiente_paso_fecha: p.siguiente_paso_fecha || "" });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const guardar = async () => {
     setBusy(true);
-    const datos = { ...f, nombre: f.nombre.trim(), objetivo: f.objetivo.trim() || null, descripcion: f.descripcion.trim() || null, area: f.area || null, responsable: f.responsable || null, fecha_inicio: f.fecha_inicio || null, fecha_objetivo: f.fecha_objetivo || null };
+    const perm = f.columna === "permanente";
+    const datos = { ...f, nombre: f.nombre.trim(), objetivo: f.objetivo.trim() || null, descripcion: f.descripcion.trim() || null, area: f.area || null, responsable: f.responsable || null, fecha_inicio: f.fecha_inicio || null, fecha_objetivo: f.fecha_objetivo || null,
+      // Rumbo: columna del roadmap, métrica que mueve y siguiente paso
+      columna: perm ? null : (f.columna || null), permanente: perm, metrica: f.metrica || null, como_mueve: f.como_mueve.trim() || null, siguiente_paso: f.siguiente_paso.trim() || null, siguiente_paso_fecha: f.siguiente_paso_fecha || null };
+    if (!perm && f.columna === "ahora" && datos.estado === "idea") datos.estado = "activo";
     try {
       let n = null;
       if (nuevo) n = await crearProyecto(datos); else await actualizarProyecto(p.id, datos);
@@ -226,6 +232,15 @@ function EditarProyecto({ p, onClose, onGuardado, onBorrado }) {
       <div className="fila-campos">
         <label className="campo">Empieza<input type="date" value={f.fecha_inicio} onChange={set("fecha_inicio")} /></label>
         <label className="campo">Fecha objetivo<input type="date" value={f.fecha_objetivo} onChange={set("fecha_objetivo")} /></label>
+      </div>
+      <div className="fila-campos">
+        <label className="campo">En el roadmap<select value={f.columna} onChange={set("columna")}><option value="">Sin colocar</option>{COLUMNAS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}<option value="permanente">Responsabilidad permanente</option></select></label>
+        <label className="campo">Métrica que mueve<select value={f.metrica} onChange={set("metrica")}><option value="">Sin métrica</option>{METRICAS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
+      </div>
+      <label className="campo">Cómo la mueve<input value={f.como_mueve} onChange={set("como_mueve")} placeholder="Ej: sin roturas de los más vendidos se vende más" /></label>
+      <div className="fila-campos">
+        <label className="campo">Siguiente paso<input value={f.siguiente_paso} onChange={set("siguiente_paso")} placeholder="Lo próximo que hay que hacer" /></label>
+        <label className="campo">Para cuándo<input type="date" value={f.siguiente_paso_fecha} onChange={set("siguiente_paso_fecha")} /></label>
       </div>
       <label className="campo">Descripción<textarea rows={4} value={f.descripcion} onChange={set("descripcion")} placeholder="Contexto, decisiones, enlaces…" /></label>
     </Panel>

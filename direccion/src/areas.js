@@ -50,7 +50,8 @@ export const AREAS = [
   {
     id: "plan", label: "Plan",
     subs: [
-      { id: "resumen", label: "Resumen" },
+      { id: "resumen", label: "Rumbo" }, // métricas del trimestre + roadmap en columnas (la URL sigue siendo plan/resumen)
+      { id: "reuniones", label: "Reuniones" },
       { id: "proyectos", label: "Proyectos" },
       { id: "tareas", label: "Tareas" },
       { id: "calendario", label: "Calendario" },
