@@ -1,6 +1,6 @@
 // Plan: datos compartidos (proyectos y tareas) para todas las vistas del área.
 import { useEffect, useState } from "react";
-import { sb } from "../../../src/lib/supabase.js";
+import { sb, supabase } from "../../../src/lib/supabase.js";
 
 export const AREAS_PLAN = [
   { id: "direccion", label: "Dirección", color: "#1E272E" },
@@ -61,13 +61,32 @@ export async function cargarPlan() {
   } catch (e) { poner({ tareas: estado.tareas || [], proyectos: estado.proyectos || [], error: true }); }
 }
 
+// Tiempo real: si otro socio cambia una tarea o un proyecto, se recarga (agrupando los cambios seguidos)
+let canal = null; let pendiente = null;
+function escucharCambios() {
+  if (canal) return;
+  const recargar = () => { clearTimeout(pendiente); pendiente = setTimeout(cargarPlan, 700); };
+  try {
+    canal = supabase.channel("plan-cambios")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tareas_admin" }, recargar)
+      .on("postgres_changes", { event: "*", schema: "public", table: "proyectos" }, recargar)
+      .subscribe();
+  } catch (e) { canal = null; } // sin tiempo real sigue funcionando la recarga cada minuto
+}
+function dejarDeEscuchar() {
+  if (!canal || subs.size) return;
+  try { supabase.removeChannel(canal); } catch (e) { /* nada */ }
+  canal = null;
+}
+
 export function usePlan() {
   const [s, setS] = useState(estado);
   useEffect(() => {
     subs.add(setS);
     if (!estado.tareas) cargarPlan();
+    escucharCambios();
     const t = setInterval(() => { if (!document.hidden) cargarPlan(); }, 60000);
-    return () => { subs.delete(setS); clearInterval(t); };
+    return () => { subs.delete(setS); clearInterval(t); setTimeout(dejarDeEscuchar, 1000); };
   }, []);
   return s;
 }

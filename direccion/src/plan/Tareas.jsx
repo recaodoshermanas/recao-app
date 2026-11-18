@@ -50,21 +50,47 @@ export function FilaTarea({ t, proyectos, onAbrir, nCom, mostrarProyecto = true 
   );
 }
 
-export function AltaRapida({ defaults, placeholder = "Añadir tarea… (escribe y pulsa Enter)", onCreada }) {
+// Alta rápida con atajos: «Pedir presupuesto @javi !alta #inventario»
+const norm = (x) => String(x || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, "");
+export function leerAltaRapida(txt, proyectos) {
+  const r = {};
+  let titulo = String(txt);
+  titulo = titulo.replace(/(^|\s)@([\p{L}\w.-]+)/gu, (m, sp, w) => {
+    const k = norm(w); const so = SOCIOS.find((x) => norm(x.label).startsWith(k) || norm(x.id).startsWith(k) || (k === "migue" && x.id === "Migue"));
+    if (!so) return m; r.propietarios = [...new Set([...(r.propietarios || []), so.id])]; return sp;
+  });
+  titulo = titulo.replace(/(^|\s)!(urgente|alta|media|baja)\b/giu, (m, sp, p) => { r.prioridad = p.toLowerCase() === "urgente" ? "alta" : p.toLowerCase(); return sp; });
+  titulo = titulo.replace(/(^|\s)#([\p{L}\w.-]+)/gu, (m, sp, w) => {
+    const k = norm(w); const pr = (proyectos || []).filter((p) => p.estado !== "terminado").find((p) => norm(p.nombre).startsWith(k)) || (proyectos || []).find((p) => p.estado !== "terminado" && norm(p.nombre).includes(k));
+    if (!pr) return m; r.proyecto_id = pr.id; if (pr.area) r.area = pr.area; return sp;
+  });
+  r.titulo = titulo.replace(/\s+/g, " ").trim();
+  return r;
+}
+
+export function AltaRapida({ defaults, placeholder = "Añadir tarea…  @persona  !alta  #proyecto", onCreada }) {
+  const { proyectos } = usePlan();
   const [txt, setTxt] = useState("");
   const [busy, setBusy] = useState(false);
+  const leido = txt.trim() ? leerAltaRapida(txt, proyectos) : null;
   const crear = async () => {
-    const titulo = txt.trim(); if (!titulo) return;
+    if (!leido?.titulo) return;
     setBusy(true);
-    try { const n = await crearTarea({ titulo, ...defaults }); setTxt(""); onCreada && onCreada(n); }
+    try { const n = await crearTarea({ ...defaults, ...leido }); setTxt(""); onCreada && onCreada(n); }
     catch (e) { avisar("No se ha podido crear la tarea", "mal"); }
     setBusy(false);
   };
+  const proy = leido?.proyecto_id ? (proyectos || []).find((p) => p.id === leido.proyecto_id) : null;
   return (
-    <div className="alta-rapida">
-      <span aria-hidden="true">+</span>
-      <input value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") crear(); }} placeholder={placeholder} disabled={busy} aria-label="Nueva tarea" />
-      {txt.trim() && <button className="btn-p" onClick={crear} disabled={busy}>Añadir</button>}
+    <div className="alta-rapida-c">
+      <div className="alta-rapida">
+        <span aria-hidden="true">+</span>
+        <input value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") crear(); if (e.key === "Escape") setTxt(""); }} placeholder={placeholder} disabled={busy} aria-label="Nueva tarea" data-alta-rapida />
+        {txt.trim() && <button className="btn-p" onClick={crear} disabled={busy || !leido?.titulo}>Añadir</button>}
+      </div>
+      {leido && (leido.propietarios || leido.prioridad || proy) && (
+        <p className="alta-lectura">→ {leido.propietarios ? leido.propietarios.map(nombreSocio).join(", ") : ""}{leido.prioridad ? `${leido.propietarios ? " · " : ""}prioridad ${leido.prioridad}` : ""}{proy ? `${leido.propietarios || leido.prioridad ? " · " : ""}◆ ${proy.nombre}` : ""}</p>
+      )}
     </div>
   );
 }

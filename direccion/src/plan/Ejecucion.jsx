@@ -1,6 +1,7 @@
 // Plan → Proyectos y tareas: una sola sección con tres pestañas.
+//  · Foco (por defecto): todas las tareas por cuándo vencen (vencidas, hoy, mañana, próximos días, más adelante, sin fecha,
+//    hechas en 7 días), con contadores que filtran y alta rápida en cada grupo que ya pone la fecha.
 //  · Proyectos: cada proyecto se despliega con sus tareas; se marcan, se añaden y se abren sin cambiar de pantalla.
-//  · Por persona: lo de cada socio por urgencia (atrasadas, esta semana, más adelante, sin fecha).
 //  · Todas las tareas: la lista y el tablero de siempre, con filtros.
 import { useEffect, useState } from "react";
 import { Panel, Pestanas, Avatar, fechaCorta, Cargando, ir } from "../ui.jsx";
@@ -9,20 +10,30 @@ import { ChipArea, FilaTarea, AltaRapida, TareaPanel, resumenProyecto } from "./
 import { Proyectos, PlanTareas, EditarProyecto } from "./Plan.jsx";
 import { COLUMNAS, METRICA, DIAS_GRIS, diasDesde } from "./rumbo.js";
 
-const PESTANAS = [{ id: "proyectos", label: "Proyectos" }, { id: "personas", label: "Por persona" }, { id: "todas", label: "Todas las tareas" }];
+const PESTANAS = [{ id: "foco", label: "Foco" }, { id: "proyectos", label: "Proyectos" }, { id: "todas", label: "Tablero y lista" }];
 const masDias = (f, n) => { const d = new Date(`${f}T12:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 export function PlanProyectos({ user, extra }) {
-  const inicial = PESTANAS.some((p) => p.id === extra) ? extra : (() => { try { return localStorage.getItem("plan-pestana") || "proyectos"; } catch (e) { return "proyectos"; } })();
+  const ruta = extra === "personas" ? "foco" : extra; // «Por persona» pasó a ser el filtro de persona del Foco
+  const inicial = PESTANAS.some((p) => p.id === ruta) ? ruta : (() => { try { const g = localStorage.getItem("plan-pestana"); return PESTANAS.some((p) => p.id === g) ? g : "foco"; } catch (e) { return "foco"; } })();
   const [tab, setTab] = useState(inicial);
-  useEffect(() => { if (PESTANAS.some((p) => p.id === extra)) setTab(extra); }, [extra]);
+  useEffect(() => { if (PESTANAS.some((p) => p.id === ruta)) setTab(ruta); }, [ruta]);
   if (extra && /^\d+$/.test(String(extra))) return <Proyectos user={user} extra={extra} />; // ficha de un proyecto
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key !== "n" && e.key !== "N") return;
+      if (e.metaKey || e.ctrlKey || e.altKey || /input|textarea|select/i.test(document.activeElement?.tagName || "") || document.body.classList.contains("con-panel")) return;
+      const el = document.querySelector("[data-alta-rapida]"); if (el) { e.preventDefault(); el.focus(); }
+    };
+    document.addEventListener("keydown", k);
+    return () => document.removeEventListener("keydown", k);
+  }, []);
   const cambiar = (t) => { setTab(t); try { localStorage.setItem("plan-pestana", t); } catch (e) { /* sin almacenamiento */ } };
   return (
     <>
       <div className="barra-sec"><Pestanas valor={tab} onChange={cambiar} etiqueta="Vista" opciones={PESTANAS} /></div>
       {tab === "proyectos" && <ListaProyectos user={user} />}
-      {tab === "personas" && <PorPersona user={user} />}
+      {tab === "foco" && <VistaFoco user={user} />}
       {tab === "todas" && <PlanTareas user={user} />}
     </>
   );
@@ -128,40 +139,101 @@ function FilaProyecto({ p, tareas, proyectos, nComentarios, abierto, onToggle, o
   );
 }
 
-// ---------- por persona ----------
-function PorPersona({ user }) {
+// ---------- Foco: todas las tareas por cuándo vencen ----------
+const CONTADORES = [
+  { k: "vencidas", label: "Vencidas", sub: "con la fecha pasada" },
+  { k: "hoy", label: "Para hoy", sub: "" },
+  { k: "semana", label: "Próximos 7 días", sub: "con fecha límite" },
+  { k: "hechas", label: "Hechas esta semana", sub: "últimos 7 días" },
+];
+export function pedirFiltroFoco(k, persona = "") { // desde Rumbo: abre el Foco ya filtrado
+  try { localStorage.setItem("plan-foco-pedido", JSON.stringify({ k, persona })); localStorage.setItem("plan-pestana", "foco"); } catch (e) { /* sin almacenamiento */ }
+  ir("plan/proyectos/foco");
+}
+
+function VistaFoco({ user }) {
   const { tareas, proyectos, nComentarios } = usePlan();
+  const pedido = (() => { try { const x = JSON.parse(localStorage.getItem("plan-foco-pedido") || "null"); localStorage.removeItem("plan-foco-pedido"); return x; } catch (e) { return null; } })();
+  const [persona, setPersona] = useState(() => pedido?.persona ?? (() => { try { return localStorage.getItem("plan-foco-persona") || ""; } catch (e) { return ""; } })());
+  const [proyecto, setProyecto] = useState("");
+  const [foco, setFoco] = useState(pedido?.k || null);
+  const [cerrados, setCerrados] = useState({ hechas: true });
   const [abierta, setAbierta] = useState(null);
   if (!tareas || !proyectos) return <Cargando />;
-  const hoy = hoyISO(); const en7 = masDias(hoy, 7);
-  const cols = [...SOCIOS.map((s) => ({ id: s.id, label: s.label, sub: s.lleva })), { id: "", label: "Sin responsable", sub: "asígnalas" }];
+  const hoy = hoyISO(); const D = (n) => masDias(hoy, n);
+  const cambiarPersona = (x) => { setPersona(x); try { localStorage.setItem("plan-foco-persona", x); } catch (e) { /* nada */ } };
+  const visibles = tareas.filter((t) =>
+    (!persona || (persona === "nadie" ? !(t.propietarios || []).length : (t.propietarios || []).includes(persona))) &&
+    (!proyecto || (proyecto === "sin" ? !t.proyecto_id : String(t.proyecto_id) === proyecto)));
+  const abiertas = visibles.filter((t) => t.estado !== "hecha");
+  const hace7 = new Date(Date.now() - 6 * 86400000); hace7.setHours(0, 0, 0, 0);
+  const en = {
+    vencidas: (t) => t.estado !== "hecha" && t.fecha_fin && t.fecha_fin < hoy,
+    hoy: (t) => t.estado !== "hecha" && t.fecha_fin === hoy,
+    semana: (t) => t.estado !== "hecha" && t.fecha_fin && t.fecha_fin >= hoy && t.fecha_fin < D(7),
+    hechas: (t) => t.estado === "hecha" && t.completada_en && new Date(t.completada_en) >= hace7,
+  };
+  const n = (k) => visibles.filter(en[k]).length;
+  const enCurso = abiertas.filter((t) => t.estado === "en_curso").length;
+  const base = foco ? visibles.filter(en[foco]) : visibles;
+  const ab = base.filter((t) => t.estado !== "hecha");
+  const GRUPOS = [
+    { k: "vencidas", label: "Vencidas", f: (t) => t.fecha_fin && t.fecha_fin < hoy, mal: true },
+    { k: "hoy", label: "Hoy", f: (t) => t.fecha_fin === hoy, fecha: hoy, siempre: true },
+    { k: "manana", label: "Mañana", f: (t) => t.fecha_fin === D(1), fecha: D(1) },
+    { k: "prox", label: "Próximos días", f: (t) => t.fecha_fin >= D(2) && t.fecha_fin < D(7) },
+    { k: "luego", label: "Más adelante", f: (t) => t.fecha_fin >= D(7) },
+    { k: "sinf", label: "Sin fecha", f: (t) => !t.fecha_fin, fecha: null, siempre: !foco },
+  ];
+  const hechas = (foco && foco !== "hechas" ? [] : base.filter(en.hechas)).sort((a, b) => String(b.completada_en).localeCompare(String(a.completada_en)));
+  const defaults = (fecha) => ({ ...(fecha !== undefined ? { fecha_fin: fecha } : {}), ...(persona && persona !== "nadie" ? { propietarios: [persona] } : {}), ...(proyecto && proyecto !== "sin" ? { proyecto_id: Number(proyecto), area: proyectos.find((p) => String(p.id) === proyecto)?.area || null } : {}) });
+  const vivos = proyectos.filter((p) => p.estado !== "terminado");
+  const grupos = GRUPOS.map((g) => ({ ...g, lista: ab.filter(g.f).sort(ordenTareas) })).filter((g) => g.lista.length || (g.siempre && foco !== "hechas" && foco !== "vencidas"));
   return (
     <>
-      <div className="ej-personas">
-        {cols.map((c) => {
-          const ts = tareas.filter((t) => t.estado !== "hecha" && (c.id ? (t.propietarios || []).includes(c.id) : !(t.propietarios || []).length)).sort(ordenTareas);
-          if (!c.id && !ts.length) return null;
-          const tramos = [
-            { k: "atras", label: "Atrasadas", ts: ts.filter((t) => atrasada(t, hoy)), mal: true },
-            { k: "semana", label: "Esta semana", ts: ts.filter((t) => t.fecha_fin && t.fecha_fin >= hoy && t.fecha_fin <= en7) },
-            { k: "luego", label: "Más adelante", ts: ts.filter((t) => t.fecha_fin && t.fecha_fin > en7) },
-            { k: "sin", label: "Sin fecha", ts: ts.filter((t) => !t.fecha_fin) },
-          ];
+      <div className="barra-sec">
+        <Pestanas valor={persona} onChange={cambiarPersona} etiqueta="De" opciones={[{ id: "", label: "Todos" }, ...SOCIOS.map((s) => ({ id: s.id, label: s.label, n: tareas.filter((t) => t.estado !== "hecha" && (t.propietarios || []).includes(s.id) && t.fecha_fin && t.fecha_fin < hoy).length || undefined })), { id: "nadie", label: "Sin responsable" }]} />
+        <div className="acciones">
+          <select value={proyecto} onChange={(e) => setProyecto(e.target.value)} aria-label="Proyecto"><option value="">Todos los proyectos</option><option value="sin">Sin proyecto</option>{vivos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>
+        </div>
+      </div>
+      <div className="fo-kpis">
+        {CONTADORES.map((c) => {
+          const v = n(c.k);
           return (
-            <section key={c.id || "nadie"} className="card ej-persona">
-              <header>{c.id ? <Avatar nombre={c.label} size={34} /> : <span className="avatar vacio">?</span>}<span><b>{c.label}</b><small>{c.sub}</small></span><span className="rb-n">{ts.length}</span></header>
-              {tramos.filter((x) => x.ts.length).map((x) => (
-                <div key={x.k} className={`ej-tramo ${x.mal ? "mal" : ""}`}>
-                  <h4>{x.label} <span>{x.ts.length}</span></h4>
-                  <ul className="lista-t">{x.ts.map((t) => <FilaTarea key={t.id} t={t} proyectos={proyectos} onAbrir={setAbierta} nCom={nComentarios?.[t.id]} />)}</ul>
-                </div>
-              ))}
-              {!ts.length && <p className="empty">Nada pendiente ✓</p>}
-              {c.id && <AltaRapida defaults={{ propietarios: [c.id] }} placeholder={`Tarea para ${c.label}…`} onCreada={(n) => setAbierta(n.id)} />}
-            </section>
+            <button key={c.k} className={`card fo-kpi k-${c.k} ${foco === c.k ? "on" : ""} ${!v ? "cero" : ""}`} onClick={() => setFoco(foco === c.k ? null : c.k)} aria-pressed={foco === c.k}>
+              <small>{c.label}</small><strong>{v}</strong>
+              <em>{foco === c.k ? "Filtrando · pulsa para quitar" : c.k === "hoy" ? `${enCurso} en curso ahora` : c.sub}</em>
+            </button>
           );
         })}
       </div>
+      <div className="card">
+        <AltaRapida defaults={defaults(undefined)} onCreada={(x) => setAbierta(x.id)} />
+        <p className="fo-ayuda">Atajos al escribir: <code>@javi</code> responsable · <code>!alta</code> prioridad · <code>#inventario</code> proyecto</p>
+      </div>
+      {grupos.length === 0 && hechas.length === 0 && <div className="card"><p className="empty">Todo al día ✓ No hay tareas con estos filtros.</p></div>}
+      {grupos.map((g) => (
+        <section key={g.k} className={`fo-grupo ${g.mal ? "mal" : ""} ${cerrados[g.k] ? "cerrado" : ""}`}>
+          <button className="fo-cab" onClick={() => setCerrados({ ...cerrados, [g.k]: !cerrados[g.k] })} aria-expanded={!cerrados[g.k]}>
+            <span className="ej-caret" aria-hidden>{cerrados[g.k] ? "▸" : "▾"}</span><i className={`fo-pto k-${g.k}`} /><b>{g.label}</b><span className="rb-n">{g.lista.length}</span>
+          </button>
+          {!cerrados[g.k] && (
+            <div className="card fo-cuerpo">
+              {g.lista.length > 0 && <ul className="lista-t">{g.lista.map((t) => <FilaTarea key={t.id} t={t} proyectos={proyectos} onAbrir={setAbierta} nCom={nComentarios?.[t.id]} />)}</ul>}
+              {"fecha" in g && <AltaRapida defaults={defaults(g.fecha)} placeholder={g.k === "hoy" ? "Añadir tarea para hoy…" : g.k === "manana" ? "Añadir tarea para mañana…" : "Añadir tarea sin fecha…"} />}
+            </div>
+          )}
+        </section>
+      ))}
+      {hechas.length > 0 && (
+        <section className={`fo-grupo ok ${cerrados.hechas && foco !== "hechas" ? "cerrado" : ""}`}>
+          <button className="fo-cab" onClick={() => setCerrados({ ...cerrados, hechas: !cerrados.hechas })}>
+            <span className="ej-caret" aria-hidden>{cerrados.hechas && foco !== "hechas" ? "▸" : "▾"}</span><i className="fo-pto k-hechas" /><b>Hechas · últimos 7 días</b><span className="rb-n">{hechas.length}</span>
+          </button>
+          {(!cerrados.hechas || foco === "hechas") && <div className="card fo-cuerpo"><ul className="lista-t">{hechas.map((t) => <FilaTarea key={t.id} t={t} proyectos={proyectos} onAbrir={setAbierta} nCom={nComentarios?.[t.id]} />)}</ul></div>}
+        </section>
+      )}
       {abierta && <TareaPanel id={abierta} user={user} onClose={() => setAbierta(null)} />}
     </>
   );

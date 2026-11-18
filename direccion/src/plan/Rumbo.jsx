@@ -6,7 +6,7 @@ import { eur, pct, num, nombreMes } from "../fmt.js";
 import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO, atrasada, actualizarProyecto } from "./datos.js";
 import { ChipArea, resumenProyecto } from "./Tareas.jsx";
 import { EditarProyecto } from "./Plan.jsx";
-import { ProyectoPanel, equipoProyecto, proximaTarea } from "./Ejecucion.jsx";
+import { ProyectoPanel, equipoProyecto, proximaTarea, pedirFiltroFoco } from "./Ejecucion.jsx";
 import { COLUMNAS, MAX_AHORA, DIAS_GRIS, METRICA, useMetricas, guardarConfig, diasDesde } from "./rumbo.js";
 import "./rumbo.css";
 
@@ -88,6 +88,8 @@ function Tarjeta({ p, tareas, onEditar, onMover, arrastrando, setArrastrando, ho
   const objTarde = p.fecha_objetivo && p.fecha_objetivo < hoy;
   const met = METRICA[p.metrica];
   const prox = proximaTarea(p, tareas);
+  const enCurso = tareas.filter((t) => t.proyecto_id === p.id && t.estado === "en_curso").length;
+  const bloq = tareas.filter((t) => t.proyecto_id === p.id && t.estado === "bloqueada").length;
   const equipo = equipoProyecto(p, tareas);
   const i = COLUMNAS.findIndex((c) => c.id === p.columna);
   return (
@@ -102,7 +104,7 @@ function Tarjeta({ p, tareas, onEditar, onMover, arrastrando, setArrastrando, ho
           : p.siguiente_paso
             ? <span className={`rb-paso ${pasoTarde ? "mal" : ""}`}><i>Siguiente paso</i>{p.siguiente_paso}{p.siguiente_paso_fecha && <em> · {fechaCorta(p.siguiente_paso_fecha)}</em>}</span>
             : <span className="rb-paso falta"><i>Próxima tarea</i>Sin tareas todavía</span>}
-        <span className="rb-avance"><span className="barra-p"><i style={{ width: `${r.pct}%` }} /></span><small>{r.total ? `${r.hechas}/${r.total} tareas` : "0 tareas"}{r.atrasadas ? <em> · {r.atrasadas} atrasadas</em> : ""}{objTarde ? <em> · objetivo vencido</em> : ""}</small></span>
+        <span className="rb-avance"><span className="barra-p"><i style={{ width: `${r.pct}%` }} /></span><small>{r.total ? `${r.hechas}/${r.total} tareas` : "0 tareas"}{enCurso ? ` · ${enCurso} en curso` : ""}{bloq ? <em> · {bloq} bloqueada{bloq > 1 ? "s" : ""}</em> : ""}{r.atrasadas ? <em> · {r.atrasadas} vencida{r.atrasadas > 1 ? "s" : ""}</em> : ""}{objTarde ? <em> · objetivo vencido</em> : ""}</small></span>
         <span className="rb-card-pie">
           {p.responsable ? <span className="rb-resp" title="Responsable"><Avatar nombre={nombreSocio(p.responsable)} size={22} />{nombreSocio(p.responsable)}</span> : <span className="rb-resp falta">Sin responsable</span>}
           {equipo.length > 0 && <span className="rb-equipo" title={`Equipo: ${equipo.map(nombreSocio).join(", ")}`}>{equipo.map((x) => <Avatar key={x} nombre={nombreSocio(x)} size={20} />)}</span>}
@@ -233,13 +235,13 @@ function FotoPlan({ quien }) {
   const semana = abiertas.filter((t) => t.fecha_fin && t.fecha_fin >= hoy && t.fecha_fin <= en7).length;
   const hechas = ts.filter((t) => t.estado === "hecha" && String(t.completada_en || "") >= hace7).length;
   const ahora = proyectos.filter((p) => p.estado !== "terminado" && !p.permanente && p.columna === "ahora" && (!quien || p.responsable === quien)).length;
-  const K = ({ t, v, sub, cls }) => <button className={`card rb-kpi ${cls || ""}`} onClick={() => ir("plan/proyectos/personas")}><h2>{t}</h2><p className="num">{v}</p><p className="sub">{sub}</p></button>;
+  const K = ({ t, v, sub, cls, ir: a }) => <button className={`card rb-kpi ${cls || ""}`} onClick={a}><h2>{t}</h2><p className="num">{v}</p><p className="sub">{sub}</p></button>;
   return (
     <div className="rb-foto">
-      <K t="Proyectos en «Ahora»" v={ahora} sub={quien ? `de ${nombreSocio(quien)}` : "de los cuatro socios"} />
-      <K t="Tareas atrasadas" v={atras} sub="con la fecha pasada" cls={atras ? "mal" : ""} />
-      <K t="Vencen esta semana" v={semana} sub="en los próximos 7 días" />
-      <K t="Hechas en 7 días" v={hechas} sub={hechas ? "buen ritmo" : "ninguna todavía"} cls="ok" />
+      <K t="Proyectos en «Ahora»" v={ahora} sub={quien ? `de ${nombreSocio(quien)}` : "de los cuatro socios"} ir={() => ir("plan/proyectos/proyectos")} />
+      <K t="Tareas vencidas" v={atras} sub="con la fecha pasada" cls={atras ? "mal" : ""} ir={() => pedirFiltroFoco("vencidas", quien)} />
+      <K t="Vencen esta semana" v={semana} sub="en los próximos 7 días" ir={() => pedirFiltroFoco("semana", quien)} />
+      <K t="Hechas en 7 días" v={hechas} sub={hechas ? "buen ritmo" : "ninguna todavía"} cls="ok" ir={() => pedirFiltroFoco("hechas", quien)} />
     </div>
   );
 }
