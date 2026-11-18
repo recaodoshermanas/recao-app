@@ -114,33 +114,41 @@ async function redactar(id: number, transcripcion: string) {
   ].filter(Boolean).join("\n");
   const pide = `Eres quien levanta acta de la reunión semanal de dirección de Recao, una tienda de alimentación con cuatro socios. Abajo tienes el contexto y la transcripción automática (puede tener errores de reconocimiento y no distingue quién habla).
 
-Devuelve SOLO este JSON, sin texto alrededor:
+Devuelve SOLO este JSON, sin texto alrededor (JSON válido: comillas dobles escapadas dentro de los textos):
 {"resumen": "<3 a 5 frases con lo importante>",
  "decisiones": [{"texto": "<qué se decidió>"}],
  "acuerdos": [{"texto": "<tarea concreta acordada>", "responsable": "<Adrian|Pablo|Javi|Migue o null>", "fecha": "<AAAA-MM-DD o null>", "proyecto_id": <id del proyecto relacionado o null>}],
  "bloqueos": [{"texto": "<qué está bloqueado y qué hace falta>", "quien": "<socio o null>"}],
  "temas": [{"titulo": "<tema>", "resumen": "<1-2 frases>"}]}
 
-Reglas: solo lo que se dijo de verdad, nada inventado. Un acuerdo es algo que alguien se compromete a hacer; si no queda claro quién, responsable null. Las fechas relativas («el viernes», «la semana que viene») se calculan desde la fecha de la reunión. En español, frases cortas y claras.
+Reglas: solo lo que se dijo de verdad, nada inventado. Un acuerdo es algo que alguien se compromete a hacer; si no queda claro quién, responsable null. Las fechas relativas («el viernes», «la semana que viene») se calculan desde la fecha de la reunión. En español, frases cortas y claras. Si la reunión es larga, no la recortes: recoge cada tema que se trató y cada compromiso, aunque sean muchos; el resumen puede tener más frases si hace falta.
 
 CONTEXTO
 ${contexto}
 
 TRANSCRIPCIÓN
 ${transcripcion.slice(0, 180000)}`;
-  for (let i = 0; i < 3; i++) {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json", "anthropic-version": "2023-06-01", "x-api-key": c.anthropic_api_key },
-      body: JSON.stringify({ model: CLAUDE, max_tokens: 4000, messages: [{ role: "user", content: pide }] }),
-    });
-    if (resp.status === 429 || resp.status >= 500) { await new Promise((s) => setTimeout(s, 2500 * (i + 1))); continue; }
-    const d = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(`Claude: ${d?.error?.message ?? resp.status}`);
-    const t = (d.content ?? []).filter((x: any) => x.type === "text").map((x: any) => x.text).join("");
-    const m = t.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error("Claude no ha devuelto el acta");
-    const o = JSON.parse(m[0]);
+  const llamar = async (contenido: string, max = 8000) => {
+    for (let i = 0; i < 3; i++) {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json", "anthropic-version": "2023-06-01", "x-api-key": c.anthropic_api_key },
+        body: JSON.stringify({ model: CLAUDE, max_tokens: max, messages: [{ role: "user", content: contenido }] }),
+      });
+      if (resp.status === 429 || resp.status >= 500) { await new Promise((s) => setTimeout(s, 2500 * (i + 1))); continue; }
+      const d = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(`Claude: ${d?.error?.message ?? resp.status}`);
+      return (d.content ?? []).filter((x: any) => x.type === "text").map((x: any) => x.text).join("");
+    }
+    throw new Error("Claude no responde");
+  };
+  const leer = (t: string) => { const m = t.match(/\{[\s\S]*\}/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
+  for (let intento = 0; intento < 2; intento++) {
+    const t = await llamar(pide);
+    let o: any = leer(t);
+    // JSON roto (unas comillas sin escapar, una coma…): Claude lo repara sin tocar el contenido
+    if (!o && t.includes("{")) o = leer(await llamar(`Este JSON tiene un error de sintaxis. Devuelve el mismo JSON corregido y válido, sin cambiar el contenido y sin texto alrededor:\n\n${t}`));
+    if (!o || !String(o.resumen ?? "").trim()) continue;
     const lista = (x: any) => (Array.isArray(x) ? x : []);
     return {
       resumen: String(o.resumen ?? ""),
@@ -150,7 +158,7 @@ ${transcripcion.slice(0, 180000)}`;
       temas: lista(o.temas).map((x: any) => ({ titulo: String(x?.titulo ?? ""), resumen: String(x?.resumen ?? "") })).filter((x: any) => x.titulo),
     };
   }
-  throw new Error("Claude no responde");
+  throw new Error("Claude no ha devuelto el acta");
 }
 
 async function comprobar(id: number, forzar = false) {
