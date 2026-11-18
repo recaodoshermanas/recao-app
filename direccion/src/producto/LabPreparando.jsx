@@ -1,6 +1,6 @@
 // Producto · Lab (#216): fase «Preparando» (análisis + conseguir proveedor) y vista «Distribuidores y catálogos».
 // El análisis y las propuestas los rellena el agente de producto (tarea programada de Claude); aquí se ven, se editan y se lanzan los contactos.
-// Correos: se dejan «En cola» y los envía el agente desde el Gmail de Recao. WhatsApp: se abre wa.me a mano y la respuesta se anota a mano.
+// Correos: a cada distribuidor con correo le escribe solo el agente en cuanto lo encuentra (L-V 9-19 al momento; fuera, en cola hasta las 10:00 del siguiente laborable). WhatsApp, llamada y formulario se anotan a mano.
 import { useCallback, useEffect, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { Cargando, Pestanas, avisar, hace } from "../ui.jsx";
@@ -72,29 +72,39 @@ function Llamar({ tel, telefono, anotar }) {
   );
 }
 
-// ───────────────────────── Ficha en Preparando ─────────────────────────
-export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescartar, onCambio }) {
-  const [d, setD] = useState(null);
-  const [an, setAn] = useState(undefined); // análisis guardado
-  const [editAn, setEditAn] = useState(null);
-  const [wa, setWa] = useState(null); // { supplier_id, tel, texto }
-  const [verPl, setVerPl] = useState(false);
-  const [verForm, setVerForm] = useState(null); // id del distribuidor con la plantilla de formulario a la vista
-  const [ocupado, setOcupado] = useState(false);
-  const fabricar = modo === "fabricar";
-  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+// Próxima salida de un correo en cola: L-V dentro del horario sale al momento; fuera, a la hora fija del siguiente día laborable
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const aMin = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+export function salidaCola(h) {
+  if (!h) return "Correo en cola";
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Madrid", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+  const dia = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(p.weekday), min = Number(p.hour) * 60 + Number(p.minute);
+  const laborable = (d) => d >= 1 && d <= 5;
+  const lleno = Number(h.enviados_hoy || 0) >= Number(h.tope_dia || 10);
+  if (laborable(dia) && min >= aMin(h.desde) && min < aMin(h.hasta) && !lleno) return "Correo en cola · sale ahora";
+  if (laborable(dia) && min < aMin(h.desde) && !lleno) return `Correo en cola · sale hoy a las ${h.cola_sale}`;
+  let d = dia, n = 0; do { d = (d + 1) % 7; n++; } while (!laborable(d));
+  return `Correo en cola · sale ${n === 1 ? "mañana" : `el ${DIAS[d]}`} a las ${h.cola_sale}${lleno ? " (tope del día cubierto)" : ""}`;
+}
+function EstadoCorreo({ c, h }) {
+  if (c.estado === "en_cola") return <Chip k="ojo">{salidaCola(h)}</Chip>;
+  if (c.canal === "correo" && c.estado === "esperando") return <Chip k="bien">Correo enviado ✓</Chip>;
+  return <EstadoC e={c.estado} />;
+}
 
+// ───────────────────────── Análisis (se hace en Idea y se sigue viendo en Preparando) ─────────────────────────
+export function Analisis({ id, fase }) {
+  const [an, setAn] = useState(undefined);
+  const [editAn, setEditAn] = useState(null);
   const cargar = useCallback(async () => {
-    try {
-      const [datos, r] = await Promise.all([sb.rpc("lab_preparar_datos", { p_id: id }), sb.select("lab_pruebas", `select=analisis,analisis_en,preparar_pedido_en&id=eq.${id}`)]);
-      setD(datos); setAn(r[0] || {});
-    } catch (e) { avisar(msg(e), "mal"); setD((x) => x || { proveedores: [], distribuidores: [], contactos: [], plantillas: {} }); setAn((x) => x || {}); }
+    try { const r = await sb.select("lab_pruebas", `select=analisis,analisis_en,creado_en&id=eq.${id}`); setAn(r[0] || {}); }
+    catch (e) { avisar(msg(e), "mal"); setAn((x) => x || {}); }
   }, [id]);
   useEffect(() => { cargar(); }, [cargar]);
-  if (!d || an === undefined) return <Cargando />;
-
-  const a = an.analisis;
-  const pl = d.plantillas || {};
+  const a = an?.analisis;
+  // Mientras la IA lo prepara, se mira cada 30 segundos si ya está
+  useEffect(() => { if (an === undefined || a || editAn) return; const t = setInterval(cargar, 30000); return () => clearInterval(t); }, [an, a, editAn, cargar]);
+  if (an === undefined) return <Cargando />;
   const guardarAn = async () => {
     try { await sb.update("lab_pruebas", `id=eq.${id}`, { analisis: editAn }); setEditAn(null); avisar("Análisis guardado"); cargar(); } catch (e) { avisar(msg(e), "mal"); }
   };
@@ -103,38 +113,10 @@ export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescar
     setEditAn({ ...base, recomendacion: base.recomendacion || "", texto: base.texto || "",
       puntos: PUNTOS.map(([k]) => ({ clave: k, valor: "", semaforo: "sin_datos", nota: "", ...((base.puntos || []).find((x) => x.clave === k) || {}) })) });
   };
-  const crearContacto = (args) => sb.rpc("lab_contacto_crear", { p_prueba: id, p_distribuidor: null, p_supplier: null, p_mensaje: null, ...args });
-  const enviarWa = async () => {
-    const ok = await abrirWhatsApp(wa.tel, wa.texto, () => crearContacto({ p_supplier: wa.supplier_id, p_canal: "whatsapp", p_tipo: fabricar ? "obrador" : "producto", p_mensaje: wa.texto }));
-    if (ok) { setWa(null); avisar("Contacto anotado como «Esperando». La respuesta se anota a mano en Contactos."); cargar(); onCambio(); }
-  };
-  const enviarCorreo = async (dist) => {
-    setOcupado(true);
-    try { await crearContacto({ p_distribuidor: dist.id, p_canal: "correo", p_tipo: "producto" }); avisar(`Correo a ${dist.nombre} en cola: lo envía el agente en su próxima pasada.`); cargar(); onCambio(); }
-    catch (e) { avisar(msg(e), "mal"); } finally { setOcupado(false); }
-  };
-  const formularioEnviado = async (dist) => {
-    setOcupado(true);
-    try { await crearContacto({ p_distribuidor: dist.id, p_canal: "formulario", p_tipo: "producto" }); setVerForm(null); avisar(`Anotado: formulario enviado a ${dist.nombre}. La respuesta se anota a mano.`); cargar(); onCambio(); }
-    catch (e) { avisar(msg(e), "mal"); } finally { setOcupado(false); }
-  };
-  const anotarLlamada = (dist) => async (texto) => { await crearContacto({ p_distribuidor: dist.id, p_canal: "llamada", p_tipo: "producto", p_mensaje: texto }); cargar(); onCambio(); };
-  const textoCorreo = `${rellenar(pl.correo_distribuidor?.texto, f.nombre, f.fuente_url)}`;
-  const faltanCat = d.distribuidores.filter((x) => x.catalogo_estado !== "recibido" && !x.catalogo_pedido);
-  const pedirCatalogos = async () => {
-    setOcupado(true);
-    let n = 0;
-    for (const x of faltanCat) { try { await sb.rpc("lab_contacto_crear", { p_prueba: null, p_distribuidor: x.id, p_supplier: null, p_canal: "correo", p_tipo: "catalogo", p_mensaje: null }); n++; } catch (e) { avisar(msg(e), "mal"); } }
-    setOcupado(false); if (n) avisar(`Catálogo pedido a ${n} distribuidor${n === 1 ? "" : "es"}.`); cargar();
-  };
-  const falta = faltaProgramar(f);
-  const cat = a?.catalogos;
-
   return (
     <div style={{ display: "grid", gap: 4 }}>
-      {/* a. Análisis */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-        <h3>Análisis</h3>
+        <h3>Análisis{fase === "evaluando" && <small className="pf" style={{ display: "inline", marginLeft: 8, fontWeight: 400 }}>Hecho en la fase Idea</small>}</h3>
         {!editAn && <button className="btn-txt" onClick={empezarEditar}>{a ? "Editar análisis" : "Escribirlo a mano"}</button>}
       </div>
       {editAn ? (
@@ -156,7 +138,7 @@ export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescar
           <div style={{ display: "flex", gap: 8 }}><button className="btn-p" onClick={guardarAn}>Guardar análisis</button><button className="btn-l" onClick={() => setEditAn(null)}>Cancelar</button></div>
         </div>
       ) : !a ? (
-        <p className="sub">El agente de producto está preparando el análisis{an.preparar_pedido_en ? ` (pedido ${hace(an.preparar_pedido_en)})` : ""}. Saldrá aquí con la recomendación y las propuestas de a quién preguntar.</p>
+        <p className="sub">La IA está preparando el análisis… Saldrá aquí con la recomendación y los seis puntos.</p>
       ) : (
         <>
           {a.recomendacion && (
@@ -176,18 +158,81 @@ export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescar
               );
             })}
           </ul>
+          {an.analisis_en && <small className="pf">Hecho {hace(an.analisis_en)}</small>}
         </>
       )}
+    </div>
+  );
+}
+
+// ───────────────────────── Ficha en Preparando ─────────────────────────
+export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescartar, onCambio }) {
+  const [d, setD] = useState(null);
+  const [an, setAn] = useState(undefined); // análisis guardado (para los catálogos)
+  const [wa, setWa] = useState(null); // { supplier_id, tel, texto }
+  const [verPl, setVerPl] = useState(false);
+  const [verForm, setVerForm] = useState(null); // id del distribuidor con la plantilla de formulario a la vista
+  const [ocupado, setOcupado] = useState(false);
+  const fabricar = modo === "fabricar";
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+
+  const cargar = useCallback(async () => {
+    try {
+      const [datos, r] = await Promise.all([sb.rpc("lab_preparar_datos", { p_id: id }), sb.select("lab_pruebas", `select=analisis,analisis_en,preparar_pedido_en&id=eq.${id}`)]);
+      setD(datos); setAn(r[0] || {});
+    } catch (e) { avisar(msg(e), "mal"); setD((x) => x || { proveedores: [], distribuidores: [], contactos: [], plantillas: {} }); setAn((x) => x || {}); }
+  }, [id]);
+  useEffect(() => { cargar(); }, [cargar]);
+  // Mientras el agente busca, se mira cada 30 segundos
+  useEffect(() => { if (!d || d.busqueda_en) return; const t = setInterval(cargar, 30000); return () => clearInterval(t); }, [d, cargar]);
+  if (!d || an === undefined) return <Cargando />;
+
+  const a = an.analisis;
+  const pl = d.plantillas || {};
+  const buscando = !d.busqueda_en;
+  const crearContacto = (args) => sb.rpc("lab_contacto_crear", { p_prueba: id, p_distribuidor: null, p_supplier: null, p_mensaje: null, ...args });
+  const enviarWa = async () => {
+    const ok = await abrirWhatsApp(wa.tel, wa.texto, () => crearContacto({ p_supplier: wa.supplier_id, p_canal: "whatsapp", p_tipo: fabricar ? "obrador" : "producto", p_mensaje: wa.texto }));
+    if (ok) { setWa(null); avisar("Contacto anotado como «Esperando». La respuesta se anota a mano en Contactos."); cargar(); onCambio(); }
+  };
+  const formularioEnviado = async (dist) => {
+    setOcupado(true);
+    try { await crearContacto({ p_distribuidor: dist.id, p_canal: "formulario", p_tipo: "producto" }); setVerForm(null); avisar(`Anotado: formulario enviado a ${dist.nombre}. La respuesta se anota a mano.`); cargar(); onCambio(); }
+    catch (e) { avisar(msg(e), "mal"); } finally { setOcupado(false); }
+  };
+  const anotarLlamada = (dist) => async (texto) => { await crearContacto({ p_distribuidor: dist.id, p_canal: "llamada", p_tipo: "producto", p_mensaje: texto }); cargar(); onCambio(); };
+  const textoCorreo = `${rellenar(pl.correo_distribuidor?.texto, f.nombre, f.fuente_url)}`;
+  const faltanCat = d.distribuidores.filter((x) => x.catalogo_estado !== "recibido" && !x.catalogo_pedido);
+  const pedirCatalogos = async () => {
+    setOcupado(true);
+    let n = 0;
+    for (const x of faltanCat) { try { await sb.rpc("lab_contacto_crear", { p_prueba: null, p_distribuidor: x.id, p_supplier: null, p_canal: "correo", p_tipo: "catalogo", p_mensaje: null }); n++; } catch (e) { avisar(msg(e), "mal"); } }
+    setOcupado(false); if (n) avisar(`Catálogo pedido a ${n} distribuidor${n === 1 ? "" : "es"}.`); cargar();
+  };
+  const falta = faltaProgramar(f);
+  const cat = a?.catalogos;
+  const ds = d.distribuidores;
+  const nCorreo = ds.filter((x) => x.correo && x.forma_contacto !== "formulario" && x.forma_contacto !== "telefono").length;
+  const nForm = ds.filter((x) => x.forma_contacto === "formulario").length;
+  const nTel = ds.filter((x) => x.tel).length;
+
+  return (
+    <div style={{ display: "grid", gap: 4 }}>
+      {/* a. Análisis (hecho en Idea) */}
+      <Analisis id={id} fase="evaluando" />
 
       {/* b. Conseguir proveedor / Buscar obrador */}
       <h3>{fabricar ? "Buscar obrador" : "Conseguir proveedor"}</h3>
+      {buscando
+        ? <p className="sub" style={{ marginTop: 0 }}>El agente está buscando {fabricar ? "obradores" : "proveedores y distribuidores"}{an.preparar_pedido_en ? ` (desde ${hace(an.preparar_pedido_en)})` : ""}…</p>
+        : !fabricar && <div className="card" style={{ background: "var(--bg)", padding: "10px 12px" }}><b>Búsqueda hecha:</b> {ds.length} distribuidor{ds.length === 1 ? "" : "es"} · {nCorreo} con correo (se les escribe solo) · {nForm} solo formulario · {nTel} con teléfono</div>}
       {!fabricar && <>
         <h4 style={{ margin: "4px 0" }}>1 · Catálogos guardados</h4>
         <p className="sub" style={{ marginTop: 0 }}>{cat?.texto ? `${cat.encontrado ? "✓ " : "— "}${cat.texto}` : d.n_catalogos ? `El agente lo buscará en los ${d.n_catalogos} catálogos guardados.` : "Aún no hay catálogos guardados."}</p>
       </>}
 
       <h4 style={{ margin: "4px 0" }}>{fabricar ? "1 · Preguntar a un obrador nuestro" : "2 · Preguntar a un proveedor nuestro"}</h4>
-      {!d.proveedores.length ? <p className="sub" style={{ marginTop: 0 }}>{a ? "El agente no ha propuesto ninguno." : "Los propone el agente al hacer el análisis."}</p> : (
+      {!d.proveedores.length ? <p className="sub" style={{ marginTop: 0 }}>{buscando ? "Los propone el agente al terminar la búsqueda." : "El agente no ha propuesto ninguno."}</p> : (
         <ul className="movers">{d.proveedores.map((x) => {
           const plantilla = pl[fabricar ? "wa_obrador" : "wa_proveedor"]?.texto;
           const abierto = wa && wa.supplier_id === x.supplier_id;
@@ -212,27 +257,28 @@ export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescar
       )}
 
       {!fabricar && <>
-        <h4 style={{ margin: "8px 0 4px" }}>3 · Escribir al distribuidor encontrado</h4>
-        {!d.distribuidores.length ? <p className="sub" style={{ marginTop: 0 }}>{a ? "El agente no ha encontrado distribuidores para este producto." : "Los propone el agente al hacer el análisis."}</p> : (
+        <h4 style={{ margin: "8px 0 4px" }}>3 · Distribuidores encontrados</h4>
+        {!d.distribuidores.length ? <p className="sub" style={{ marginTop: 0 }}>{buscando ? "Los propone el agente al terminar la búsqueda." : "El agente no ha encontrado distribuidores para este producto."}</p> : (
           <ul className="movers">{d.distribuidores.map((x) => (
             <li key={x.id} style={{ padding: "8px 0", display: "grid", gap: 6 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
                 <div style={{ flex: 1, minWidth: 200 }}><b>{x.nombre}</b> {x.conocido ? <Chip k="bien">Ya lo conocemos</Chip> : x.zona_sevilla ? <Chip k="info">Zona de Sevilla</Chip> : null}
                   {x.tipo && <small className="pf">{x.tipo}</small>}{x.motivo && <small className="pf">{x.motivo}</small>}
                   {x.web && <small className="pf"><a href={x.web} target="_blank" rel="noreferrer">{x.web.replace(/^https?:\/\//, "")}</a></small>}
-                  {!x.correo && !x.contacto && x.forma_contacto !== "formulario" && x.forma_contacto !== "telefono" && <small className="pf">Sin correo guardado: el agente lo busca antes de enviar.</small>}</div>
-                {x.contacto ? <EstadoC e={x.contacto.estado} />
-                  : x.forma_contacto === "formulario" ? <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}><Chip k="ojo">Solo formulario</Chip><button className="btn-txt" onClick={() => setVerForm(verForm === x.id ? null : x.id)}>{verForm === x.id ? "Ocultar" : "Preparar"}</button></div>
+                  {!x.correo && !x.contacto && x.forma_contacto !== "formulario" && x.forma_contacto !== "telefono" && <small className="pf">Sin correo guardado.</small>}</div>
+                {x.contacto ? <EstadoCorreo c={x.contacto} h={d.horario} />
+                  : x.forma_contacto === "formulario" ? <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}><Chip k="ojo">Solo formulario</Chip>
+                      {x.formulario_url && <a className="btn-l" href={x.formulario_url} target="_blank" rel="noreferrer">Abrir formulario</a>}
+                      <button className="btn-p" disabled={ocupado} onClick={() => formularioEnviado(x)}>Lo he enviado</button>
+                      <button className="btn-txt" onClick={() => setVerForm(verForm === x.id ? null : x.id)}>{verForm === x.id ? "Ocultar texto" : "Ver texto"}</button></div>
                   : x.forma_contacto === "telefono" ? <Chip k="ojo">Solo teléfono</Chip>
-                  : <button className="btn-p" disabled={ocupado} onClick={() => enviarCorreo(x)}>Enviar correo</button>}
+                  : x.correo ? <Chip k="ojo">Se le escribe solo</Chip> : null}
               </div>
               {verForm === x.id && !x.contacto && (
                 <div style={{ display: "grid", gap: 6 }}>
                   <pre style={{ whiteSpace: "pre-wrap", background: "var(--bg)", padding: 12, borderRadius: 10, fontFamily: "inherit", fontSize: 13.5, margin: 0 }}>{textoCorreo}</pre>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn-l" onClick={() => navigator.clipboard?.writeText(textoCorreo).then(() => avisar("Texto copiado")).catch(() => {})}>Copiar texto</button>
-                    {x.formulario_url && <a className="btn-l" href={x.formulario_url} target="_blank" rel="noreferrer">Abrir formulario</a>}
-                    <button className="btn-p" disabled={ocupado} onClick={() => formularioEnviado(x)}>Lo he enviado</button>
                   </div>
                 </div>
               )}
@@ -242,7 +288,7 @@ export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescar
         )}
         <button className="btn-txt" style={{ justifySelf: "start" }} onClick={() => setVerPl(!verPl)}>{verPl ? "Ocultar plantilla" : "Ver plantilla"}</button>
         {verPl && <pre style={{ whiteSpace: "pre-wrap", background: "var(--bg)", padding: 12, borderRadius: 10, fontFamily: "inherit", fontSize: 13.5, margin: 0 }}>{`Asunto: ${rellenar(pl.correo_distribuidor?.asunto, f.nombre)}\n\n${rellenar(pl.correo_distribuidor?.texto, f.nombre, f.fuente_url)}`}</pre>}
-        <p className="sub">Los correos salen sin revisión desde el Gmail de Recao (etiqueta «Producto»), con un tope diario. Nunca se escribe dos veces al mismo por la misma prueba.</p>
+        <p className="sub">A cada distribuidor con correo se le escribe solo en cuanto se encuentra, desde el Gmail de Recao (etiqueta «Producto»): de lunes a viernes de {d.horario?.desde || "9:00"} a {d.horario?.hasta || "19:00"} sale al momento; fuera de ese horario queda en cola y sale a las {d.horario?.cola_sale || "10:00"} del siguiente día laborable. Tope de {d.horario?.tope_dia || 10} correos al día. Nunca se escribe dos veces al mismo por la misma prueba.</p>
 
         <h4 style={{ margin: "8px 0 4px" }}>4 · Pedir catálogo</h4>
         {!d.distribuidores.length ? <p className="sub" style={{ marginTop: 0 }}>No hay distribuidores de esta categoría todavía.</p>
@@ -256,8 +302,8 @@ export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescar
         <div className="tabla-scroll"><table className="ranking">
           <thead><tr><th>A quién</th><th>Canal</th><th>Cuándo</th><th>Estado</th><th>Respuesta</th></tr></thead>
           <tbody>{d.contactos.map((c) => (
-            <tr key={c.id}><td>{c.quien}</td><td>{canalT(c.canal)}</td><td>{hace(c.enviado_en || c.creado_en)}</td><td><EstadoC e={c.estado} /></td>
-              <td>{c.respuesta || <span className="pf">{c.estado === "en_cola" ? "Lo envía el agente" : c.canal === "whatsapp" ? "Se anota a mano en Distribuidores y catálogos → Contactos" : "Sin respuesta todavía"}</span>}</td></tr>
+            <tr key={c.id}><td>{c.quien}</td><td>{canalT(c.canal)}</td><td>{hace(c.enviado_en || c.creado_en)}</td><td><EstadoCorreo c={c} h={d.horario} /></td>
+              <td>{c.respuesta || <span className="pf">{c.estado === "en_cola" ? "Sale solo" : c.canal === "whatsapp" ? "Se anota a mano en Distribuidores y catálogos → Contactos" : "Sin respuesta todavía"}</span>}</td></tr>
           ))}</tbody>
         </table></div>
       )}
@@ -377,7 +423,8 @@ function Contactos({ lista, onAbrir }) {
   const [l, setL] = useState(null);
   const [filtro, setFiltro] = useState("todos");
   const [anot, setAnot] = useState(null); // { id, texto }
-  const cargar = useCallback(() => { sb.rpc("lab_contactos_lista").then(setL).catch((e) => { avisar(msg(e), "mal"); setL([]); }); }, []);
+  const [h, setH] = useState(null); // horario de envío
+  const cargar = useCallback(() => { sb.rpc("lab_contactos_lista").then(setL).catch((e) => { avisar(msg(e), "mal"); setL([]); }); sb.rpc("lab_reglas").then((r) => setH(r.horario || null)).catch(() => {}); }, []);
   useEffect(() => { cargar(); }, [cargar]);
   if (!l) return <Cargando />;
   const nEsp = l.filter((c) => c.estado === "esperando" || c.estado === "en_cola").length, nResp = l.filter((c) => c.estado === "respondido" || c.estado === "es_proveedor").length;
@@ -400,12 +447,12 @@ function Contactos({ lista, onAbrir }) {
               <td>{c.prueba_id ? <button className="btn-txt" style={{ padding: 0, textAlign: "left" }} onClick={() => abrir(c)}>{c.prueba}</button> : <span className="pf">{c.tipo === "catalogo" ? "Catálogo general" : "–"}</span>}</td>
               <td>{c.quien}<small className="pf">{hace(c.enviado_en || c.creado_en)}</small></td>
               <td>{canalT(c.canal)}{c.tipo === "catalogo" && <small className="pf">catálogo</small>}</td>
-              <td><EstadoC e={c.estado} />{c.recordatorio_en && <small className="pf">recordatorio {hace(c.recordatorio_en)}</small>}</td>
+              <td><EstadoCorreo c={c} h={h} />{c.recordatorio_en && <small className="pf">recordatorio {hace(c.recordatorio_en)}</small>}</td>
               <td style={{ minWidth: 220 }}>
                 {anot?.id === c.id ? (
                   <div><textarea rows={3} style={{ width: "100%" }} aria-label="Respuesta" value={anot.texto} onChange={(e) => setAnot({ ...anot, texto: e.target.value })} />
                     <button className="btn-p" onClick={guardarAnot}>Guardar</button> <button className="btn-l" onClick={() => setAnot(null)}>Cancelar</button></div>
-                ) : c.respuesta || <span className="pf">{c.estado === "en_cola" ? "Lo envía el agente" : "Sin respuesta todavía"}</span>}
+                ) : c.respuesta || <span className="pf">{c.estado === "en_cola" ? "Sale solo" : "Sin respuesta todavía"}</span>}
               </td>
               <td style={{ whiteSpace: "nowrap" }}>
                 {c.canal !== "correo" && anot?.id !== c.id && ["esperando", "respondido", "sin_respuesta"].includes(c.estado) && <button className="btn-txt" onClick={() => setAnot({ id: c.id, texto: c.respuesta || "" })}>Anotar respuesta</button>}
@@ -422,7 +469,7 @@ function Contactos({ lista, onAbrir }) {
 function Reglas() {
   const [r, setR] = useState(null);
   const [pls, setPls] = useState([]);
-  const cargar = useCallback(() => { sb.rpc("lab_reglas").then((x) => { setR({ tope: x.tope_dia ?? "10", rec: x.recordatorio_dias ?? "6", sinRev: x.sin_revision !== "false", con: x.con_telefono, tot: x.proveedores_pedido }); setPls(x.plantillas || []); }).catch((e) => avisar(msg(e), "mal")); }, []);
+  const cargar = useCallback(() => { sb.rpc("lab_reglas").then((x) => { setR({ tope: x.tope_dia ?? "10", rec: x.recordatorio_dias ?? "6", sinRev: x.sin_revision !== "false", con: x.con_telefono, tot: x.proveedores_pedido, h: x.horario || {} }); setPls(x.plantillas || []); }).catch((e) => avisar(msg(e), "mal")); }, []);
   useEffect(() => { cargar(); }, [cargar]);
   if (!r) return <Cargando />;
   const guardar = async () => {
@@ -435,6 +482,10 @@ function Reglas() {
     <>
       <h3>Reglas</h3>
       <ul style={{ lineHeight: 1.6, paddingLeft: 18 }}>
+        <li><b>Horario de envío:</b> de lunes a viernes de {r.h.desde || "09:00"} a {r.h.hasta || "19:00"} los correos salen al momento, en cuanto el agente encuentra al distribuidor. Fuera de ese horario quedan en cola y salen a las {r.h.cola_sale || "10:00"} del siguiente día laborable.</li>
+        <li><b>Lectura de respuestas y catálogos, y recordatorios:</b> tres pasadas cada día laborable, a las {String(r.h.lectura || "10:00,13:00,16:00").split(",").map((t) => t.trim()).join(", ").replace(/, ([^,]*)$/, " y $1")}.</li>
+        <li><b>Análisis y búsqueda al momento:</b> al entrar una prueba en Idea, la IA hace el análisis; al pasarla a Preparando, busca proveedores y distribuidores. No hay que esperar a una hora fija.</li>
+        <li><b>Canales de contacto:</b> Correo, WhatsApp, Llamada y Formulario. Llamada y Formulario se anotan a mano.</li>
         <li><b>Nunca dos veces</b> al mismo contacto por la misma prueba (lo impide la base de datos).</li>
         <li><b>Etiqueta en Gmail:</b> «Producto», con subetiquetas Producto/Distribuidores y Producto/Catálogos. Cada respuesta se une a su contacto por el hilo del correo.</li>
         <li><b>WhatsApp:</b> se abre a mano y la respuesta se anota a mano. Los teléfonos salen de Pedidos: {r.con} de {r.tot} proveedores lo tienen.</li>
@@ -446,7 +497,7 @@ function Reglas() {
         <label className="campo">Recordatorio (una sola vez) a los … días sin respuesta<input inputMode="numeric" value={r.rec} onChange={(e) => setR({ ...r, rec: e.target.value })} /></label>
         <label className="campo">Envío sin revisión de las plantillas<select value={r.sinRev ? "si" : "no"} onChange={(e) => setR({ ...r, sinRev: e.target.value === "si" })}><option value="si">Sí, salen solas</option><option value="no">No, el agente espera</option></select></label>
       </div>
-      <p className="sub">Lo que pase del tope sale al día siguiente. Tras el recordatorio sin respuesta, el contacto pasa a «Sin respuesta».</p>
+      <p className="sub">Lo que pase del tope sale en la siguiente franja de envío. Tras el recordatorio sin respuesta, el contacto pasa a «Sin respuesta».</p>
       <button className="btn-p" onClick={guardar}>Guardar reglas</button>
       <h3 style={{ marginTop: 20 }}>Plantillas</h3>
       <p className="sub">Huecos: [producto] (nombre de la prueba) y [enlace] (enlace de la fuente).</p>

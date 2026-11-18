@@ -1,11 +1,12 @@
 // Producto · Lab (#140): pruebas de producto con ficha, métricas automáticas desde Epos y calendario de lanzamientos.
 // Las métricas las calcula la base de datos (lab_metricas); el semáforo orienta, no decide.
+// #216: análisis en la fase Idea (lo hace la IA al entrar); al pasar a Preparando el agente busca proveedor al momento.
 // #216: fase «Preparando» (en la base de datos sigue llamándose 'evaluando') con análisis y búsqueda de proveedor, y vista «Distribuidores y catálogos».
 import { useCallback, useEffect, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
 import { Cargando, Panel, Pestanas, avisar, confirmar, hoyStr, masDias } from "../ui.jsx";
 import { eur, num } from "../fmt.js";
-import { Preparando, Distribuidores, MOTIVOS_DESCARTE, faltaProgramar } from "./LabPreparando.jsx";
+import { Analisis, Preparando, Distribuidores, MOTIVOS_DESCARTE, faltaProgramar } from "./LabPreparando.jsx";
 
 const FASES = [["idea", "Idea"], ["evaluando", "Preparando"], ["programado", "Programado"], ["en_prueba", "En prueba"], ["decision", "Decisión"], ["cerrada", "Cerrada"]];
 const FASE_T = Object.fromEntries([...FASES, ["descartada", "Descartada"]]);
@@ -66,7 +67,7 @@ export function Lab() {
               <tbody>{visibles.map((p) => (
                 <tr key={p.id} onClick={() => setSel(p)} style={{ cursor: "pointer" }}>
                   <td><b>{p.nombre}</b>{p.proveedor && <small className="pf">{p.proveedor}</small>}</td>
-                  <td>{FASE_T[p.fase]}{p.fase === "evaluando" && <small className="pf">{p.analisis ? "análisis hecho" : "análisis pendiente"}{p.n_contactos ? ` · ${p.n_contactos} contacto${p.n_contactos === 1 ? "" : "s"}${p.n_respondidos ? `, ${p.n_respondidos} con respuesta` : ""}` : ""}</small>}{p.salida && <small className="pf">{SALIDAS.find((s) => s[0] === p.salida)?.[1]}</small>}{p.salida_temporada && <small className="pf">{SALIDAS_T.find((s) => s[0] === p.salida_temporada)?.[1]}</small>}</td>
+                  <td>{FASE_T[p.fase]}{(p.fase === "evaluando" || p.fase === "idea") && <small className="pf">{p.analisis ? "análisis hecho" : "la IA prepara el análisis"}{p.n_contactos ? ` · ${p.n_contactos} contacto${p.n_contactos === 1 ? "" : "s"}${p.n_respondidos ? `, ${p.n_respondidos} con respuesta` : ""}` : ""}</small>}{p.salida && <small className="pf">{SALIDAS.find((s) => s[0] === p.salida)?.[1]}</small>}{p.salida_temporada && <small className="pf">{SALIDAS_T.find((s) => s[0] === p.salida_temporada)?.[1]}</small>}</td>
                   <td>{p.tipo === "temporada" ? "Temporada" : "Normal"}</td>
                   <td>{fdia(p.f_lanzamiento)}</td><td>{fdia(p.f_decision)}</td>
                   <td>{p.productos.length ? `${p.productos.length}` : <span className="pf">sin vincular</span>}</td>
@@ -217,7 +218,7 @@ function FichaPrueba({ p, lista, onClose, onGuardado }) {
   const empezarPreparar = async () => {
     const pid = await guardar();
     if (!pid) return;
-    try { await sb.rpc("lab_empezar_preparar", { p_id: pid }); setF((x) => ({ ...x, fase: "evaluando" })); avisar("Pasa a Preparando. El agente de producto hará el análisis y propondrá a quién preguntar."); onGuardado(); }
+    try { await sb.rpc("lab_empezar_preparar", { p_id: pid }); setF((x) => ({ ...x, fase: "evaluando" })); avisar("Pasa a Preparando. El agente busca ya proveedores y distribuidores y escribe solo a los que tienen correo."); onGuardado(); }
     catch (e) { avisar(msg(e), "mal"); }
   };
   const vincular = async (x) => {
@@ -261,13 +262,23 @@ function FichaPrueba({ p, lista, onClose, onGuardado }) {
         <label className="campo">¿Cómo se consigue?<select value={modo} onChange={set("modo")}><option value="comprar">Se compra a proveedor</option><option value="fabricar">Hay que fabricarlo (obrador)</option></select></label>
       </div>
       <label className="campo">Hipótesis<textarea rows={2} value={f.hipotesis} onChange={set("hipotesis")} placeholder="Qué esperamos que pase" /></label>
-      {f.fase === "idea" && <div className="card" style={{ background: "var(--bg)", padding: 12, margin: "8px 0 4px" }}>
-        <p className="sub" style={{ marginTop: 0 }}>Al empezar a preparar, el agente de producto analiza si nos diferencia y propone a quién preguntar.</p>
-        <button className="btn-p" disabled={guardando} onClick={empezarPreparar}>Empezar a preparar</button>
+      {f.fase === "idea" && (id
+        ? <Analisis id={id} fase="idea" />
+        : <p className="sub">Al guardar la prueba, la IA hace el análisis (recomendación y los seis puntos) y sale aquí.</p>)}
+      {f.fase === "idea" && id && <div className="card" style={{ background: "var(--bg)", padding: 12, margin: "8px 0 4px", display: "grid", gap: 8 }}>
+        <p className="sub" style={{ margin: 0 }}>Decide con el análisis a la vista. Al pasar a Preparando, el agente busca proveedores y distribuidores al momento.</p>
+        <div className="fila-campos">
+          <label className="campo">Motivo para descartar<select value={f.motivo_descarte_tipo} onChange={set("motivo_descarte_tipo")}><option value="">–</option>{MOTIVOS_DESCARTE.map(([i, t]) => <option key={i} value={i}>{t}</option>)}</select></label>
+          <label className="campo">Detalle (opcional)<input value={f.motivo_descarte} onChange={set("motivo_descarte")} /></label>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn-p" disabled={guardando} onClick={empezarPreparar}>Pasar a Preparando</button>
+          <button className="btn-l" disabled={guardando} onClick={descartar}>Descartar</button>
+        </div>
       </div>}
       {id && f.fase === "evaluando" && <Preparando id={id} f={f} setF={setF} modo={modo} guardando={guardando}
         onProgramar={() => cambiarFase("programado")} onDescartar={descartar} onCambio={onGuardado} />}
-      {f.fase === "evaluando" && <h3 style={{ marginTop: 24 }}>Resto de la ficha</h3>}
+      {(f.fase === "evaluando" || (f.fase === "idea" && id)) && <h3 style={{ marginTop: 24 }}>Resto de la ficha</h3>}
 
       <h3>Fechas</h3>
       <div className="fila-campos">
