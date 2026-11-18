@@ -115,54 +115,49 @@ function Reunion({ id, user }) {
   const nBloq = puntos.filter((p) => p.tipo !== "acuerdo" && p.estado === "abierto").length;
   const nAcu = puntos.filter((p) => p.tipo === "acuerdo").length;
 
+  const PASOS_V = [{ id: "metricas", label: "1 Métricas" }, { id: "personas", label: `2 Cada uno${nBloq ? ` · ${nBloq}` : ""}` }, { id: "acta", label: "🎙 Grabación y acta" }];
+  const pasoV = paso === "acuerdos" ? "personas" : paso;
   return (
-    <>
-      <button className="volver" onClick={() => ir("plan/reuniones")}>← Reuniones</button>
-      <section className="rn-cab">
-        <div>
-          <p className="rb-eyebrow">{TIPOS_R[r.tipo]} · {cerrada ? `cerrada ${hace(r.cerrada_en)}` : "abierta"}</p>
-          <h1>Reunión del {fechaCorta(r.fecha)}</h1>
-          {!cerrada && (
-            <div className="rn-cab-campos">
-              <label>Fecha <input type="date" value={r.fecha} onChange={(e) => e.target.value && guardar({ fecha: e.target.value })} /></label>
-              <label>Tipo <select value={r.tipo} onChange={(e) => guardar({ tipo: e.target.value })}>{Object.entries(TIPOS_R).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
-            </div>
+    <div className="rn2">
+      <header className="rn2-cab">
+        <button className="rn2-salir" onClick={() => ir("plan/reuniones")}>← Salir</button>
+        <b className="rn2-tit">Reunión de dirección · {fechaCorta(r.fecha)}</b>
+        <span className={`rn2-est ${cerrada ? "cerrada" : ""}`}>{cerrada ? `Cerrada ${hace(r.cerrada_en)}` : "Abierta"}</span>
+        <span className="ls-esp" />
+        <nav className="rn2-pasos" aria-label="Pasos">
+          {PASOS_V.map((p) => <button key={p.id} aria-current={pasoV === p.id ? "step" : undefined} onClick={() => setPaso(p.id)}>{p.label}</button>)}
+        </nav>
+        {!cerrada && <button className="rn2-cerrar" onClick={() => setCerrar(true)}>Cerrar reunión</button>}
+      </header>
+
+      <div className="rn2-cuerpo">
+        <main className="rn2-main">
+          {pasoV === "metricas" && (cerrada && r.metricas ? <FotoMetricas f={r.metricas} /> : <BloqueMetricas compacto />)}
+          {pasoV === "personas" && (
+            <>
+              <div className="rn2-h"><h2>Cada uno: solo lo que está en rojo</h2><span>La pantalla ya enseña el estado. Nadie cuenta lo que ha hecho.</span></div>
+              <EstadoPersonas r={r} tareas={tareas} proyectos={proyectos} puntos={puntos} setPuntos={setPuntos} yo={yo} cerrada={cerrada}
+                desde={anterior === undefined ? null : (anterior?.cerrada_en || new Date(Date.now() - 7 * 86400000).toISOString())} desdeTexto={anterior ? `desde la reunión del ${fechaCorta(anterior.fecha)}` : "en los últimos 7 días"} onAbrir={setAbierta} />
+            </>
           )}
-        </div>
-        <div className="rn-cab-acc">
-          {!cerrada && <button className="btn-p" onClick={() => setCerrar(true)}>Cerrar la reunión</button>}
-          <button className="btn-txt peligro" onClick={async () => { if (window.confirm("¿Borrar esta reunión, con lo apuntado y su audio? Las tareas que ya salieron de sus acuerdos no se borran.")) { try { await R.borrar(id, r.audio_path); avisar("Reunión borrada"); ir("plan/reuniones"); } catch (e) { avisar("No se ha podido borrar", "mal"); } } }}>Borrar reunión</button>
-        </div>
-      </section>
-
-      <nav className="rn-pasos" aria-label="Orden del día">
-        {PASOS.map((p) => (
-          <button key={p.id} aria-current={paso === p.id ? "step" : undefined} onClick={() => setPaso(p.id)}>
-            <b>{p.n}</b>{p.label}<small>{p.min}′{p.id === "personas" && nBloq ? ` · ${nBloq} bloqueos` : ""}{p.id === "acuerdos" && nAcu ? ` · ${nAcu}` : ""}</small>
-          </button>
-        ))}
-        <button aria-current={paso === "acta" ? "step" : undefined} onClick={() => setPaso("acta")}><b>🎙</b>Grabación y acta</button>
-      </nav>
-      {PASOS.find((p) => p.id === paso) && <p className="rn-ayuda">{PASOS.find((p) => p.id === paso).ayuda}</p>}
-
-      {paso === "metricas" && (cerrada && r.metricas ? <FotoMetricas f={r.metricas} /> : <BloqueMetricas compacto />)}
-      {paso === "personas" && (
-        <EstadoPersonas r={r} tareas={tareas} proyectos={proyectos} puntos={puntos} setPuntos={setPuntos} yo={yo} cerrada={cerrada}
-          desde={anterior === undefined ? null : (anterior?.cerrada_en || new Date(Date.now() - 7 * 86400000).toISOString())} desdeTexto={anterior ? `desde la reunión del ${fechaCorta(anterior.fecha)}` : "en los últimos 7 días"} onAbrir={setAbierta} />
-      )}
-      {paso === "acuerdos" && <Puntos r={r} puntos={puntos} setPuntos={setPuntos} yo={yo} tipos={["acuerdo"]} proyectos={proyectos} cerrada={cerrada} />}
-      {paso === "acta" && <Grabacion r={r} setR={setR} recargar={cargar} puntos={puntos} setPuntos={setPuntos} yo={yo} proyectos={proyectos} />}
-
-      {!cerrada && paso !== "acta" && (
-        <div className="card rn-notas">
-          <h2>Notas</h2>
-          <textarea rows={3} defaultValue={r.notas || ""} placeholder="Lo que no encaja en otro sitio…" onBlur={(e) => e.target.value !== (r.notas || "") && guardar({ notas: e.target.value })} />
-        </div>
-      )}
-      {cerrada && r.notas && <div className="card rn-notas"><h2>Notas</h2><p className="rn-texto">{r.notas}</p></div>}
+          {pasoV === "acta" && <Grabacion r={r} setR={setR} recargar={cargar} puntos={puntos} setPuntos={setPuntos} yo={yo} proyectos={proyectos} />}
+          {!cerrada && (
+            <details className="rn2-notas">
+              <summary>Notas de la reunión{r.notas ? " ✎" : ""}</summary>
+              <textarea rows={3} defaultValue={r.notas || ""} placeholder="Lo que no encaja en otro sitio…" onBlur={(e) => e.target.value !== (r.notas || "") && guardar({ notas: e.target.value })} />
+            </details>
+          )}
+          {cerrada && r.notas && <div className="card rn-notas"><h2>Notas</h2><p className="rn-texto">{r.notas}</p></div>}
+          {!cerrada && !puntos.length && <p className="rn-ayuda"><button className="btn-txt peligro" onClick={async () => { if (window.confirm("¿Borrar esta reunión?")) { try { await R.borrar(id, r.audio_path); ir("plan/reuniones"); } catch (e) { avisar("No se ha podido borrar", "mal"); } } }}>Borrar esta reunión</button></p>}
+          {cerrada && <p className="rn-ayuda"><button className="btn-txt peligro" onClick={async () => { if (window.confirm("¿Borrar esta reunión, con lo apuntado y su audio? Las tareas que ya salieron de sus acuerdos no se borran.")) { try { await R.borrar(id, r.audio_path); avisar("Reunión borrada"); ir("plan/reuniones"); } catch (e) { avisar("No se ha podido borrar", "mal"); } } }}>Borrar reunión</button></p>}
+        </main>
+        <aside className="rn2-acuerdos">
+          <Puntos r={r} puntos={puntos} setPuntos={setPuntos} yo={yo} tipos={["acuerdo"]} proyectos={proyectos} cerrada={cerrada} />
+        </aside>
+      </div>
       {abierta && <TareaPanel id={abierta} user={user} onClose={() => setAbierta(null)} />}
-      {cerrar && <CerrarReunion r={r} puntos={puntos} onClose={() => setCerrar(false)} onCerrada={(res) => { setCerrar(false); cargarPlan(); avisar(`Reunión cerrada · ${res.tareas} tareas creadas`); cargar(); setPaso("acuerdos"); }} />}
-    </>
+      {cerrar && <CerrarReunion r={r} puntos={puntos} onClose={() => setCerrar(false)} onCerrada={(res) => { setCerrar(false); cargarPlan(); avisar(`Reunión cerrada · ${res.tareas} tareas creadas`); cargar(); }} />}
+    </div>
   );
 }
 

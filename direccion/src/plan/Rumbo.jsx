@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Panel, Pestanas, Avatar, avisar, fechaCorta, Cargando, ir } from "../ui.jsx";
 import { eur, pct, num, nombreMes } from "../fmt.js";
-import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO, atrasada, actualizarProyecto } from "./datos.js";
+import { usePlan, cargarPlan, SOCIOS, nombreSocio, hoyISO, atrasada, actualizarProyecto, AREA } from "./datos.js";
 import { ChipArea, resumenProyecto } from "./Tareas.jsx";
 import { EditarProyecto } from "./Plan.jsx";
 import { ProyectoPanel, equipoProyecto, proximaTarea, pedirFiltroFoco } from "./Ejecucion.jsx";
@@ -93,24 +93,38 @@ function Tarjeta({ p, tareas, onEditar, onMover, arrastrando, setArrastrando, ho
   const bloq = tareas.filter((t) => t.proyecto_id === p.id && t.estado === "bloqueada").length;
   const equipo = equipoProyecto(p, tareas);
   const i = COLUMNAS.findIndex((c) => c.id === p.columna);
+  const color = AREA[p.area]?.color || "#8A9095";
   return (
-    <li className={`rb-card ${gris ? "gris" : ""} ${arrastrando === p.id ? "arrastrando" : ""}`} draggable
+    <li className={`rb-card v2 ${gris ? "gris" : ""} ${arrastrando === p.id ? "arrastrando" : ""}`} style={{ "--a": color }} draggable
       onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(p.id)); e.dataTransfer.effectAllowed = "move"; setArrastrando(p.id); }}
       onDragEnd={() => setArrastrando(null)}>
       <button className="rb-card-cuerpo" onClick={() => onEditar(p)}>
-        <span className="rb-card-cab"><ChipArea id={p.area} />{met ? <span className={`rb-met-chip ${met.principal ? "principal" : ""}`}>↗ {met.corta}</span> : <span className="rb-met-chip falta">Sin métrica</span>}</span>
-        <b className="rb-card-tit">{p.nombre}</b>
-        {prox
-          ? <span className={`rb-paso ${prox.fecha_fin && prox.fecha_fin < hoy ? "mal" : ""}`}><i>Próxima tarea</i>{prox.titulo}{prox.fecha_fin && <em> · {fechaCorta(prox.fecha_fin)}</em>}{(prox.propietarios || []).length > 0 && <em> · {(prox.propietarios || []).map(nombreSocio).join(", ")}</em>}</span>
-          : p.siguiente_paso
-            ? <span className={`rb-paso ${pasoTarde ? "mal" : ""}`}><i>Siguiente paso</i>{p.siguiente_paso}{p.siguiente_paso_fecha && <em> · {fechaCorta(p.siguiente_paso_fecha)}</em>}</span>
-            : <span className="rb-paso falta"><i>Próxima tarea</i>Sin tareas todavía</span>}
-        <span className="rb-avance"><span className="barra-p"><i style={{ width: `${r.pct}%` }} /></span><small>{r.total ? `${r.hechas}/${r.total} tareas` : "0 tareas"}{enCurso ? ` · ${enCurso} en curso` : ""}{bloq ? <em> · {bloq} bloqueada{bloq > 1 ? "s" : ""}</em> : ""}{r.atrasadas ? <em> · {r.atrasadas} vencida{r.atrasadas > 1 ? "s" : ""}</em> : ""}{objTarde ? <em> · objetivo vencido</em> : ""}</small></span>
-        <span className="rb-card-pie">
-          {p.responsable ? <span className="rb-resp" title="Responsable"><Avatar nombre={nombreSocio(p.responsable)} size={22} />{nombreSocio(p.responsable)}</span> : <span className="rb-resp falta">Sin responsable</span>}
-          {equipo.length > 0 && <span className="rb-equipo" title={`Equipo: ${equipo.map(nombreSocio).join(", ")}`}>{equipo.map((x) => <Avatar key={x} nombre={nombreSocio(x)} size={20} />)}</span>}
+        <span className="rb-card-cab">
+          {p.area && <span className="rb-area">{AREA[p.area]?.label}</span>}
+          {met ? <span className="rb-metv2">↗ {met.corta}</span> : <span className="rb-metv2 falta">sin métrica</span>}
+          <span className="ls-esp" />
+          {gris && <span className="rb-gris">{dias} días sin tocar</span>}
         </span>
-        {gris && <span className="rb-gris">Sin actualizar desde hace {dias} días</span>}
+        <b className="rb-card-tit">{p.nombre}</b>
+        <span className="rb-barra"><i><b style={{ width: `${r.pct}%` }} /></i><small>{r.hechas}/{r.total}</small></span>
+        {(enCurso || bloq || r.atrasadas || objTarde) ? (
+          <span className="rb-cuentas">
+            {enCurso > 0 && <span className="c-curso">{enCurso} en curso</span>}
+            {bloq > 0 && <span className="c-bloq">{bloq} bloqueada{bloq > 1 ? "s" : ""}</span>}
+            {r.atrasadas > 0 && <span className="c-venc">{r.atrasadas} vencida{r.atrasadas > 1 ? "s" : ""}</span>}
+            {objTarde && <span className="c-venc">objetivo vencido</span>}
+          </span>
+        ) : null}
+        <span className="rb-prox">
+          <i>{prox ? "Próxima tarea" : p.siguiente_paso ? "Siguiente paso" : "Próxima tarea"}</i>
+          {prox ? <><b>{prox.titulo}</b>{prox.fecha_fin && <em className={prox.fecha_fin < hoy ? "mal" : ""}> {fechaCorta(prox.fecha_fin)}</em>}</>
+            : p.siguiente_paso ? <><b>{p.siguiente_paso}</b>{p.siguiente_paso_fecha && <em className={pasoTarde ? "mal" : ""}> {fechaCorta(p.siguiente_paso_fecha)}</em>}</>
+            : <span className="falta">Sin tareas todavía</span>}
+        </span>
+        <span className="rb-card-pie">
+          {p.responsable ? <span className="rb-resp" title="Responsable"><Bola id={p.responsable} size={28} />{nombreSocio(p.responsable)}</span> : <span className="rb-resp falta">Sin responsable</span>}
+          {equipo.length > 0 && <span className="rb-equipo" title={`Equipo: ${equipo.map(nombreSocio).join(", ")}`}>{equipo.map((x) => <Bola key={x} id={x} size={24} />)}</span>}
+        </span>
       </button>
       <span className="rb-mover">
         <button disabled={i <= 0} onClick={() => onMover(p, COLUMNAS[i - 1]?.id)} aria-label={`Mover «${p.nombre}» a ${COLUMNAS[i - 1]?.label || ""}`}>←</button>
