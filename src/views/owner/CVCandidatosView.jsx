@@ -12,6 +12,39 @@ const ESTADO_L = { revisar: "Por revisar", interesa: "Interesan", entrevista: "E
 const puntos = (c) => CRIT.reduce((n, [k]) => n + (c[k] === "Sí" ? 1 : 0), 0);
 const norm = (s) => (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 function fmtF(f) { if (!f) return ""; const d = new Date(f); return d.toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
+// #212: WhatsApp de primer contacto. Mismo criterio de móvil que la función whatsapp-candidatas
+function telWa(v) {
+  let d = String(v ?? "").trim().replace(/[^\d+]/g, "");
+  if (d.startsWith("00")) d = "+" + d.slice(2);
+  const dig = d.replace(/\D/g, "");
+  if (d.startsWith("+")) return dig.length >= 10 && dig.length <= 15 ? dig : null;
+  if (dig.length === 9 && /^[67]/.test(dig)) return "34" + dig;
+  if (dig.length === 11 && /^34[67]/.test(dig)) return dig;
+  return null;
+}
+const PUESTO_L = { principal: "Principal", apoyo: "Apoyo" };
+const nombrePila = (n) => { const p = String(n || "").trim().split(/\s+/)[0] || ""; return p ? p.charAt(0).toLocaleUpperCase("es") + p.slice(1).toLocaleLowerCase("es") : "hola"; };
+function fmtDiaHora(f) { if (!f) return ""; return new Date(f).toLocaleString("es-ES", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
+function fmtDia(f) { if (!f) return ""; return new Date(f).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }); }
+// Resumen del WhatsApp de una candidata: último envío, respuesta (botón) posterior y mensajes recibidos
+function resumenWa(msgs) {
+  if (!msgs || !msgs.length) return null;
+  const envios = msgs.filter((m) => m.sentido === "salida" && m.tipo === "plantilla");
+  const ultEnvio = envios[envios.length - 1] || null;
+  const ultError = [...msgs].reverse().find((m) => m.sentido === "salida") || null;
+  const entradas = msgs.filter((m) => m.sentido === "entrada");
+  const botones = entradas.filter((m) => m.tipo === "boton" && (!ultEnvio || m.creado_en >= ultEnvio.creado_en));
+  const respuesta = botones[botones.length - 1] || null;
+  const fallidoEnvio = ultEnvio && ultEnvio.estado === "fallido";
+  const etiqueta = !ultEnvio ? null : respuesta ? respuesta.texto : fallidoEnvio ? null : "Esperando respuesta";
+  return { ultEnvio, ultError: ultError && (ultError.tipo === "error" || ultError.estado === "fallido") ? ultError : null, entradas, respuesta, etiqueta };
+}
+function EtiquetaWa({ r }) {
+  if (!r?.etiqueta) return null;
+  const st = r.etiqueta === "Me interesa" ? { bg: "#E7F3EC", fg: "#1E7A46" } : r.etiqueta === "No me interesa" ? { bg: "#ECE8E1", fg: "#6B6358" } : { bg: "#FBF0DA", fg: "#8a6a1e" };
+  return <span style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, color: st.fg, background: st.bg, borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>{r.etiqueta}</span>;
+}
+
 function gmailUrl(id) { return `https://mail.google.com/mail/u/5/#all/${id}`; }
 
 function Foto({ c, size }) {
@@ -56,7 +89,7 @@ function CvArchivo({ c }) {
   );
 }
 
-export function CVCandidatosView({ currentUser }) {
+export function CVCandidatosView({ currentUser, abrirId }) {
   const [rows, setRows] = useState([]);
   const [evals, setEvals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,6 +104,32 @@ export function CVCandidatosView({ currentUser }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2600); };
+  // #212: WhatsApp de primer contacto
+  const [wa, setWa] = useState([]);
+  const [waInfo, setWaInfo] = useState(null);
+  const [waElegir, setWaElegir] = useState(null); // { c, puesto }
+  const [waErr, setWaErr] = useState("");
+  const loadWa = useCallback(async () => {
+    try { setWa(await sb.select("candidatos_whatsapp", "select=*&order=creado_en.asc")); } catch (e) { /* tabla sin acceso: no se muestra */ }
+  }, []);
+  useEffect(() => { loadWa(); sb.fn("whatsapp-candidatas", { action: "estado" }).then(setWaInfo).catch(() => setWaInfo({ recepcion_activa: false })); }, [loadWa]);
+  const waPor = useMemo(() => { const m = {}; wa.forEach((x) => { (m[x.candidato_id] = m[x.candidato_id] || []).push(x); }); return m; }, [wa]);
+  const waRes = (c) => resumenWa(waPor[c.id]);
+  const abrirWa = (c) => {
+    setWaErr("");
+    const r = waRes(c);
+    if (r?.ultEnvio && !window.confirm(`Ya se le envió el ${fmtDia(r.ultEnvio.creado_en)}. ¿Enviar otra vez?`)) return;
+    setWaElegir({ c, puesto: null });
+  };
+  const enviarWa = async () => {
+    const { c, puesto } = waElegir || {};
+    if (!c || !puesto) return;
+    setBusy(true); setWaErr("");
+    try { await sb.fn("whatsapp-candidatas", { action: "enviar", candidato_id: c.id, puesto }); setWaElegir(null); flash("WhatsApp enviado"); }
+    catch (e) { setWaErr(e.message || "No se ha podido enviar"); }
+    await loadWa();
+    setBusy(false);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,6 +140,12 @@ export function CVCandidatosView({ currentUser }) {
     try { setEvals(await sb.select("evaluaciones_candidato", "select=*")); } catch (e) { /* noop */ }
   }, []);
   useEffect(() => { load(); loadEvals(); }, [load, loadEvals]);
+  // #212: el aviso de la campana abre la ficha de la candidata (personas/seleccion/<id>)
+  useEffect(() => {
+    if (!abrirId || !rows.length) return;
+    const c = rows.find((x) => String(x.id) === String(abrirId));
+    if (c) { setPantalla("candidatas"); setTab(c.estado); abrir(c); loadWa(); }
+  }, [abrirId, rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const evalsById = useMemo(() => { const m = {}; evals.forEach(e => { m[e.candidato_id] = e; }); return m; }, [evals]);
 
@@ -192,7 +257,10 @@ export function CVCandidatosView({ currentUser }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
                       <span style={{ fontFamily: SF, fontSize: 16, color: C.char }}>{c.nombre}</span>
-                      {puntos(c) >= 2 && <span style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, color: "#1E7A46", background: "#E7F3EC", borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>Cualificada</span>}
+                      <span style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        {tab === "interesa" && <EtiquetaWa r={waRes(c)} />}
+                        {puntos(c) >= 2 && <span style={{ fontFamily: F, fontSize: 10.5, fontWeight: 700, color: "#1E7A46", background: "#E7F3EC", borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>Cualificada</span>}
+                      </span>
                     </div>
                     <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 1 }}>{c.poblacion || "Población no indicada"}{c.fecha_correo ? ` · ${fmtF(c.fecha_correo)}` : ""}</div>
                     <Crit c={c} />
@@ -248,6 +316,46 @@ export function CVCandidatosView({ currentUser }) {
               {abierto.email && <a href={`mailto:${abierto.email}`} style={{ fontFamily: F, fontSize: 13.5, color: C.blu, textDecoration: "none", wordBreak: "break-all" }}>✉️ {abierto.email}</a>}
             </div>
 
+            {(() => {
+              const r = waRes(abierto);
+              const tel = telWa(abierto.telefono);
+              const puedeEnviar = abierto.estado === "interesa";
+              if (!puedeEnviar && !r) return null;
+              const lista = r ? r.entradas : [];
+              return (
+                <div style={{ marginTop: 12, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ fontFamily: F, fontSize: 13, color: C.char, lineHeight: 1.45 }}>
+                      {r?.ultEnvio ? <>WhatsApp enviado · {PUESTO_L[r.ultEnvio.puesto] || ""} · {fmtDiaHora(r.ultEnvio.creado_en)}</> : <span style={{ color: C.mut }}>Sin WhatsApp enviado</span>}
+                      {r?.ultEnvio && <div style={{ marginTop: 4 }}><EtiquetaWa r={r} />{r.respuesta && <span style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginLeft: 6 }}>{fmtDiaHora(r.respuesta.creado_en)}</span>}</div>}
+                    </div>
+                    {puedeEnviar && (
+                      <button onClick={() => abrirWa(abierto)} disabled={busy || !tel || !waInfo?.recepcion_activa}
+                        title={!tel ? "Sin teléfono válido" : !waInfo?.recepcion_activa ? "Falta activar la recepción de respuestas" : ""}
+                        style={{ background: tel && waInfo?.recepcion_activa ? "#1E7A46" : "#E5DFD3", color: tel && waInfo?.recepcion_activa ? "#fff" : C.mut, border: "none", borderRadius: 10, padding: "9px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: tel && waInfo?.recepcion_activa ? "pointer" : "default" }}>
+                        {!tel ? "Sin teléfono válido" : "WhatsApp"}
+                      </button>
+                    )}
+                  </div>
+                  {puedeEnviar && tel && waInfo && !waInfo.recepcion_activa && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut, marginTop: 6 }}>Aún no se puede enviar: falta activar la recepción de respuestas.</div>}
+                  {r?.ultError && (!r.ultEnvio || r.ultError.creado_en >= r.ultEnvio.creado_en) && <div style={{ fontFamily: F, fontSize: 12.5, color: "#B23A2C", marginTop: 6 }}>No se ha podido enviar · {r.ultError.error || "Meta no lo ha entregado."}</div>}
+                  {lista.length > 0 && (
+                    <>
+                      <div style={{ fontFamily: F, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: C.mutL, margin: "12px 0 6px" }}>Mensajes de WhatsApp</div>
+                      {lista.map((m) => (
+                        <div key={m.id} style={{ background: "#F5F0E6", borderRadius: 10, padding: "8px 11px", marginBottom: 6 }}>
+                          <div style={{ fontFamily: F, fontSize: 11, color: C.mutL }}>{fmtDiaHora(m.creado_en)}</div>
+                          <div style={{ fontFamily: F, fontSize: 13.5, color: C.char, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                            {m.tipo === "archivo" ? <i>Ha enviado un archivo</i> : m.tipo === "boton" ? <>Ha pulsado «{m.texto}»</> : m.texto}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+
             <Crit c={abierto} />
 
             {abierto.resumen && <div style={{ fontFamily: F, fontSize: 13.5, color: C.char, lineHeight: 1.5, marginTop: 12, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "12px 14px" }}>{abierto.resumen}</div>}
@@ -268,6 +376,33 @@ export function CVCandidatosView({ currentUser }) {
 
             <div style={{ marginTop: 18 }}>{acciones(abierto, true)}</div>
             <button onClick={() => setAbierto(null)} style={{ width: "100%", marginTop: 10, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
+      {waElegir && (
+        <div onClick={() => !busy && setWaElegir(null)} style={{ position: "fixed", inset: 0, background: "rgba(30,26,20,0.5)", zIndex: 90, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.cream, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "18px 18px 24px" }}>
+            <div style={{ fontFamily: SF, fontSize: 18, color: C.char }}>WhatsApp a {waElegir.c.nombre}</div>
+            <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 2 }}>Elige qué mensaje enviar</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              {[["principal", "Puesto principal (40 h)"], ["apoyo", "Puesto de apoyo (28 h)"]].map(([k, l]) => (
+                <button key={k} onClick={() => setWaElegir((w) => ({ ...w, puesto: k }))} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: `1.5px solid ${waElegir.puesto === k ? C.char : C.brd}`, background: waElegir.puesto === k ? C.char : "#fff", color: waElegir.puesto === k ? C.gold : C.char, fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{l}</button>
+              ))}
+            </div>
+            {waElegir.puesto && waInfo?.textos && (
+              <div style={{ marginTop: 12, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "12px 14px" }}>
+                <div style={{ fontFamily: F, fontSize: 13.5, fontWeight: 700, color: C.char }}>Tu candidatura en Recao</div>
+                <div style={{ fontFamily: F, fontSize: 13, color: C.char, lineHeight: 1.5, whiteSpace: "pre-wrap", marginTop: 6 }}>{String(waInfo.textos[waElegir.puesto] || "").replace("{{1}}", nombrePila(waElegir.c.nombre))}</div>
+                <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 8 }}>{waInfo.textos.pie}</div>
+                <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                  {["Me interesa", "No me interesa"].map((b) => <span key={b} style={{ flex: 1, textAlign: "center", fontFamily: F, fontSize: 12.5, fontWeight: 600, color: C.blu, border: `1px solid ${C.brdL}`, borderRadius: 8, padding: "6px 4px" }}>{b}</span>)}
+                </div>
+              </div>
+            )}
+            {waErr && <div style={{ fontFamily: F, fontSize: 13, color: "#B23A2C", marginTop: 10 }}>{waErr}</div>}
+            <button onClick={enviarWa} disabled={busy || !waElegir.puesto} style={{ width: "100%", marginTop: 14, background: waElegir.puesto ? "#1E7A46" : "#E5DFD3", color: waElegir.puesto ? "#fff" : C.mut, border: "none", borderRadius: 11, padding: "12px", fontFamily: F, fontSize: 14.5, fontWeight: 700, cursor: waElegir.puesto ? "pointer" : "default" }}>{busy ? "Enviando…" : "Enviar"}</button>
+            <button onClick={() => setWaElegir(null)} disabled={busy} style={{ width: "100%", marginTop: 8, background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
           </div>
         </div>
       )}

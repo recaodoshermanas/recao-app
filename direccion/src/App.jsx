@@ -320,7 +320,7 @@ export default function App() {
       </>
     );
   }
-  else contenido = <Legado area={area.id} sub={sub.id} datos={datos} user={user} mesFoco={mesFoco} onEditMonth={editarMes} />;
+  else contenido = <Legado area={area.id} sub={sub.id} datos={datos} user={user} mesFoco={mesFoco} onEditMonth={editarMes} extra={extra} />;
 
   return (
     <div className="wrap">

@@ -13,7 +13,7 @@ import { PaqueteTrimestre } from "./finanzas/PaqueteTrimestre.jsx";
 
 const NECESITA_DATOS = new Set(["finanzas"]);
 
-export function Legado({ area, sub, datos, user, mesFoco, onEditMonth }) {
+export function Legado({ area, sub, datos, user, mesFoco, onEditMonth, extra }) {
   const { facturas, monthlyData, proveedores, config, loading, error, reload } = datos;
 
   if (NECESITA_DATOS.has(area)) {
@@ -28,7 +28,7 @@ export function Legado({ area, sub, datos, user, mesFoco, onEditMonth }) {
   const v = `${area}/${sub}`;
   let vista = null;
   switch (v) {
-    case "personas/seleccion": vista = <CVCandidatosView currentUser={user} />; break;
+    case "personas/seleccion": vista = <CVCandidatosView currentUser={user} abrirId={extra} />; break;
     case "finanzas/tesoreria": vista = <Tesoreria />; break;
     case "finanzas/historia": vista = <HistoriaDinero />; break;
     case "finanzas/cierre": vista = <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={reload} initialMonth={mesFoco} />; break;
