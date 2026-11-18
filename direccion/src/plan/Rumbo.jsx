@@ -295,8 +295,7 @@ export function PlanRumbo({ user }) {
       <TableroRumbo quien={quien} user={user} />
       <p className="rb-leyenda">Arrastra las tarjetas entre columnas (o usa las flechas). Una tarjeta sin tocar en {DIAS_GRIS} días se pone gris: actualízala o pulsa «Sigue igual».</p>
       {ajustes && <AjustesRumbo onClose={() => setAjustes(false)} />}
-      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: quien || "" }} onClose={() => setNuevo(false)} onGuardado={(n) => { setNuevo(false); cargarPlan(); if (n?.id) setRecien(n); }} />}
-      {recien && <ProyectoPanel p={recien} user={user} onClose={() => setRecien(null)} />}
+      {nuevo && <EditarProyecto p={{ columna: "siguiente", responsable: quien || "" }} onClose={() => setNuevo(false)} onGuardado={() => { setNuevo(false); cargarPlan(); }} />}
     </>
   );
 }
