@@ -24,7 +24,8 @@ function Chip({ k, children }) {
   return <span style={{ display: "inline-block", fontSize: 12, fontWeight: 700, padding: "3px 9px", borderRadius: 999, whiteSpace: "nowrap", background: c[1], color: c[2] }}>{children}</span>;
 }
 const EstadoC = ({ e }) => <Chip k={(ESTADOS_C[e] || ["", "sin_datos"])[1]}>{(ESTADOS_C[e] || [e])[0]}</Chip>;
-const canalT = (c) => (c === "whatsapp" ? "WhatsApp" : "Correo");
+const CANAL_T = { whatsapp: "WhatsApp", correo: "Correo", llamada: "Llamada", formulario: "Formulario" };
+const canalT = (c) => CANAL_T[c] || c;
 const rellenar = (t, nombre, enlace) => String(t || "").replaceAll("[producto]", nombre || "").replaceAll("[enlace]", enlace || "");
 const waUrl = (tel, txt) => `https://wa.me/${tel}?text=${encodeURIComponent(txt)}`;
 
@@ -43,6 +44,34 @@ async function abrirWhatsApp(tel, txt, crear) {
   catch (e) { if (w) w.close(); avisar(msg(e), "mal"); return false; }
 }
 
+// «Llamar» (enlace tel:) y, al pulsarlo, «Anotar llamada»: crea un contacto con canal Llamada y lo que han dicho
+function Llamar({ tel, telefono, anotar }) {
+  const [abierto, setAbierto] = useState(false);
+  const [txt, setTxt] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  if (!tel) return null;
+  const guardar = async () => {
+    if (!txt.trim()) { avisar("Escribe lo que han dicho", "mal"); return; }
+    setOcupado(true);
+    try { await anotar(txt.trim()); setAbierto(false); setTxt(""); avisar("Llamada anotada"); } catch (e) { avisar(msg(e), "mal"); } finally { setOcupado(false); }
+  };
+  return (
+    <div style={{ display: "grid", gap: 6, justifyItems: "start" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <small>{telefono || `+${tel}`}</small>
+        <a className="btn-l" href={`tel:+${tel}`} onClick={() => anotar && setAbierto(true)}>Llamar</a>
+        {anotar && !abierto && <button className="btn-txt" onClick={() => setAbierto(true)}>Anotar llamada</button>}
+      </div>
+      {abierto && (
+        <div style={{ width: "100%" }}>
+          <label className="campo">Qué han dicho en la llamada<textarea rows={3} value={txt} onChange={(e) => setTxt(e.target.value)} /></label>
+          <div style={{ display: "flex", gap: 8 }}><button className="btn-p" disabled={ocupado} onClick={guardar}>Guardar llamada</button><button className="btn-l" onClick={() => setAbierto(false)}>Cancelar</button></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ───────────────────────── Ficha en Preparando ─────────────────────────
 export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescartar, onCambio }) {
   const [d, setD] = useState(null);
@@ -50,6 +79,7 @@ export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescar
   const [editAn, setEditAn] = useState(null);
   const [wa, setWa] = useState(null); // { supplier_id, tel, texto }
   const [verPl, setVerPl] = useState(false);
+  const [verForm, setVerForm] = useState(null); // id del distribuidor con la plantilla de formulario a la vista
   const [ocupado, setOcupado] = useState(false);
   const fabricar = modo === "fabricar";
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
@@ -83,6 +113,13 @@ export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescar
     try { await crearContacto({ p_distribuidor: dist.id, p_canal: "correo", p_tipo: "producto" }); avisar(`Correo a ${dist.nombre} en cola: lo envía el agente en su próxima pasada.`); cargar(); onCambio(); }
     catch (e) { avisar(msg(e), "mal"); } finally { setOcupado(false); }
   };
+  const formularioEnviado = async (dist) => {
+    setOcupado(true);
+    try { await crearContacto({ p_distribuidor: dist.id, p_canal: "formulario", p_tipo: "producto" }); setVerForm(null); avisar(`Anotado: formulario enviado a ${dist.nombre}. La respuesta se anota a mano.`); cargar(); onCambio(); }
+    catch (e) { avisar(msg(e), "mal"); } finally { setOcupado(false); }
+  };
+  const anotarLlamada = (dist) => async (texto) => { await crearContacto({ p_distribuidor: dist.id, p_canal: "llamada", p_tipo: "producto", p_mensaje: texto }); cargar(); onCambio(); };
+  const textoCorreo = `${rellenar(pl.correo_distribuidor?.texto, f.nombre, f.fuente_url)}`;
   const faltanCat = d.distribuidores.filter((x) => x.catalogo_estado !== "recibido" && !x.catalogo_pedido);
   const pedirCatalogos = async () => {
     setOcupado(true);
@@ -178,9 +215,28 @@ export function Preparando({ id, f, setF, modo, guardando, onProgramar, onDescar
         <h4 style={{ margin: "8px 0 4px" }}>3 · Escribir al distribuidor encontrado</h4>
         {!d.distribuidores.length ? <p className="sub" style={{ marginTop: 0 }}>{a ? "El agente no ha encontrado distribuidores para este producto." : "Los propone el agente al hacer el análisis."}</p> : (
           <ul className="movers">{d.distribuidores.map((x) => (
-            <li key={x.id} style={{ padding: "8px 0", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-              <div style={{ flex: 1, minWidth: 200 }}><b>{x.nombre}</b>{x.tipo && <small className="pf">{x.tipo}</small>}{x.motivo && <small className="pf">{x.motivo}</small>}{!x.correo && !x.contacto && <small className="pf">Sin correo guardado: el agente lo busca antes de enviar.</small>}</div>
-              {x.contacto ? <EstadoC e={x.contacto.estado} /> : <button className="btn-p" disabled={ocupado} onClick={() => enviarCorreo(x)}>Enviar correo</button>}
+            <li key={x.id} style={{ padding: "8px 0", display: "grid", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 200 }}><b>{x.nombre}</b> {x.conocido ? <Chip k="bien">Ya lo conocemos</Chip> : x.zona_sevilla ? <Chip k="info">Zona de Sevilla</Chip> : null}
+                  {x.tipo && <small className="pf">{x.tipo}</small>}{x.motivo && <small className="pf">{x.motivo}</small>}
+                  {x.web && <small className="pf"><a href={x.web} target="_blank" rel="noreferrer">{x.web.replace(/^https?:\/\//, "")}</a></small>}
+                  {!x.correo && !x.contacto && x.forma_contacto !== "formulario" && x.forma_contacto !== "telefono" && <small className="pf">Sin correo guardado: el agente lo busca antes de enviar.</small>}</div>
+                {x.contacto ? <EstadoC e={x.contacto.estado} />
+                  : x.forma_contacto === "formulario" ? <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}><Chip k="ojo">Solo formulario</Chip><button className="btn-txt" onClick={() => setVerForm(verForm === x.id ? null : x.id)}>{verForm === x.id ? "Ocultar" : "Preparar"}</button></div>
+                  : x.forma_contacto === "telefono" ? <Chip k="ojo">Solo teléfono</Chip>
+                  : <button className="btn-p" disabled={ocupado} onClick={() => enviarCorreo(x)}>Enviar correo</button>}
+              </div>
+              {verForm === x.id && !x.contacto && (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <pre style={{ whiteSpace: "pre-wrap", background: "var(--bg)", padding: 12, borderRadius: 10, fontFamily: "inherit", fontSize: 13.5, margin: 0 }}>{textoCorreo}</pre>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn-l" onClick={() => navigator.clipboard?.writeText(textoCorreo).then(() => avisar("Texto copiado")).catch(() => {})}>Copiar texto</button>
+                    {x.formulario_url && <a className="btn-l" href={x.formulario_url} target="_blank" rel="noreferrer">Abrir formulario</a>}
+                    <button className="btn-p" disabled={ocupado} onClick={() => formularioEnviado(x)}>Lo he enviado</button>
+                  </div>
+                </div>
+              )}
+              <Llamar tel={x.tel} telefono={x.telefono} anotar={x.contacto ? null : anotarLlamada(x)} />
             </li>
           ))}</ul>
         )}
@@ -283,9 +339,13 @@ function DistLista() {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}><b>{x.nombre}</b><Chip k={o[1]}>{o[0]}</Chip></div>
         {x.tipo && <small className="pf">{x.tipo}</small>}
         {x.marcas?.length > 0 ? <small>{x.marcas.join(" · ")}</small> : x.n_productos > 0 && <small className="pf">{x.n_productos} productos en Epos</small>}
+        {(x.zona_sevilla || x.forma_contacto === "formulario" || x.forma_contacto === "telefono") && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {x.zona_sevilla && <Chip k="info">Zona de Sevilla</Chip>}{x.forma_contacto === "formulario" && <Chip k="ojo">Solo formulario</Chip>}{x.forma_contacto === "telefono" && <Chip k="ojo">Solo teléfono</Chip>}</div>}
+        {(x.web || x.formulario_url || x.fuente_url) && <small className="pf">{x.web && <a href={x.web} target="_blank" rel="noreferrer">Web</a>}{x.formulario_url && <>{x.web ? " · " : ""}<a href={x.formulario_url} target="_blank" rel="noreferrer">Formulario</a></>}{x.fuente_url && <>{x.web || x.formulario_url ? " · " : ""}<a href={x.fuente_url} target="_blank" rel="noreferrer">De dónde sale</a></>}</small>}
+        <Llamar tel={x.tel} telefono={x.telefono} anotar={async (texto) => { await sb.rpc("lab_contacto_crear", { p_prueba: null, p_distribuidor: x.id || null, p_supplier: x.id ? null : x.supplier_id, p_canal: "llamada", p_tipo: "producto", p_mensaje: texto }); }} />
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <Chip k={c[1]}>{c[0]}{x.catalogo_fecha ? ` · ${new Date(`${x.catalogo_fecha}T12:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}` : ""}</Chip>
-          {x.catalogo_estado === "sin" && (x.id ? <button className="btn-l" disabled={ocupado} onClick={() => pedir(x)}>Pedir catálogo</button>
+          {x.catalogo_estado === "sin" && (x.id ? x.forma_contacto === "formulario" || x.forma_contacto === "telefono" ? null : <button className="btn-l" disabled={ocupado} onClick={() => pedir(x)}>Pedir catálogo</button>
             : x.tel ? <button className="btn-l" onClick={() => pedir(x)}>Pedir catálogo (WhatsApp)</button> : <small className="pf">Sin teléfono · añadirlo en Pedidos</small>)}
         </div>
       </div>
@@ -348,7 +408,7 @@ function Contactos({ lista, onAbrir }) {
                 ) : c.respuesta || <span className="pf">{c.estado === "en_cola" ? "Lo envía el agente" : "Sin respuesta todavía"}</span>}
               </td>
               <td style={{ whiteSpace: "nowrap" }}>
-                {c.canal === "whatsapp" && anot?.id !== c.id && ["esperando", "respondido", "sin_respuesta"].includes(c.estado) && <button className="btn-txt" onClick={() => setAnot({ id: c.id, texto: c.respuesta || "" })}>Anotar respuesta</button>}
+                {c.canal !== "correo" && anot?.id !== c.id && ["esperando", "respondido", "sin_respuesta"].includes(c.estado) && <button className="btn-txt" onClick={() => setAnot({ id: c.id, texto: c.respuesta || "" })}>Anotar respuesta</button>}
                 {c.estado === "respondido" && c.prueba_id && <button className="btn-l" onClick={() => esProveedor(c)}>Es el proveedor</button>}
               </td>
             </tr>
@@ -378,6 +438,8 @@ function Reglas() {
         <li><b>Nunca dos veces</b> al mismo contacto por la misma prueba (lo impide la base de datos).</li>
         <li><b>Etiqueta en Gmail:</b> «Producto», con subetiquetas Producto/Distribuidores y Producto/Catálogos. Cada respuesta se une a su contacto por el hilo del correo.</li>
         <li><b>WhatsApp:</b> se abre a mano y la respuesta se anota a mano. Los teléfonos salen de Pedidos: {r.con} de {r.tot} proveedores lo tienen.</li>
+        <li><b>Llamadas y formularios:</b> «Llamar» abre el teléfono y se anota lo que han dicho; si un distribuidor solo tiene formulario, se copia la plantilla, se envía a mano y se marca «Lo he enviado». Los dos cuentan para no repetir contacto.</li>
+        <li><b>Datos de distribuidores:</b> solo teléfonos, correos y formularios de empresa publicados por ellos (web, directorios, Google Maps), con el enlace de donde salen.</li>
       </ul>
       <div className="fila-campos">
         <label className="campo">Tope de correos al día<input inputMode="numeric" value={r.tope} onChange={(e) => setR({ ...r, tope: e.target.value })} /></label>
