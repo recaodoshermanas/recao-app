@@ -57,7 +57,12 @@ export function horasExtraAuto(turno, fecha) {
 
 export const TURNO_OPCIONES = ["Mañana", "Tarde", "Apoyo 1", "Apoyo 2", "Apoyo 3", "Descanso", "Vacaciones", "Baja", "Permiso", "Formación"];
 export const PRECIO_HORA_FORMACION = 6;
-export const HORAS_FORMACION = 4;
+export const HORAS_FORMACION = 6; // #217: horas por defecto de una formación nueva (antes 4)
+export const HORAS_FORMACION_ANTIGUA = 4; // #217: las formaciones guardadas sin horas se siguen contando con 4 h
+// #217: horario de la formación ("09:00:00" → "9:00") y horas posibles (de 7:00 a 23:00, cada media hora)
+export const horaFormacion = (t) => { if (!t) return ""; const [h, m] = String(t).split(":"); return `${Number(h)}:${m}`; };
+export const horarioFormacion = (ini, fin) => (ini && fin ? `${horaFormacion(ini)}–${horaFormacion(fin)}` : "");
+export const HORAS_TIENDA = Array.from({ length: 33 }, (_, i) => `${String(7 + Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 
 export function ymd(d) {
   const y = d.getFullYear();

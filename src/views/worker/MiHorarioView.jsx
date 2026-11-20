@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { F, SF, C } from "../../lib/styles.js";
 import { IcoLeft, IcoRight } from "../../lib/icons.jsx";
 import { sb } from "../../lib/supabase.js";
-import { TURNOS, ymd, horasTurno, HORAS_FORMACION } from "../../lib/turnos.js";
+import { TURNOS, ymd, horasTurno, HORAS_FORMACION_ANTIGUA, horarioFormacion } from "../../lib/turnos.js";
 import { BOLSA_ACTIVA } from "../../lib/bolsa.js"; // BOLSA
 import { cargarFestivos, PLUS_FESTIVO_8H } from "../../lib/festivos.js"; // FESTIVOS
 
@@ -18,6 +18,7 @@ export function MiHorarioView({ user, dia }) {
   const [cursor, setCursor] = useState(() => { const d = /^\d{4}-\d{2}-\d{2}$/.test(dia || "") ? new Date(dia + "T12:00:00") : new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [mapa, setMapa] = useState({});
   const [horasFor, setHorasFor] = useState({}); // #138
+  const [horFor, setHorFor] = useState({}); // #217: fecha → "9:00–15:00"
   const [pend, setPend] = useState({}); // BOLSA: fecha → true si es un descanso compensatorio pendiente
   const [enBolsa, setEnBolsa] = useState({}); // #198: fecha → true si dirección ha sacado su turno a la bolsa sin quitarla
   const [fest, setFest] = useState({}); // FESTIVOS: fecha → { nombre, ambito }
@@ -35,8 +36,8 @@ export function MiHorarioView({ user, dia }) {
     const hasta = ymd(new Date(cursor.y, cursor.m + 1, 0));
     let rows0 = {};
     try {
-      const rows = await sb.select("horarios", `select=fecha,turno,horas_formacion&usuario_id=eq.${user.id}&fecha=gte.${desde}&fecha=lte.${hasta}`);
-      const m = {}; const hf = {}; rows.forEach(r => { m[r.fecha] = r.turno; if (r.turno === "Formación") hf[r.fecha] = r.horas_formacion ?? HORAS_FORMACION; }); setMapa(m); setHorasFor(hf); rows0 = m;
+      const rows = await sb.select("horarios", `select=fecha,turno,horas_formacion,formacion_inicio,formacion_fin&usuario_id=eq.${user.id}&fecha=gte.${desde}&fecha=lte.${hasta}`);
+      const m = {}; const hf = {}; const hh = {}; rows.forEach(r => { m[r.fecha] = r.turno; if (r.turno === "Formación") { hf[r.fecha] = Number(r.horas_formacion ?? HORAS_FORMACION_ANTIGUA); if (r.formacion_inicio && r.formacion_fin) hh[r.fecha] = horarioFormacion(r.formacion_inicio, r.formacion_fin); } }); setMapa(m); setHorasFor(hf); setHorFor(hh); rows0 = m;
     } catch (e) { setMapa({}); }
     try { setFest(await cargarFestivos(desde, hasta)); } catch (e) { setFest({}); } // FESTIVOS
     if (BOLSA_ACTIVA) { // BOLSA
@@ -82,7 +83,8 @@ export function MiHorarioView({ user, dia }) {
               {esFest && <span aria-label="Festivo" style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: 999, background: C.red }} />}
               <span style={{ fontFamily: F, fontSize: 12.5, fontWeight: 600, color: esFest && !def ? C.red : undefined }}>{d.getDate()}</span>
               {def && <span style={{ fontFamily: F, fontSize: 8.5, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{def.label}</span>}
-              {def && mapa[f] === "Formación" && <span style={{ fontFamily: F, fontSize: 8.5, fontWeight: 700, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{horasFor[f] ?? HORAS_FORMACION} h</span>}
+              {def && mapa[f] === "Formación" && horFor[f] && <span style={{ fontFamily: F, fontSize: 8.5, fontWeight: 700, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{horFor[f].replace(/:00/g, "")}</span>}
+              {def && mapa[f] === "Formación" && <span style={{ fontFamily: F, fontSize: 8.5, fontWeight: 700, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{String(horasFor[f] ?? HORAS_FORMACION_ANTIGUA).replace(".", ",")} h</span>}
               {def && def.horas && <span style={{ fontFamily: F, fontSize: 8.5, fontWeight: 700, lineHeight: 1, marginTop: 2, textAlign: "center" }}>{horaCorta(horasTurno(mapa[f], f))}</span>}
               {esPend && <span style={{ fontFamily: F, fontSize: 7.5, fontWeight: 700, lineHeight: 1, marginTop: 2, color: "#8A6410" }}>desc. pend.</span>}
               {esBolsa && <span style={{ fontFamily: F, fontSize: 7.5, fontWeight: 700, lineHeight: 1, marginTop: 2, color: "#1F4F85", textAlign: "center" }}>en bolsa</span>}
@@ -90,6 +92,17 @@ export function MiHorarioView({ user, dia }) {
           );
         })}
       </div>
+
+      {Object.keys(horasFor).length > 0 && ( // #217: días de formación con su horario
+        <div style={{ marginTop: 14, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "10px 12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: F, fontSize: 12.5, fontWeight: 700, color: C.char }}><span style={{ width: 8, height: 8, borderRadius: 999, background: TURNOS["Formación"].fg }} />Tus días de formación</div>
+          {Object.keys(horasFor).sort().map((x) => (
+            <div key={x} style={{ fontFamily: F, fontSize: 12.5, color: C.char, marginTop: 5 }}>
+              <strong>{Number(x.slice(8))}</strong> · Formación{horFor[x] ? ` · ${horFor[x]}` : ""} · {String(horasFor[x]).replace(".", ",")} h
+            </div>
+          ))}
+        </div>
+      )}
 
       {Object.keys(fest).length > 0 && ( // FESTIVOS
         <div style={{ marginTop: 14, background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "10px 12px" }}>

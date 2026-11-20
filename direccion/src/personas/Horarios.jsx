@@ -1,7 +1,7 @@
 // Personas · Horarios: cuadrante semanal con la cobertura integrada.
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
-import { TURNOS, TURNO_OPCIONES, horasTurno, NOTA_FINDE, HORAS_FORMACION, PRECIO_HORA_FORMACION } from "../../../src/lib/turnos.js";
+import { TURNOS, TURNO_OPCIONES, horasTurno, NOTA_FINDE, HORAS_FORMACION, HORAS_FORMACION_ANTIGUA, PRECIO_HORA_FORMACION, HORAS_TIENDA, horarioFormacion } from "../../../src/lib/turnos.js";
 import { requeridosDe, TURNOS_TRABAJO, REGLA_COBERTURA } from "../../../src/lib/cobertura.js";
 import { Panel, useEquipo, avisar, hoyStr, masDias, lunesDe, fechaCorta, Cargando, Avatar } from "../ui.jsx";
 import { BOLSA_ACTIVA, DIAS_ANTELACION, destinoDe, diasHasta } from "../../../src/lib/bolsa.js"; // BOLSA
@@ -38,7 +38,8 @@ export function Horarios({ extra }) {
   const [festivos, setFestivos] = useState({}); // FESTIVOS: fecha → { nombre, ambito }
   const [verFestivos, setVerFestivos] = useState(false);
   const [horasFor, setHorasFor] = useState({}); // #138: horas de cada formación de la semana ("uid|fecha" → horas)
-  const [formando, setFormando] = useState(null); // #138: {horas} mientras se elige la duración de una formación
+  const [horFor, setHorFor] = useState({}); // #217: horario de cada formación ("uid|fecha" → {ini, fin} en "HH:MM")
+  const [formando, setFormando] = useState(null); // #138/#217: {ini, fin, horas} mientras se elige el horario de una formación
   const [deb, setDeb] = useState({ nomina: [], saldos: {}, marcas: [] }); // #197: días que debe cada persona de nómina
   const [sacando, setSacando] = useState(false);
 
@@ -52,8 +53,13 @@ export function Horarios({ extra }) {
   }, [fechaOk, uidIn, equipo, mapa]);
 
   const cargarSemana = useCallback(async () => {
-    const r = await sb.select("horarios", `select=usuario_id,fecha,turno,horas_formacion&fecha=gte.${lunes}&fecha=lte.${masDias(lunes, 6)}`);
-    const m = {}, hf = {}; r.forEach((h) => { m[`${h.usuario_id}|${h.fecha}`] = h.turno; if (h.turno === "Formación") hf[`${h.usuario_id}|${h.fecha}`] = h.horas_formacion ?? HORAS_FORMACION; }); setMapa(m); setHorasFor(hf);
+    const r = await sb.select("horarios", `select=usuario_id,fecha,turno,horas_formacion,formacion_inicio,formacion_fin&fecha=gte.${lunes}&fecha=lte.${masDias(lunes, 6)}`);
+    const m = {}, hf = {}, hh = {};
+    r.forEach((h) => {
+      const k = `${h.usuario_id}|${h.fecha}`; m[k] = h.turno;
+      if (h.turno === "Formación") { hf[k] = Number(h.horas_formacion ?? HORAS_FORMACION_ANTIGUA); if (h.formacion_inicio && h.formacion_fin) hh[k] = { ini: h.formacion_inicio.slice(0, 5), fin: h.formacion_fin.slice(0, 5) }; }
+    });
+    setMapa(m); setHorasFor(hf); setHorFor(hh);
   }, [lunes]);
   const cargarProx = useCallback(async () => {
     const r = await sb.select("horarios", `select=usuario_id,fecha,turno&fecha=gte.${hoy}&fecha=lte.${masDias(hoy, 60)}`);
@@ -105,12 +111,14 @@ export function Horarios({ extra }) {
     return Object.keys(h).sort().flatMap((f) => h[f].map((t) => ({ fecha: f, turno: t })));
   }, [prox]);
 
-  const guardar = async (uid, fecha, turno, horas) => {
+  const guardar = async (uid, fecha, turno, horas, hor) => {
     const k = `${uid}|${fecha}`;
+    const esF = turno === "Formación";
     setMapa((m) => { const n = { ...m }; if (turno) n[k] = turno; else delete n[k]; return n; });
-    setHorasFor((m) => { const n = { ...m }; if (turno === "Formación") n[k] = horas; else delete n[k]; return n; });
+    setHorasFor((m) => { const n = { ...m }; if (esF) n[k] = horas; else delete n[k]; return n; });
+    setHorFor((m) => { const n = { ...m }; if (esF && hor) n[k] = hor; else delete n[k]; return n; }); // #217
     try {
-      if (turno) await sb.upsert("horarios", { usuario_id: uid, fecha, turno, horas_formacion: turno === "Formación" ? horas : null }, "usuario_id,fecha");
+      if (turno) await sb.upsert("horarios", { usuario_id: uid, fecha, turno, horas_formacion: esF ? horas : null, formacion_inicio: esF && hor ? hor.ini : null, formacion_fin: esF && hor ? hor.fin : null }, "usuario_id,fecha");
       else await sb.delete("horarios", `usuario_id=eq.${uid}&fecha=eq.${fecha}`);
       cargarProx();
       if (BOLSA_ACTIVA) setTimeout(() => cargarBolsa().catch(() => {}), 400); // si cubría un turno de la bolsa, la base de datos lo retira sola
@@ -245,28 +253,39 @@ export function Horarios({ extra }) {
       </div>
 
       {celda && (
-        <Panel titulo={celda.persona.nombre} sub={fechaCorta(celda.fecha)} onClose={() => { setCelda(null); setFormando(null); }}>
+        <Panel titulo={celda.persona.nombre} sub={(() => { const k = `${celda.persona.id}|${celda.fecha}`; if (mapa[k] !== "Formación") return fechaCorta(celda.fecha); const hor = horFor[k]; return `${fechaCorta(celda.fecha)} · Formación${hor ? " " + horarioFormacion(hor.ini, hor.fin) : ""} · ${String(horasFor[k] ?? HORAS_FORMACION_ANTIGUA).replace(".", ",")} h`; })()} onClose={() => { setCelda(null); setFormando(null); }}>
           {pendiente[`${celda.persona.id}|${celda.fecha}`] && <p className="b-leyenda-pend">Este día es su descanso compensatorio pendiente. Si le cambias el turno a mano, la oferta se retira de la bolsa.</p>}
           <div className="opciones-turno">
             {TURNO_OPCIONES.map((t) => {
               const sel = mapa[`${celda.persona.id}|${celda.fecha}`] === t;
               return (
                 <button key={t} className={sel ? "sel" : ""} style={{ background: TURNOS[t].bg, color: TURNOS[t].fg }}
-                  onClick={() => { if (t === "Formación") { setFormando({ horas: String(horasFor[`${celda.persona.id}|${celda.fecha}`] ?? HORAS_FORMACION) }); return; } guardar(celda.persona.id, celda.fecha, t); setCelda(null); }}>
+                  onClick={() => { if (t === "Formación") { const k = `${celda.persona.id}|${celda.fecha}`; const hor = horFor[k]; setFormando(hor ? { ...hor } : { ini: "", fin: "", horas: horasFor[k], antigua: mapa[k] === "Formación" }); return; } guardar(celda.persona.id, celda.fecha, t); setCelda(null); }}>
                   <b>{t}</b>{TURNOS[t].horas && <small>{horasTurno(t, celda.fecha)}</small>}
                 </button>
               );
             })}
           </div>
-          {formando && (() => {
-            const h = Number(String(formando.horas).replace(",", "."));
-            const ok = Number.isFinite(h) && h > 0 && h <= 12;
+          {formando && (() => { // #217: hora de inicio y fin; las horas son siempre fin menos inicio
+            const aMin = (x) => { const [h, m] = x.split(":").map(Number); return h * 60 + m; };
+            const deMin = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
+            const { ini, fin } = formando;
+            const h = ini && fin ? (aMin(fin) - aMin(ini)) / 60 : (formando.horas ?? HORAS_FORMACION);
+            const fallo = !ini ? "Falta la hora de inicio" : !fin ? "Falta la hora de fin" : aMin(fin) <= aMin(ini) ? "La hora de fin tiene que ser después de la de inicio" : aMin(ini) < 420 || aMin(fin) > 1380 ? "Tiene que estar entre las 7:00 y las 23:00" : "";
+            const elegirIni = (v) => setFormando((f) => ({ ...f, ini: v, fin: v ? deMin(Math.min(aMin(v) + HORAS_FORMACION * 60, 1380)) : f.fin }));
+            const hTxt = String(Math.round(h * 100) / 100).replace(".", ",");
             return (
               <div className="hueco-acc">
-                <span><b>Formación</b>: se paga a {PRECIO_HORA_FORMACION} € la hora en el sobre. Horas de esta sesión:</span>
-                <input type="text" inputMode="decimal" value={formando.horas} onChange={(e) => setFormando({ horas: e.target.value })} style={{ width: 70 }} aria-label="Horas de formación" />
-                <span>{ok ? `${(h * PRECIO_HORA_FORMACION).toFixed(2).replace(".", ",")} €` : "Pon entre 0,5 y 12 horas"}</span>
-                <button className="btn-p" disabled={!ok} onClick={() => { guardar(celda.persona.id, celda.fecha, "Formación", Math.round(h * 100) / 100); setFormando(null); setCelda(null); }}>Guardar formación</button>
+                <span><b>Formación</b>: se paga a {PRECIO_HORA_FORMACION} € la hora en el sobre.{formando.antigua && !ini ? ` Está guardada sin horario (${hTxt} h); ponle la hora de inicio y de fin para cambiarla.` : ""}</span>
+                <label>Empieza <select value={ini} onChange={(e) => elegirIni(e.target.value)} aria-label="Hora de inicio de la formación">
+                  <option value="">–</option>{HORAS_TIENDA.slice(0, -1).map((x) => <option key={x} value={x}>{x.replace(/^0/, "")}</option>)}
+                </select></label>
+                <label>Termina <select value={fin} onChange={(e) => setFormando((f) => ({ ...f, fin: e.target.value }))} aria-label="Hora de fin de la formación">
+                  <option value="">–</option>{HORAS_TIENDA.slice(1).map((x) => <option key={x} value={x}>{x.replace(/^0/, "")}</option>)}
+                </select></label>
+                {(!fallo || !ini || !fin) && <span><b>{hTxt} h</b> · {(h * PRECIO_HORA_FORMACION).toFixed(2).replace(".", ",")} €</span>}
+                {fallo && <small role="alert">{fallo}</small>}
+                <button className="btn-p" disabled={!!fallo} title={fallo || undefined} onClick={() => { guardar(celda.persona.id, celda.fecha, "Formación", Math.round(h * 100) / 100, { ini, fin }); setFormando(null); setCelda(null); }}>Guardar formación</button>
               </div>
             );
           })()}
@@ -333,8 +352,8 @@ function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {}, horasFor = {}
               <td key={f} className={`${f === hoy ? "hoy" : ""}${f < hoy ? " pasado" : ""}`}>
                 <button className={`celda ${t ? "" : "vacia"}${pendiente[`${p.id}|${f}`] ? " pend" : ""}${sinQuitar[`${p.id}|${f}`] ? " sq" : ""}${devol[`${p.id}|${f}`] ? " dev" : ""}`} onClick={() => onCelda({ persona: p, fecha: f })}
                   style={info ? { background: info.bg, color: info.fg } : undefined}
-                  aria-label={`${p.nombre}, ${fechaCorta(f)}: ${t || "sin turno"}${sinQuitar[`${p.id}|${f}`] ? " (en bolsa)" : ""}${devol[`${p.id}|${f}`] ? " (devolución)" : ""}`} title={t ? `${t}${info?.horas ? " · " + horasTurno(t, f) : ""}${sinQuitar[`${p.id}|${f}`] ? " · en bolsa" : ""}${devol[`${p.id}|${f}`] ? " · devolución" : ""}` : "Sin turno"}>
-                  {t ? (t === "Formación" ? `F ${horasFor[`${p.id}|${f}`] ?? HORAS_FORMACION}h` : ABREV[t] || t) : "+"}
+                  aria-label={`${p.nombre}, ${fechaCorta(f)}: ${t || "sin turno"}${sinQuitar[`${p.id}|${f}`] ? " (en bolsa)" : ""}${devol[`${p.id}|${f}`] ? " (devolución)" : ""}`} title={t ? `${t}${info?.horas ? " · " + horasTurno(t, f) : ""}${t === "Formación" ? `${horFor[`${p.id}|${f}`] ? " · " + horarioFormacion(horFor[`${p.id}|${f}`].ini, horFor[`${p.id}|${f}`].fin) : ""} · ${String(horasFor[`${p.id}|${f}`] ?? HORAS_FORMACION_ANTIGUA).replace(".", ",")} h` : ""}${sinQuitar[`${p.id}|${f}`] ? " · en bolsa" : ""}${devol[`${p.id}|${f}`] ? " · devolución" : ""}` : "Sin turno"}>
+                  {t ? (t === "Formación" ? (horFor[`${p.id}|${f}`] ? `F ${horarioFormacion(horFor[`${p.id}|${f}`].ini, horFor[`${p.id}|${f}`].fin).replace(/:00/g, "")}` : `F ${horasFor[`${p.id}|${f}`] ?? HORAS_FORMACION_ANTIGUA}h`) : ABREV[t] || t) : "+"}
                   {sinQuitar[`${p.id}|${f}`] && <small className="celda-tag">en bolsa</small>}
                   {devol[`${p.id}|${f}`] && <small className="celda-tag">devolución</small>}
                 </button>
