@@ -208,7 +208,7 @@ export function Horarios({ extra }) {
             </thead>
             <tbody>
               {grupos.map((g) => (
-                <GrupoFilas key={g.id} g={g} dias={dias} mapa={mapa} hoy={hoy} onCelda={setCelda} pendiente={pendiente} horasFor={horasFor} sinQuitar={sinQuitar} devol={devol} />
+                <GrupoFilas key={g.id} g={g} dias={dias} mapa={mapa} hoy={hoy} onCelda={setCelda} pendiente={pendiente} horasFor={horasFor} horFor={horFor} sinQuitar={sinQuitar} devol={devol} />
               ))}
               <tr className="cobertura">
                 <th>Cobertura</th>
@@ -338,7 +338,7 @@ export function Horarios({ extra }) {
   );
 }
 
-function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {}, horasFor = {}, sinQuitar = {}, devol = {} }) {
+function GrupoFilas({ g, dias, mapa, hoy, onCelda, pendiente = {}, horasFor = {}, horFor = {}, sinQuitar = {}, devol = {} }) {
   return (
     <>
       <tr className="grupo"><th colSpan={8}>{g.label}</th></tr>
