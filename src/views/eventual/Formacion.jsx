@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { F, SF, C } from "../../lib/styles.js";
 import { sb } from "../../lib/supabase.js";
 import { IcoCheck, IcoLeft } from "../../lib/icons.jsx";
-import { duracionTxt, estadoVideo, pctVideo, resumenFormacion } from "../../lib/formacion.js";
+import { duracionTxt, estadoVideo, pctVideo, resumenFormacion, esVideoApp } from "../../lib/formacion.js";
 
 // Al volver a ver un vídeo ya completo se puede mover libremente. Si dirección no lo quiere, poner false.
 const LIBRE_TRAS_VERLO = true;
@@ -41,17 +41,90 @@ export function TarjetaFormacion({ videos, onAbrir }) {
 
 const chip = (txt, bg, fg) => <span style={{ fontFamily: F, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: bg, color: fg }}>{txt}</span>;
 
-export function FormacionView({ videos, abrirId, onCambio, onVolver }) {
+// #218: con «bloques» (app de la plantilla) la lista se parte en dos desplegables, cerrados al entrar:
+// «Formación en el trabajo» (como siempre) y «Cómo funciona la app» (solo información, se puede adelantar).
+const IcoTrabajo = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9.5v5l4.5-2.5-4.5-2.5" /></svg>;
+const IcoApp = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5" /><path d="M10.5 18.5h3" /></svg>;
+const Flecha = ({ abierto }) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: abierto ? "rotate(180deg)" : "none", transition: "transform .15s" }}><path d="M6 9l6 6 6-6" /></svg>;
+
+function FilaVideo({ v, i, portadas, fotogramas, onAbrir, info }) {
+  const est = estadoVideo(v);
+  return (
+    <button onClick={onAbrir} style={{ display: "flex", gap: 12, alignItems: "center", textAlign: "left", background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 16, padding: 10, cursor: "pointer" }}>
+      <span style={{ width: 96, height: 60, flexShrink: 0, borderRadius: 10, background: C.char, overflow: "hidden", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {portadas[v.id] && <img src={portadas[v.id]} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+        {!portadas[v.id] && fotogramas[v.id] && <video src={fotogramas[v.id] + "#t=0.1"} preload="metadata" muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} />}
+        <span style={{ position: "relative", width: 26, height: 26, borderRadius: "50%", background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ borderLeft: "9px solid #fff", borderTop: "6px solid transparent", borderBottom: "6px solid transparent", marginLeft: 2 }} /></span>
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontFamily: F, fontSize: 11.5, color: C.mutL, fontWeight: 600 }}>Vídeo {i + 1} · {duracionTxt(v.duracion_seg)}</span>
+        <span style={{ display: "block", fontFamily: F, fontSize: 14.5, fontWeight: 700, color: C.char, marginTop: 2, lineHeight: 1.3 }}>{v.titulo}</span>
+        {!info && (
+          <span style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+            {est === "visto" ? chip("Visto", "#E7F3EC", "#1E7A46") : chip("Nuevo", "#FBF0DA", "#8A6410")}
+            {est === "medias" && <span style={{ fontFamily: F, fontSize: 12, color: C.mut }}>a medias · {pctVideo(v)} %</span>}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+function Bloque({ titulo, icono, nuevos, sub, progreso, abierto, onAlternar, children }) {
+  return (
+    <div style={{ background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 18, overflow: "hidden" }}>
+      <button onClick={onAlternar} aria-expanded={abierto} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: "transparent", border: "none", padding: "14px 14px", cursor: "pointer", color: C.char }}>
+        <span style={{ position: "relative", width: 42, height: 42, flexShrink: 0, borderRadius: 12, background: "#F4F0E8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {icono}
+          {nuevos > 0 && <span style={{ position: "absolute", top: -6, right: -6, minWidth: 20, height: 20, padding: "0 5px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 11.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{nuevos}</span>}
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontFamily: F, fontSize: 15, fontWeight: 700 }}>{titulo}</span>
+          {nuevos > 0 && <span style={{ display: "block", fontFamily: F, fontSize: 12.5, fontWeight: 700, color: C.red, marginTop: 2 }}>{nuevos === 1 ? "1 vídeo nuevo" : `${nuevos} vídeos nuevos`}</span>}
+          <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: C.mut, marginTop: 2 }}>{sub}</span>
+          {progreso != null && <span style={{ display: "block", height: 5, borderRadius: 999, background: "#EFEBE3", marginTop: 7, overflow: "hidden" }}><span style={{ display: "block", height: "100%", width: `${progreso}%`, background: C.gold }} /></span>}
+        </span>
+        <Flecha abierto={abierto} />
+      </button>
+      {abierto && <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "0 10px 12px" }}>{children}</div>}
+    </div>
+  );
+}
+
+export function FormacionView({ videos, abrirId, onCambio, onVolver, bloques = false }) {
   const [sel, setSel] = useState(abrirId || null);
+  const [abiertos, setAbiertos] = useState({}); // #218: cerrados al entrar
   const [portadas, setPortadas] = useState({});
   const [fotogramas, setFotogramas] = useState({});
   useEffect(() => { sb.fn("formacion", { accion: "portadas" }).then((r) => { setPortadas(r.portadas || {}); setFotogramas(r.fotogramas || {}); }).catch(() => {}); }, [(videos || []).length]);
   useEffect(() => { if (abrirId) setSel(abrirId); }, [abrirId]);
-  const lista = videos || [];
-  const { total, completos } = resumenFormacion(lista);
-  const actual = sel ? lista.find((v) => String(v.id) === String(sel)) : null;
+  const todos = videos || [];
+  const lista = bloques ? todos.filter((v) => !esVideoApp(v)) : todos;
+  const deApp = bloques ? todos.filter(esVideoApp) : [];
+  const { total, completos, pendientes } = resumenFormacion(lista);
+  const actual = sel ? todos.find((v) => String(v.id) === String(sel)) : null;
 
+  if (actual && esVideoApp(actual)) return <Reproductor key={actual.id} video={actual} portada={portadas[actual.id]} libreSiempre guardarProgreso={async () => null} onSalir={() => setSel(null)} />;
   if (actual) return <Reproductor key={actual.id} video={actual} portada={portadas[actual.id]} onCambio={onCambio} onSalir={() => setSel(null)} />;
+
+  if (bloques) {
+    const alternar = (k) => setAbiertos((a) => ({ ...a, [k]: !a[k] }));
+    return (
+      <div style={{ padding: "18px 16px 40px", maxWidth: 540, margin: "0 auto" }}>
+        <button onClick={onVolver} style={{ display: "flex", alignItems: "center", gap: 4, minHeight: 40, padding: 0, border: "none", background: "transparent", fontFamily: F, fontSize: 14, fontWeight: 600, color: C.goldSub, cursor: "pointer" }}><IcoLeft size={18} /> Volver</button>
+        <div style={{ fontFamily: SF, fontSize: 28, color: C.char, marginTop: 4 }}>Formación</div>
+        <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut, marginTop: 4 }}>{total === 0 ? "Todavía no hay vídeos de formación en el trabajo." : `${completos} de ${total} ${total === 1 ? "vídeo visto" : "vídeos vistos"}`}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
+          <Bloque titulo="Formación en el trabajo" icono={<IcoTrabajo />} nuevos={pendientes} sub={total ? `${completos} de ${total} vistos` : "Todavía no hay vídeos"} progreso={total ? Math.round((completos / total) * 100) : 0} abierto={!!abiertos.trabajo} onAlternar={() => alternar("trabajo")}>
+            {lista.length ? lista.map((v, i) => <FilaVideo key={v.id} v={v} i={i} portadas={portadas} fotogramas={fotogramas} onAbrir={() => setSel(v.id)} />) : <div style={{ fontFamily: F, fontSize: 13, color: C.mut, padding: "4px 4px 6px" }}>Todavía no hay vídeos.</div>}
+          </Bloque>
+          <Bloque titulo="Cómo funciona la app" icono={<IcoApp />} nuevos={0} sub={`${deApp.length} ${deApp.length === 1 ? "vídeo" : "vídeos"} · para consultar cuando quieras`} abierto={!!abiertos.app} onAlternar={() => alternar("app")}>
+            {deApp.length ? deApp.map((v, i) => <FilaVideo key={v.id} v={v} i={i} info portadas={portadas} fotogramas={fotogramas} onAbrir={() => setSel(v.id)} />) : <div style={{ fontFamily: F, fontSize: 13, color: C.mut, padding: "4px 4px 6px" }}>Todavía no hay vídeos.</div>}
+          </Bloque>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "18px 16px 40px", maxWidth: 540, margin: "0 auto" }}>
@@ -85,9 +158,9 @@ export function FormacionView({ videos, abrirId, onCambio, onVolver }) {
 }
 
 // #187: también lo usan las normas y protocolos (cargarUrl / guardarProgreso / volverTxt); por defecto, Formación.
-export function Reproductor({ video, portada: portadaIni, onCambio, onSalir, cargarUrl, guardarProgreso, volverTxt = "Formación" }) {
+export function Reproductor({ video, portada: portadaIni, onCambio, onSalir, cargarUrl, guardarProgreso, volverTxt = "Formación", libreSiempre = false }) {
   const completo = !!video.completo_en;
-  const libre = LIBRE_TRAS_VERLO && completo;
+  const libre = libreSiempre || (LIBRE_TRAS_VERLO && completo); // #218: los vídeos de la app se ven con libertad
   const dur = Number(video.duracion_seg) || 0;
   const vref = useRef(null);
   const caja = useRef(null);
@@ -222,7 +295,7 @@ export function Reproductor({ video, portada: portadaIni, onCambio, onSalir, car
       </div>
       {!pantalla && (
         <div style={{ fontFamily: F, fontSize: 13, color: C.mut, lineHeight: 1.5, marginTop: 12 }}>
-          {libre ? "Ya has visto este vídeo entero: puedes moverte libremente por él." : "No se puede adelantar el vídeo. Cuenta como visto cuando llegas al final."}
+          {libreSiempre ? "Vídeo para consultar: puedes adelantar, retroceder y salir cuando quieras." : libre ? "Ya has visto este vídeo entero: puedes moverte libremente por él." : "No se puede adelantar el vídeo. Cuenta como visto cuando llegas al final."}
         </div>
       )}
       {!pantalla && fin && <div role="status" style={{ marginTop: 12, background: "#E7F3EC", color: "#1E7A46", fontFamily: F, fontSize: 14, fontWeight: 700, borderRadius: 12, padding: "12px 14px" }}>¡Vídeo completo! Ya cuenta como visto.</div>}

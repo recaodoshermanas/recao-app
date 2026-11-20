@@ -13,8 +13,11 @@ export function pctVideo(v) {
   const d = Number(v.duracion_seg) || 0;
   return d > 0 ? Math.min(100, Math.floor((Number(v.max_seg) / d) * 100)) : 0;
 }
+// #218: solo cuenta «Formación en el trabajo»; los vídeos de «Cómo funciona la app» son solo información
+export const esVideoApp = (v) => v && v.bloque === "app";
 export function resumenFormacion(videos) {
-  const total = (videos || []).length;
-  const completos = (videos || []).filter((v) => v.completo_en).length;
+  const lista = (videos || []).filter((v) => !esVideoApp(v));
+  const total = lista.length;
+  const completos = lista.filter((v) => v.completo_en).length;
   return { total, completos, pendientes: total - completos };
 }

@@ -255,7 +255,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       {screen === "vacaciones" && <MisVacacionesView user={user} />}
       {screen === "facturas" && <WorkerView facturas={facturas} proveedores={proveedores} onReload={onReload} user={user} />}
       {screen === "cuenta" && <MiCuentaView />}
-      {screen === "formacion" && <FormacionView videos={videos} abrirId={videoAbrir} onCambio={cargarVideos} onVolver={() => { setVideoAbrir(null); setScreen("home"); }} />}
+      {screen === "formacion" && <FormacionView bloques videos={videos} abrirId={videoAbrir} onCambio={cargarVideos} onVolver={() => { setVideoAbrir(null); setScreen("home"); }} />}
     </div>
   );
 }
