@@ -42,6 +42,7 @@ const IcoDoc = (p) => <Ico {...p}><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M
 const IcoPedido = (p) => <Ico {...p}><path d="M6 4h12l1 4H5l1-4" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" /><path d="M10 12h4" /></Ico>; // #143
 const PEDIDO = { id: "pedido", label: "Hacer pedido", Ico: IcoPedido }; // #143 (solo con permiso)
 
+const IcoCarrito = (p) => <Ico {...p}><circle cx="9" cy="20" r="1.4" /><circle cx="17" cy="20" r="1.4" /><path d="M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 8H6.2" /></Ico>; // #220
 const IcoFormacion = (p) => <Ico {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9.5v5l4.5-2.5-4.5-2.5" /></Ico>;
 
 // #35: bloque «Producto» con su circulito de pendientes (como el de las notificaciones de una app)
@@ -64,7 +65,9 @@ const LO_TUYO = [
   { id: "documentos", label: "Mis documentos", Ico: IcoDoc },
   { id: "seguimiento", label: "Mi seguimiento", sub: "Avisos, plus y faltas", Ico: (p) => <IcoBars size={20} color={TOSTADO} sw={1.9} {...p} /> },
   { id: "formacion", label: "Formación", Ico: IcoFormacion }, // #101 (el subtítulo depende de los vídeos que le faltan)
+  { id: "caja", label: "Caja", sub: "Cobrar mientras Epos no funciona", Ico: IcoCarrito, gris: true }, // #220: al final y en gris (solo se usa si cae Epos o internet)
 ];
+const GRIS_CAJA = "#757575"; // #220: fondo gris medio con texto blanco
 const TITULOS = { pedido: "Hacer pedido", caja: "Caja", anadir: "Añadir producto", escanear: "Escanear producto", sincodigo: "Productos sin código", marcado: "Comprobar precio marcado", corregir: "Corregir productos marcados", documentos: "Mis documentos", horarios: "Horarios y fichajes", recepcion: "Recepcionar pedido", cerrar: "Mi turno", cubrir: "Turnos para cubrir", revisar: "Turno anterior", seguimiento: "Mi seguimiento", formacion: "Formación", cambio: "Cambiar turno", horasextra: "Horas extra", apoyo: "Tareas que te han dejado", vacaciones: "Mis vacaciones", facturas: "Facturas", cuenta: "Mi cuenta" };
 
 // A dónde lleva cada destino de la campana o del correo (?ir=…) en la organización nueva: [pantalla, pestaña]
@@ -146,15 +149,6 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
       <div style={{ padding: "18px 16px 28px", maxWidth: 540, margin: "0 auto" }}>
         <div style={{ fontFamily: F, fontSize: 11, color: C.mutL, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, marginBottom: 14 }}>{hoy}</div>
 
-        <button type="button" onClick={() => abrir("caja")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", background: C.char, border: "none", borderRadius: 20, padding: "16px 18px", display: "flex", alignItems: "center", gap: 15, marginBottom: 12, textAlign: "left" }}>
-          <span style={{ width: 46, height: 46, borderRadius: 14, background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22 }} aria-hidden="true">🛒</span>
-          <span style={{ flex: 1 }}>
-            <span style={{ display: "block", fontFamily: SF, fontSize: 21, color: C.gold }}>Caja</span>
-            <span style={{ display: "block", fontFamily: F, fontSize: 12.5, color: "#C9BFA8", marginTop: 2 }}>Cobrar mientras Epos no funciona</span>
-          </span>
-          <IcoRight size={20} color={C.gold} sw={2.4} />
-        </button>
-
         <button onClick={() => abrir("cerrar")} style={{ width: "100%", boxSizing: "border-box", cursor: "pointer", background: C.gold, border: "none", borderRadius: 20, padding: 18, display: "flex", alignItems: "center", gap: 15, boxShadow: SHADOW.hero, textAlign: "left" }}>
           <span style={{ width: 46, height: 46, borderRadius: 14, background: C.goldDark, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IcoCheck size={24} color={C.gold} sw={2.2} /></span>
           <span style={{ flex: 1 }}>
@@ -211,9 +205,9 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
         <div style={seccion}>Lo tuyo</div>
         <div style={caja}>
           {LO_TUYO.map((t, i) => (
-            <button key={t.id} type="button" onClick={() => abrir(t.id)} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", gap: 12, minHeight: 50, padding: "11px 16px", border: "none", borderTop: i ? `1px solid ${C.brdL}` : "none", background: "#fff", cursor: "pointer", textAlign: "left" }}>
-              <t.Ico />
-              <span style={{ flex: 1, fontFamily: F, fontSize: 14.5, color: C.char }}>{t.label}{t.sub && <span style={{ display: "block", fontSize: 11.5, color: C.mutL, marginTop: 1 }}>{t.sub}</span>}
+            <button key={t.id} type="button" onClick={() => abrir(t.id)} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", gap: 12, minHeight: 50, padding: "11px 16px", border: "none", borderTop: i ? `1px solid ${t.gris ? GRIS_CAJA : C.brdL}` : "none", background: t.gris ? GRIS_CAJA : "#fff", cursor: "pointer", textAlign: "left" }}>
+              {t.gris ? <t.Ico color="#fff" /> : <t.Ico />}
+              <span style={{ flex: 1, fontFamily: F, fontSize: 14.5, color: t.gris ? "#fff" : C.char }}>{t.label}{t.sub && <span style={{ display: "block", fontSize: 11.5, color: t.gris ? "#EDEDED" : C.mutL, marginTop: 1 }}>{t.sub}</span>}
                 {t.id === "formacion" && videos && (() => { const r = resumenFormacion(videos); return r.pendientes > 0
                   ? <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: C.red, marginTop: 1 }}>{r.pendientes === 1 ? "1 vídeo nuevo" : `${r.pendientes} vídeos nuevos`}</span>
                   : <span style={{ display: "block", fontSize: 11.5, color: C.mutL, marginTop: 1 }}>{r.total ? `Al día · ${r.completos} de ${r.total}` : "Todavía no hay vídeos"}</span>; })()}
@@ -221,7 +215,7 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
               </span>
               {t.id === "formacion" && videos && resumenFormacion(videos).pendientes > 0 && <span style={{ minWidth: 22, height: 22, padding: "0 6px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{resumenFormacion(videos).pendientes}</span>}
               {t.id === "documentos" && docsNuevos > 0 && <span style={{ minWidth: 22, height: 22, padding: "0 6px", boxSizing: "border-box", borderRadius: 999, background: C.red, color: "#fff", fontFamily: F, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{docsNuevos > 99 ? "99+" : docsNuevos}</span>}
-              <IcoRight size={17} color={C.mutL} sw={2.4} />
+              <IcoRight size={17} color={t.gris ? "#fff" : C.mutL} sw={2.4} />
             </button>
           ))}
         </div>
