@@ -39,6 +39,7 @@ export function CerrarTurnoView({ user }) {
   const [detalles, setDetalles] = useState({}); // #221: líneas informativas por tarea (familias a reponer)
   const [pideHora, setPideHora] = useState({}); // #222: tareas que piden la hora a la que se hicieron
   const [paqLista, setPaqLista] = useState({}); // #223: paqueterías a marcar en «Picar paquetería»
+  const [obsExtra, setObsExtra] = useState({}); // #224: observaciones de las tareas extra (por texto)
   const [estado, setEstado] = useState({});
   const [yaCerrado, setYaCerrado] = useState(null);
   const [cajaCerrada, setCajaCerrada] = useState(null);
@@ -149,6 +150,8 @@ export function CerrarTurnoView({ user }) {
   const setEst = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], estado: v, apoyo: v === "apoyo" ? (s[id] && s[id].apoyo) || (apoyos.length === 1 ? apoyos[0].usuario_id : null) : null } }));
   const setApoyo = (id, uid) => setEstado(s => ({ ...s, [id]: { ...s[id], apoyo: uid } }));
   const setNota = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], nota: v } }));
+  const setObs = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], obs: v.slice(0, 200) } })); // #224
+  const obsDe = (st) => ((st && st.obs) || "").replace(/\s+/g, " ").trim() || null;
   // #222: hora a la que se hizo (solo en las tareas que la piden); al marcar «Hecha» trae la hora del momento
   const pideHoraDe = (t) => !!pideHora[t.origen ? t.origen.tarea_id : t.id];
   const ahoraHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -198,12 +201,14 @@ export function CerrarTurnoView({ user }) {
   const enviar = async () => {
     setSaving(true); setMsg("");
     try {
-      const items = tareas.filter(t => estado[t.id].estado !== "apoyo").map(t => ({ tarea_id: t.origen ? t.origen.tarea_id : t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", estado: EST_BD[estado[t.id].estado], justificacion: justif(estado[t.id], t), origen_item_id: t.origen ? t.origen.id : null, paqueterias: paqItems(t, estado[t.id]), hora: estado[t.id].estado === "hecha" && pideHoraDe(t) ? estado[t.id].hora : null }));
-      const p_traspasos = tareas.filter(t => estado[t.id].estado === "apoyo").map(t => ({ tarea_id: t.id, apoyo_id: estado[t.id].apoyo }));
+      const items = tareas.filter(t => estado[t.id].estado !== "apoyo").map(t => ({ tarea_id: t.origen ? t.origen.tarea_id : t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", estado: EST_BD[estado[t.id].estado], justificacion: justif(estado[t.id], t), origen_item_id: t.origen ? t.origen.id : null, paqueterias: paqItems(t, estado[t.id]), observacion: obsDe(estado[t.id]), hora: estado[t.id].estado === "hecha" && pideHoraDe(t) ? estado[t.id].hora : null }));
+      const p_traspasos = tareas.filter(t => estado[t.id].estado === "apoyo").map(t => ({ tarea_id: t.id, apoyo_id: estado[t.id].apoyo, observacion: obsDe(estado[t.id]) }));
       const p_caja = sinCaja ? null : { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
       const p_facturas = sinCaja ? [] : Object.entries(selProv).map(([id, c]) => ({ id, caja: c }));
       // #222: cerrar_turno_v2 comprueba y guarda la hora; por dentro cierra igual que antes (con o sin apoyo)
-      const r = await sb.rpc("cerrar_turno_v2", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras, p_traspasos });
+      // #224: cerrar_turno_v3 guarda además las observaciones de cada tarea (por dentro llama a cerrar_turno_v2)
+      const p_obs_extras = extras.map(x => ({ texto: x, observacion: (obsExtra[claveExtra(x)] || "").replace(/\s+/g, " ").trim() })).filter(x => x.observacion);
+      const r = await sb.rpc("cerrar_turno_v3", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras, p_traspasos, p_obs_extras });
       const fReal = (r && r.fecha) || fecha;
       if (fReal !== fecha) setFechaSel(fReal);
       try { const c = await sb.rpc("cierre_contexto", {}); if (c && c.hoy) setCtx(c); } catch (e) { /* noop */ }
@@ -310,6 +315,7 @@ export function CerrarTurnoView({ user }) {
             <input value={st.nota} onChange={e => setNota(t.id, e.target.value)} placeholder="Escribe el motivo" style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />
           </div>
         )}
+        <div style={{ marginTop: 10 }}><input value={st.obs || ""} onChange={e => setObs(t.id, e.target.value)} maxLength={200} placeholder="Observaciones (opcional)" style={{ width: "100%", boxSizing: "border-box", padding: "8px 12px", background: "#FAF8F4", border: `1px solid ${C.brdL}`, borderRadius: 10, fontFamily: F, fontSize: 12.5, color: C.char, outline: "none" }} /></div>{/* #224 */}
       </div>
     );
   };
@@ -497,7 +503,7 @@ export function CerrarTurnoView({ user }) {
                   <span style={chipExtra}>Extra</span>
                   <button onClick={() => quitarExtra(i)} aria-label={`Quitar ${x}`} style={{ width: 30, height: 30, flexShrink: 0, border: "none", background: "none", color: C.mut, fontSize: 20, lineHeight: 1, cursor: "pointer" }}>×</button>
                 </div>
-              ))}
+              )).flatMap((el, i) => [el, <div key={`o${i}`} style={{ margin: "-2px 0 10px" }}><input value={obsExtra[claveExtra(extras[i])] || ""} onChange={e => { const v = e.target.value.slice(0, 200), k = claveExtra(extras[i]); setObsExtra(o => ({ ...o, [k]: v })); }} maxLength={200} placeholder="Observaciones (opcional)" style={{ width: "100%", boxSizing: "border-box", padding: "8px 12px", background: "#FAF8F4", border: `1px solid ${C.brdL}`, borderRadius: 10, fontFamily: F, fontSize: 12.5, color: C.char, outline: "none" }} /></div>])}{/* #224 */}
               <button onClick={abrirHojaExtra} style={{ width: "100%", padding: "10px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 13.5, fontWeight: 700, border: `1.5px solid ${C.brd}`, background: "#fff", color: C.char }}>+ Añadir tarea hecha</button>
             </div>
             <button onClick={irACaja} disabled={!completo} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10, opacity: !completo ? 0.5 : 1 }}>{completo ? (sinCaja ? "Cerrar turno" : "Continuar al cierre de caja") : `Revisa todas (faltan ${tareas.length - revisadas})`}</button>

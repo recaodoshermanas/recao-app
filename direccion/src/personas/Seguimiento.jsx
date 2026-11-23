@@ -136,6 +136,12 @@ function paqTarea(i) {
   return <small>Paqueterías · picadas: {pic.join(", ") || "ninguna"}{fal.length ? ` · faltaban: ${fal.join(", ")}` : ""}</small>;
 }
 
+// #224: observaciones de cada tarea (en las pasadas al apoyo pueden dejarla la principal y el apoyo)
+function obsTarea(i, nombreDe) {
+  const l = (i && i.obs) || []; if (!l.length) return null;
+  return l.map((o, k) => <small key={`obs${k}`}>Observación{l.length > 1 || (nombreDe && i.apoyo_id) ? ` de ${(nombreDe && nombreDe[o.autor_id]) || "—"}` : ""}: “{o.texto}”</small>);
+}
+
 // #225: resultado de la verificación del turno siguiente, tarea a tarea
 const VERIF_TAREA = { bien: "Verificación: bien", no_estaba: "Verificación: no estaba hecha", si_procedia: "Verificación: sí procedía" };
 function verifTarea(inf, i) {
@@ -158,7 +164,7 @@ function Cierres({ foco, quitarFoco }) {
   const [bocadillo, setBocadillo] = useState(null);
   const cargar = useCallback(async () => {
     setFilas(null);
-    const q = "select=*,items:cierre_items(id,tarea_texto,hecha,justificacion,estado,origen_item_id,horas:cierre_horas(hora),paq:cierre_paqueterias(detalle)),extras:cierre_tareas_extra(texto),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,a_medias,justificacion,cerrado_en,valoracion,cuenta_a,horas:cierre_horas(hora),paq:cierre_paqueterias(detalle)),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
+    const q = "select=*,items:cierre_items(id,tarea_texto,hecha,justificacion,estado,origen_item_id,horas:cierre_horas(hora),paq:cierre_paqueterias(detalle),obs:cierre_observaciones(texto,autor_id)),extras:cierre_tareas_extra(texto,obs:cierre_observaciones(texto,autor_id)),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,a_medias,justificacion,cerrado_en,valoracion,cuenta_a,horas:cierre_horas(hora),paq:cierre_paqueterias(detalle),obs:cierre_observaciones(texto,autor_id)),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
       + (foco ? `&id=eq.${foco.cierre_id}` : (uid ? `&usuario_id=eq.${uid}` : "") + `&fecha=gte.${masDias(hoy, -(Number(dias) - 1))}`);
     try {
       const r = await sb.select("cierres_turno", q); setFilas(r); if (foco && r[0]) setAbierto(r[0].id);
@@ -236,7 +242,7 @@ function Cierres({ foco, quitarFoco }) {
                         )}
                         {it.length > 0 && (
                           <ul className="checklist ver">
-                            {it.map((i, k) => { const e = EST[estDe(i)]; return <li key={k} className={e.cls}><span>{e.ico}</span><div>{i.tarea_texto}{horaTareaDe(i) && ` · hecha · ${horaTareaDe(i)}`}{i.origen_item_id ? <small>Venía a medias del turno anterior</small> : null}{e.cls === "medias" && <small>A medias · queda: “{i.justificacion}”</small>}{paqTarea(i)}{e.cls === "noproc" && <small>No procedía</small>}{e.cls === "no" && i.justificacion && <small>“{i.justificacion}”</small>}{verifTarea(info[c.id], i)}</div></li>; })}
+                            {it.map((i, k) => { const e = EST[estDe(i)]; return <li key={k} className={e.cls}><span>{e.ico}</span><div>{i.tarea_texto}{horaTareaDe(i) && ` · hecha · ${horaTareaDe(i)}`}{i.origen_item_id ? <small>Venía a medias del turno anterior</small> : null}{e.cls === "medias" && <small>A medias · queda: “{i.justificacion}”</small>}{paqTarea(i)}{e.cls === "noproc" && <small>No procedía</small>}{e.cls === "no" && i.justificacion && <small>“{i.justificacion}”</small>}{obsTarea(i)}{verifTarea(info[c.id], i)}</div></li>; })}
                           </ul>
                         )}
                         {it.length > 0 && <p className="sub resumen-cierre">{hechas} hechas · {est.a_medias} a medias · {est.no_hecha} no hechas · {est.no_procedia} no procedía{ex.length ? ` · +${ex.length} extra` : ""}</p>}
@@ -251,6 +257,7 @@ function Cierres({ foco, quitarFoco }) {
                                   <div>
                                     {x.tarea_texto}{horaTareaDe(x) && ` · hecha · ${horaTareaDe(x)}`}
                                     {paqTarea(x)}
+                                    {obsTarea(x, nombreDe)}
                                     <small>Pasada a {nombreDe[x.apoyo_id] || "la persona de apoyo"} · {resultadoTraspaso(x)}</small>
                                     {x.estado === "no_hecha" && x.justificacion && <small>“{x.justificacion}”</small>}
                                     {(x.estado === "no_hecha" || x.estado === "sin_cerrar") && <small>{cuentaTxt(x, nombreDe)}</small>}
@@ -264,7 +271,7 @@ function Cierres({ foco, quitarFoco }) {
                           <>
                             <h3 className="sub-tit">Tareas extra</h3>
                             <ul className="checklist ver">
-                              {ex.map((x, k) => <li key={k} className="hecha extra"><span>+</span><div>{x.texto}</div></li>)}
+                              {ex.map((x, k) => <li key={k} className="hecha extra"><span>+</span><div>{x.texto}{obsTarea(x)}</div></li>)}
                             </ul>
                           </>
                         )}

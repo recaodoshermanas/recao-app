@@ -36,6 +36,7 @@ export function TareasApoyoView({ onTerminar }) {
   const todas = (lista || []).flatMap(g => g.tareas || []);
   const setEst = (id, v) => setEstado(s => ({ ...s, [id]: { ...(s[id] || { nota: "" }), estado: v } }));
   const setNota = (id, v) => setEstado(s => ({ ...s, [id]: { ...(s[id] || {}), nota: v } }));
+  const setObs = (id, v) => setEstado(s => ({ ...s, [id]: { ...(s[id] || { nota: "" }), obs: v.slice(0, 200) } })); // #224
   // #222: las tareas que piden hora (Limpieza del suelo) la traen puesta al marcar «Hecha»
   const ahoraHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
   const setHora = (id, v) => setEstado(s => ({ ...s, [id]: { ...(s[id] || {}), hora: v } }));
@@ -69,7 +70,7 @@ export function TareasApoyoView({ onTerminar }) {
     try {
       // #201: tres estados. «A medias» aquí no pasa a nadie: lo valora dirección, igual que «No hecha»
       const BD = { hecha: "hecha", medias: "a_medias", no: "no_hecha" };
-      await sb.rpc("cerrar_tareas_apoyo_v2", { p_items: todas.map(t => ({ id: t.id, hecha: estado[t.id].estado === "hecha", estado: BD[estado[t.id].estado], justificacion: estado[t.id].estado !== "hecha" ? notaDe(t, estado[t.id]) : null, paqueterias: paqItems(t, estado[t.id]), hora: t.pide_hora && estado[t.id].estado === "hecha" ? estado[t.id].hora : null })) }); // #222
+      await sb.rpc("cerrar_tareas_apoyo_v2", { p_items: todas.map(t => ({ id: t.id, hecha: estado[t.id].estado === "hecha", estado: BD[estado[t.id].estado], justificacion: estado[t.id].estado !== "hecha" ? notaDe(t, estado[t.id]) : null, paqueterias: paqItems(t, estado[t.id]), observacion: ((estado[t.id].obs || "").replace(/\s+/g, " ").trim() || null), hora: t.pide_hora && estado[t.id].estado === "hecha" ? estado[t.id].hora : null })) }); // #222
       setHecho(true);
     } catch (e) { setMsg(errorTexto(e)); await cargar(); }
     setSaving(false);
@@ -149,6 +150,7 @@ export function TareasApoyoView({ onTerminar }) {
                         <input value={st.nota || ""} onChange={e => setNota(t.id, e.target.value)} placeholder="Escribe el motivo" style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />
                       </div>
                     )}
+                    <div style={{ marginTop: 10 }}><input value={st.obs || ""} onChange={e => setObs(t.id, e.target.value)} maxLength={200} placeholder="Observaciones (opcional)" style={{ width: "100%", boxSizing: "border-box", padding: "8px 12px", background: "#FAF8F4", border: `1px solid ${C.brdL}`, borderRadius: 10, fontFamily: F, fontSize: 12.5, color: C.char, outline: "none" }} /></div>{/* #224 */}
                   </div>
                 );
               })}

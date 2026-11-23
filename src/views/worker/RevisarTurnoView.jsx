@@ -31,6 +31,7 @@ export function RevisarTurnoView({ user }) {
   const [info, setInfo] = useState({});
   const [marcadas, setMarcadas] = useState({});
   const [bien, setBien] = useState({}); // #225: tareas marcadas «Bien» una a una
+  const [obs, setObs] = useState({}); // #224: observaciones que dejó el turno anterior en cada tarea
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
@@ -49,6 +50,9 @@ export function RevisarTurnoView({ user }) {
       setReportadas(r.reportadas || []);
       setInfo({ motivo: r.motivo, ventana: r.ventana || {}, prueba: !!r.prueba });
       setMarcadas({}); setBien({});
+      const ids = [...(r.completadas || []), ...(r.no_completadas || []), ...(r.no_procede || [])].map(x => Number(x.id)).filter(Boolean);
+      setObs({});
+      if (ids.length) sb.select("cierre_observaciones", `select=cierre_item_id,texto&cierre_item_id=in.(${ids.join(",")})`).then(d => { const m = {}; (d || []).forEach(x => { m[x.cierre_item_id] = x.texto; }); setObs(m); }).catch(() => {});
     } catch (e) { /* noop */ }
     setLoading(false);
   }, []);
@@ -100,6 +104,7 @@ export function RevisarTurnoView({ user }) {
         <div key={it.id} style={{ background: "#F7F4EE", border: `1px solid ${C.brdL}`, borderRadius: 12, padding: "11px 13px", marginBottom: 8 }}>
           <div style={{ fontFamily: F, fontSize: 13.5, color: C.mut }}>{it.texto}{it.estado === "a_medias" ? <b style={{ color: "#C27C0E", fontSize: 12 }}> · a medias (te llega a ti)</b> : null}</div>
           {it.justificacion && <div style={{ fontFamily: F, fontSize: 12, color: C.mutL, marginTop: 3, fontStyle: "italic" }}>“{it.justificacion}”</div>}
+          {obs[it.id] && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 3 }}>Observación: “{obs[it.id]}”</div>}
         </div>
       ))}
       <div style={{ fontFamily: F, fontSize: 11.5, color: C.mutL, marginTop: 2 }}>Estas ya constan como no hechas. No se verifican.</div>
@@ -159,7 +164,7 @@ export function RevisarTurnoView({ user }) {
                   const mk = marcadas[it.id]; const ok = !!bien[it.id];
                   return (
                     <div key={it.id} style={{ background: "#fff", border: `1.5px solid ${mk ? C.red : ok ? "#BFE6CC" : C.brdL}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
-                      <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{it.texto}</div>
+                      <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{it.texto}</div>{obs[it.id] && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 3 }}>Observación: “{obs[it.id]}”</div>}
                       {ok ? (
                         <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 12 }}>
                           <span style={{ background: C.grn, color: "#fff", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 700 }}>Bien ✓</span>
@@ -190,7 +195,7 @@ export function RevisarTurnoView({ user }) {
                     const mk = marcadas[it.id];
                     return (
                       <div key={it.id} style={{ background: "#fff", border: `1.5px solid ${mk ? C.red : C.brdL}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
-                        <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{it.texto} <span style={{ color: C.mut, fontSize: 12 }}>· no procedía</span></div>
+                        <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{it.texto} <span style={{ color: C.mut, fontSize: 12 }}>· no procedía</span></div>{obs[it.id] && <div style={{ fontFamily: F, fontSize: 12, color: C.mut, marginTop: 3 }}>Observación: “{obs[it.id]}”</div>}
                         {!mk ? (
                           <button onClick={() => toggle(it.id)} style={{ marginTop: 10, background: "#FBEDE9", color: C.red, border: "none", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Sí procedía</button>
                         ) : (
