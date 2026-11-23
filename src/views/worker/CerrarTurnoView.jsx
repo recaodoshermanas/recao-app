@@ -37,6 +37,7 @@ export function CerrarTurnoView({ user }) {
   const [sugerido, setSugerido] = useState(null);
   const [tareas, setTareas] = useState([]);
   const [detalles, setDetalles] = useState({}); // #221: líneas informativas por tarea (familias a reponer)
+  const [pideHora, setPideHora] = useState({}); // #222: tareas que piden la hora a la que se hicieron
   const [estado, setEstado] = useState({});
   const [yaCerrado, setYaCerrado] = useState(null);
   const [cajaCerrada, setCajaCerrada] = useState(null);
@@ -100,7 +101,7 @@ export function CerrarTurnoView({ user }) {
       setApoyoDisp(null);
       sb.rpc("cierre_apoyos_disponibles", { p_turno: tn }).then((d) => { if (d && d.fecha === ff && (d.apoyos || []).length) setApoyoDisp(d); }).catch(() => {});
       const all = await sb.select("cierre_tareas", `select=id,orden,texto,dia_semana,hora,grupo&turno=eq.${tn}&activa=eq.true&order=orden.asc`);
-      sb.select("cierre_tareas_detalle", "select=tarea_id,lineas").then(d => { const m = {}; (d || []).forEach(x => { m[x.tarea_id] = x.lineas || []; }); setDetalles(m); }).catch(() => setDetalles({})); // #221
+      sb.select("cierre_tareas_detalle", "select=tarea_id,lineas,pide_hora").then(d => { const m = {}, h = {}; (d || []).forEach(x => { m[x.tarea_id] = x.lineas || []; if (x.pide_hora) h[x.tarea_id] = true; }); setDetalles(m); setPideHora(h); }).catch(() => { setDetalles({}); setPideHora({}); }); // #221 #222
       // #201: lo que el turno anterior dejó «A medias» (no en un turno reabierto: ese día ya pasó)
       let medias = [];
       const reab = (ctx?.reabiertos || []).some(rb => rb.fecha === ff && rb.turno === tn);
@@ -147,6 +148,11 @@ export function CerrarTurnoView({ user }) {
   const setEst = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], estado: v, apoyo: v === "apoyo" ? (s[id] && s[id].apoyo) || (apoyos.length === 1 ? apoyos[0].usuario_id : null) : null } }));
   const setApoyo = (id, uid) => setEstado(s => ({ ...s, [id]: { ...s[id], apoyo: uid } }));
   const setNota = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], nota: v } }));
+  // #222: hora a la que se hizo (solo en las tareas que la piden); al marcar «Hecha» trae la hora del momento
+  const pideHoraDe = (t) => !!pideHora[t.origen ? t.origen.tarea_id : t.id];
+  const ahoraHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  const setHora = (id, v) => setEstado(s => ({ ...s, [id]: { ...s[id], hora: v } }));
+  const marcarHecha = (t) => setEstado(s => ({ ...s, [t.id]: { ...s[t.id], estado: "hecha", apoyo: null, hora: (s[t.id] && s[t.id].hora) || (pideHoraDe(t) ? ahoraHM() : "") } }));
   const setProvCaja = (id, n) => setSelProv(s => { const c = { ...s }; if (c[id] === n) delete c[id]; else c[id] = n; return c; });
 
   const justif = (s) => (s.estado === "no" || s.estado === "medias") ? s.nota.trim() : null;
@@ -161,6 +167,9 @@ export function CerrarTurnoView({ user }) {
     if (faltaQueda.length) { setMsg("Escribe qué queda por hacer en las tareas a medias"); return; }
     const faltaApoyo = tareas.filter(t => { const s = estado[t.id]; return s.estado === "apoyo" && !apoyoDe(s.apoyo); });
     if (faltaApoyo.length) { setMsg("Elige a quién le dejas cada tarea"); return; }
+    const conHora = tareas.filter(t => estado[t.id].estado === "hecha" && pideHoraDe(t));
+    if (conHora.some(t => !(estado[t.id].hora || "").trim())) { setMsg("Pon la hora a la que se limpió"); return; }
+    if (conHora.some(t => estado[t.id].hora < "07:00" || estado[t.id].hora > "23:00")) { setMsg("La hora tiene que estar entre las 7:00 y las 23:00"); return; }
     setMsg("");
     if (sinCaja) { setConfirmando(true); return; }
     await cargarProv(turno);
@@ -172,13 +181,12 @@ export function CerrarTurnoView({ user }) {
   const enviar = async () => {
     setSaving(true); setMsg("");
     try {
-      const items = tareas.filter(t => estado[t.id].estado !== "apoyo").map(t => ({ tarea_id: t.origen ? t.origen.tarea_id : t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", estado: EST_BD[estado[t.id].estado], justificacion: justif(estado[t.id]), origen_item_id: t.origen ? t.origen.id : null }));
+      const items = tareas.filter(t => estado[t.id].estado !== "apoyo").map(t => ({ tarea_id: t.origen ? t.origen.tarea_id : t.id, tarea_texto: t.texto, hecha: estado[t.id].estado === "hecha", estado: EST_BD[estado[t.id].estado], justificacion: justif(estado[t.id]), origen_item_id: t.origen ? t.origen.id : null, hora: estado[t.id].estado === "hecha" && pideHoraDe(t) ? estado[t.id].hora : null }));
       const p_traspasos = tareas.filter(t => estado[t.id].estado === "apoyo").map(t => ({ tarea_id: t.id, apoyo_id: estado[t.id].apoyo }));
       const p_caja = sinCaja ? null : { caja1: { efectivo: pn(caja.c1e), tarjeta: pn(caja.c1t) }, caja2: { efectivo: pn(caja.c2e), tarjeta: pn(caja.c2t) } };
       const p_facturas = sinCaja ? [] : Object.entries(selProv).map(([id, c]) => ({ id, caja: c }));
-      const r = p_traspasos.length
-        ? await sb.rpc("cerrar_turno_con_apoyo", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras, p_traspasos })
-        : await sb.rpc("cerrar_turno_caja", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras });
+      // #222: cerrar_turno_v2 comprueba y guarda la hora; por dentro cierra igual que antes (con o sin apoyo)
+      const r = await sb.rpc("cerrar_turno_v2", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras, p_traspasos });
       const fReal = (r && r.fecha) || fecha;
       if (fReal !== fecha) setFechaSel(fReal);
       try { const c = await sb.rpc("cierre_contexto", {}); if (c && c.hoy) setCtx(c); } catch (e) { /* noop */ }
@@ -224,13 +232,20 @@ export function CerrarTurnoView({ user }) {
       <div key={t.id} style={{ background: "#fff", border: `1.5px solid ${no ? C.red : done ? "#BFE6CC" : alApoyo ? C.blu : medias ? AMBAR : noproc ? C.mutL : t.origen ? AMBAR : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
         <div style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500, marginBottom: 10 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}{detalleDe(t)}{vieneDe(t)}</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={() => setEst(t.id, "hecha")} style={segBtn(done, "hecha")}>Hecha</button>
+          <button onClick={() => marcarHecha(t)} style={segBtn(done, "hecha")}>Hecha</button>
           {puedePasar
             ? <button onClick={() => setEst(t.id, "apoyo")} style={segBtn(alApoyo, "apoyo")}>Al apoyo</button>
             : <button onClick={() => setEst(t.id, "medias")} style={segBtn(medias, "medias")}>A medias</button>}
           {!t.origen && <button onClick={() => setEst(t.id, "noproc")} style={segBtn(noproc, "noproc")}>No procedía</button>}
           <button onClick={() => setEst(t.id, "no")} style={segBtn(no, "no")}>No hecha</button>
         </div>
+        {done && pideHoraDe(t) && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.grn, marginBottom: 8 }}>¿A qué hora se limpió?</div>
+            <input type="time" min="07:00" max="23:00" value={st.hora || ""} onChange={e => setHora(t.id, e.target.value)} style={{ boxSizing: "border-box", padding: "9px 12px", background: "#F1F8F3", border: `1px solid ${(st.hora || "") ? "#BFE6CC" : C.red}`, borderRadius: 10, fontFamily: F, fontSize: 15, color: C.char, outline: "none" }} />
+            {!(st.hora || "") && <div style={{ fontFamily: F, fontSize: 11.5, color: C.red, marginTop: 6 }}>Pon la hora a la que se limpió</div>}
+          </div>
+        )}
         {medias && (
           <div style={{ marginTop: 12 }}>
             <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: AMBAR, marginBottom: 8 }}>¿Qué queda por hacer? Pasa así al turno siguiente.</div>

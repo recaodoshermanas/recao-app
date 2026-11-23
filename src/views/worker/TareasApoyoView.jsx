@@ -36,16 +36,23 @@ export function TareasApoyoView({ onTerminar }) {
   const todas = (lista || []).flatMap(g => g.tareas || []);
   const setEst = (id, v) => setEstado(s => ({ ...s, [id]: { ...(s[id] || { nota: "" }), estado: v } }));
   const setNota = (id, v) => setEstado(s => ({ ...s, [id]: { ...(s[id] || {}), nota: v } }));
+  // #222: las tareas que piden hora (Limpieza del suelo) la traen puesta al marcar «Hecha»
+  const ahoraHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  const setHora = (id, v) => setEstado(s => ({ ...s, [id]: { ...(s[id] || {}), hora: v } }));
+  const marcarHecha = (t) => setEstado(s => ({ ...s, [t.id]: { ...(s[t.id] || { nota: "" }), estado: "hecha", hora: (s[t.id] && s[t.id].hora) || (t.pide_hora ? ahoraHM() : "") } }));
   const revisadas = todas.filter(t => estado[t.id] && estado[t.id].estado).length;
 
   const cerrar = async () => {
     if (revisadas < todas.length) { setMsg(`Te faltan ${todas.length - revisadas} por marcar`); return; }
     if (todas.some(t => estado[t.id].estado !== "hecha" && !(estado[t.id].nota || "").trim())) { setMsg("Indica el motivo de las tareas a medias o no hechas"); return; }
+    const conHora = todas.filter(t => t.pide_hora && estado[t.id].estado === "hecha");
+    if (conHora.some(t => !(estado[t.id].hora || "").trim())) { setMsg("Pon la hora a la que se limpió"); return; }
+    if (conHora.some(t => estado[t.id].hora < "07:00" || estado[t.id].hora > "23:00")) { setMsg("La hora tiene que estar entre las 7:00 y las 23:00"); return; }
     setSaving(true); setMsg("");
     try {
       // #201: tres estados. «A medias» aquí no pasa a nadie: lo valora dirección, igual que «No hecha»
       const BD = { hecha: "hecha", medias: "a_medias", no: "no_hecha" };
-      await sb.rpc("cerrar_tareas_apoyo", { p_items: todas.map(t => ({ id: t.id, hecha: estado[t.id].estado === "hecha", estado: BD[estado[t.id].estado], justificacion: estado[t.id].estado !== "hecha" ? estado[t.id].nota.trim() : null })) });
+      await sb.rpc("cerrar_tareas_apoyo_v2", { p_items: todas.map(t => ({ id: t.id, hecha: estado[t.id].estado === "hecha", estado: BD[estado[t.id].estado], justificacion: estado[t.id].estado !== "hecha" ? estado[t.id].nota.trim() : null, hora: t.pide_hora && estado[t.id].estado === "hecha" ? estado[t.id].hora : null })) }); // #222
       setHecho(true);
     } catch (e) { setMsg(errorTexto(e)); await cargar(); }
     setSaving(false);
@@ -86,10 +93,17 @@ export function TareasApoyoView({ onTerminar }) {
                       {(t.detalle || []).length > 0 && <div style={{ marginTop: 4, fontWeight: 400 }}>{t.detalle.map((x, i) => <div key={i} style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.45 }}>{x}</div>)}</div>}{/* #221 */}
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => setEst(t.id, "hecha")} style={segBtn(done, "hecha")}>Hecha</button>
+                      <button onClick={() => marcarHecha(t)} style={segBtn(done, "hecha")}>Hecha</button>
                       <button onClick={() => setEst(t.id, "medias")} style={segBtn(medias, "medias")}>A medias</button>
                       <button onClick={() => setEst(t.id, "no")} style={segBtn(no, "no")}>No hecha</button>
                     </div>
+                    {done && t.pide_hora && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.grn, marginBottom: 8 }}>¿A qué hora se limpió?</div>
+                        <input type="time" min="07:00" max="23:00" value={st.hora || ""} onChange={e => setHora(t.id, e.target.value)} style={{ boxSizing: "border-box", padding: "9px 12px", background: "#F1F8F3", border: `1px solid ${(st.hora || "") ? "#BFE6CC" : C.red}`, borderRadius: 10, fontFamily: F, fontSize: 15, color: C.char, outline: "none" }} />
+                        {!(st.hora || "") && <div style={{ fontFamily: F, fontSize: 11.5, color: C.red, marginTop: 6 }}>Pon la hora a la que se limpió</div>}
+                      </div>
+                    )}
                     {(no || medias) && (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: medias ? "#7A4E06" : "#B23A2C", marginBottom: 8, lineHeight: 1.4 }}>{medias ? "¿Por qué se ha quedado a medias y qué falta? No pasa a nadie: lo verá dirección." : "¿Por qué no se ha hecho?"}</div>
