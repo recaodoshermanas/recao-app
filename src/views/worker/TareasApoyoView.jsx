@@ -40,11 +40,28 @@ export function TareasApoyoView({ onTerminar }) {
   const ahoraHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
   const setHora = (id, v) => setEstado(s => ({ ...s, [id]: { ...(s[id] || {}), hora: v } }));
   const marcarHecha = (t) => setEstado(s => ({ ...s, [t.id]: { ...(s[t.id] || { nota: "" }), estado: "hecha", hora: (s[t.id] && s[t.id].hora) || (t.pide_hora ? ahoraHM() : "") } }));
+  // #223: paqueterías de «Picar paquetería» (Hecha: las picadas; A medias: Picada / Falta / No vino)
+  const setPaq = (id, nombre, v) => setEstado(s => { const p = { ...((s[id] && s[id].paq) || {}) }; if (p[nombre] === v) delete p[nombre]; else p[nombre] = v; return { ...s, [id]: { ...(s[id] || { nota: "" }), paq: p } }; });
+  const paqDe = (t) => t.paqueterias || [];
+  const paqResumen = (t, st) => { const p = (st && st.paq) || {}, l = paqDe(t); const pic = l.filter(n => p[n] === "picada"), fal = l.filter(n => p[n] === "falta"); return `Picadas: ${pic.join(", ") || "—"} · Falta por picar: ${fal.join(", ") || "—"}`; };
+  const paqError = (t, st) => {
+    const l = paqDe(t); if (!l.length || !st) return null; const p = st.paq || {};
+    if (st.estado === "hecha") return l.some(n => p[n] === "picada") ? null : "Marca al menos una paquetería";
+    if (st.estado === "medias") {
+      if (l.some(n => !p[n])) return "Marca cada paquetería: Picada, Falta o No vino";
+      if (!l.some(n => p[n] === "picada") || !l.some(n => p[n] === "falta")) return "A medias necesita al menos una picada y una que falte";
+    }
+    return null;
+  };
+  const paqItems = (t, st) => { const l = paqDe(t); if (!l.length || (st.estado !== "hecha" && st.estado !== "medias")) return null; const p = st.paq || {}; return l.map(n => ({ nombre: n, estado: st.estado === "hecha" ? (p[n] === "picada" ? "picada" : "no_vino") : p[n] })); };
+  const notaDe = (t, st) => st.estado === "medias" && paqDe(t).length ? paqResumen(t, st) : (st.nota || "").trim();
   const revisadas = todas.filter(t => estado[t.id] && estado[t.id].estado).length;
 
   const cerrar = async () => {
     if (revisadas < todas.length) { setMsg(`Te faltan ${todas.length - revisadas} por marcar`); return; }
-    if (todas.some(t => estado[t.id].estado !== "hecha" && !(estado[t.id].nota || "").trim())) { setMsg("Indica el motivo de las tareas a medias o no hechas"); return; }
+    const conPaq = todas.map(t => paqError(t, estado[t.id])).find(Boolean); // #223
+    if (conPaq) { setMsg(conPaq); return; }
+    if (todas.some(t => estado[t.id].estado !== "hecha" && !notaDe(t, estado[t.id]))) { setMsg("Indica el motivo de las tareas a medias o no hechas"); return; }
     const conHora = todas.filter(t => t.pide_hora && estado[t.id].estado === "hecha");
     if (conHora.some(t => !(estado[t.id].hora || "").trim())) { setMsg("Pon la hora a la que se limpió"); return; }
     if (conHora.some(t => estado[t.id].hora < "07:00" || estado[t.id].hora > "23:00")) { setMsg("La hora tiene que estar entre las 7:00 y las 23:00"); return; }
@@ -52,7 +69,7 @@ export function TareasApoyoView({ onTerminar }) {
     try {
       // #201: tres estados. «A medias» aquí no pasa a nadie: lo valora dirección, igual que «No hecha»
       const BD = { hecha: "hecha", medias: "a_medias", no: "no_hecha" };
-      await sb.rpc("cerrar_tareas_apoyo_v2", { p_items: todas.map(t => ({ id: t.id, hecha: estado[t.id].estado === "hecha", estado: BD[estado[t.id].estado], justificacion: estado[t.id].estado !== "hecha" ? estado[t.id].nota.trim() : null, hora: t.pide_hora && estado[t.id].estado === "hecha" ? estado[t.id].hora : null })) }); // #222
+      await sb.rpc("cerrar_tareas_apoyo_v2", { p_items: todas.map(t => ({ id: t.id, hecha: estado[t.id].estado === "hecha", estado: BD[estado[t.id].estado], justificacion: estado[t.id].estado !== "hecha" ? notaDe(t, estado[t.id]) : null, paqueterias: paqItems(t, estado[t.id]), hora: t.pide_hora && estado[t.id].estado === "hecha" ? estado[t.id].hora : null })) }); // #222
       setHecho(true);
     } catch (e) { setMsg(errorTexto(e)); await cargar(); }
     setSaving(false);
@@ -104,7 +121,29 @@ export function TareasApoyoView({ onTerminar }) {
                         {!(st.hora || "") && <div style={{ fontFamily: F, fontSize: 11.5, color: C.red, marginTop: 6 }}>Pon la hora a la que se limpió</div>}
                       </div>
                     )}
-                    {(no || medias) && (
+                    {done && paqDe(t).length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: C.grn, marginBottom: 8 }}>¿Qué paqueterías han venido?</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {paqDe(t).map(n => { const on = (st.paq || {})[n] === "picada"; return <button key={n} onClick={() => setPaq(t.id, n, "picada")} style={{ padding: "8px 12px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 12.5, fontWeight: 700, border: `1.5px solid ${on ? C.grn : C.brd}`, background: on ? C.grn : "#fff", color: on ? "#fff" : C.char }}>{on ? "✓ " : ""}{n}</button>; })}
+                        </div>
+                        {paqError(t, st) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.red, marginTop: 6 }}>{paqError(t, st)}</div>}
+                      </div>
+                    )}
+                    {medias && paqDe(t).length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: "#7A4E06", marginBottom: 8, lineHeight: 1.4 }}>Marca cada paquetería. No pasa a nadie: lo verá dirección.</div>
+                        {paqDe(t).map(n => (
+                          <div key={n} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                            <div style={{ width: 62, fontFamily: F, fontSize: 12.5, fontWeight: 600, color: C.char }}>{n}</div>
+                            {[["picada", "Picada", C.grn], ["falta", "Falta", "#C27C0E"], ["no_vino", "No vino", C.mut]].map(([v, txt, col]) => { const on = (st.paq || {})[n] === v; return <button key={v} onClick={() => setPaq(t.id, n, v)} style={{ flex: 1, padding: "7px 4px", borderRadius: 9, cursor: "pointer", fontFamily: F, fontSize: 12, fontWeight: 700, border: `1.5px solid ${on ? col : C.brd}`, background: on ? col : "#fff", color: on ? "#fff" : C.mut }}>{txt}</button>; })}
+                          </div>
+                        ))}
+                        <div style={{ fontFamily: F, fontSize: 12, color: "#7A4E06", marginTop: 4 }}>{paqResumen(t, st)}</div>
+                        {paqError(t, st) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.red, marginTop: 6 }}>{paqError(t, st)}</div>}
+                      </div>
+                    )}
+                    {(no || (medias && !paqDe(t).length)) && (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontFamily: F, fontSize: 11.5, fontWeight: 600, color: medias ? "#7A4E06" : "#B23A2C", marginBottom: 8, lineHeight: 1.4 }}>{medias ? "¿Por qué se ha quedado a medias y qué falta? No pasa a nadie: lo verá dirección." : "¿Por qué no se ha hecho?"}</div>
                         <input value={st.nota || ""} onChange={e => setNota(t.id, e.target.value)} placeholder="Escribe el motivo" style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#FBF4F3", border: "1px solid #EDC9C3", borderRadius: 10, fontFamily: F, fontSize: 12.5, color: "#B23A2C", outline: "none" }} />

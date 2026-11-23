@@ -129,6 +129,13 @@ const pctDe = (e) => (e.cuentan ? Math.round((e.hecha / e.cuentan) * 100) : null
 // #222: hora a la que se hizo la tarea (solo las que la piden, p. ej. «Limpieza del suelo»)
 const horaTareaDe = (i) => { const h = i && i.horas && i.horas[0] && i.horas[0].hora; return h ? String(h).slice(0, 5) : null; };
 
+// #223: paqueterías marcadas en «Picar paquetería»
+function paqTarea(i) {
+  const d = i && i.paq && i.paq[0] && i.paq[0].detalle; if (!Array.isArray(d)) return null;
+  const pic = d.filter(x => x.estado === "picada").map(x => x.nombre), fal = d.filter(x => x.estado === "falta").map(x => x.nombre);
+  return <small>Paqueterías · picadas: {pic.join(", ") || "ninguna"}{fal.length ? ` · faltaban: ${fal.join(", ")}` : ""}</small>;
+}
+
 // #225: resultado de la verificación del turno siguiente, tarea a tarea
 const VERIF_TAREA = { bien: "Verificación: bien", no_estaba: "Verificación: no estaba hecha", si_procedia: "Verificación: sí procedía" };
 function verifTarea(inf, i) {
@@ -151,7 +158,7 @@ function Cierres({ foco, quitarFoco }) {
   const [bocadillo, setBocadillo] = useState(null);
   const cargar = useCallback(async () => {
     setFilas(null);
-    const q = "select=*,items:cierre_items(id,tarea_texto,hecha,justificacion,estado,origen_item_id,horas:cierre_horas(hora)),extras:cierre_tareas_extra(texto),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,a_medias,justificacion,cerrado_en,valoracion,cuenta_a,horas:cierre_horas(hora)),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
+    const q = "select=*,items:cierre_items(id,tarea_texto,hecha,justificacion,estado,origen_item_id,horas:cierre_horas(hora),paq:cierre_paqueterias(detalle)),extras:cierre_tareas_extra(texto),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,a_medias,justificacion,cerrado_en,valoracion,cuenta_a,horas:cierre_horas(hora),paq:cierre_paqueterias(detalle)),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
       + (foco ? `&id=eq.${foco.cierre_id}` : (uid ? `&usuario_id=eq.${uid}` : "") + `&fecha=gte.${masDias(hoy, -(Number(dias) - 1))}`);
     try {
       const r = await sb.select("cierres_turno", q); setFilas(r); if (foco && r[0]) setAbierto(r[0].id);
@@ -229,7 +236,7 @@ function Cierres({ foco, quitarFoco }) {
                         )}
                         {it.length > 0 && (
                           <ul className="checklist ver">
-                            {it.map((i, k) => { const e = EST[estDe(i)]; return <li key={k} className={e.cls}><span>{e.ico}</span><div>{i.tarea_texto}{horaTareaDe(i) && ` · hecha · ${horaTareaDe(i)}`}{i.origen_item_id ? <small>Venía a medias del turno anterior</small> : null}{e.cls === "medias" && <small>A medias · queda: “{i.justificacion}”</small>}{e.cls === "noproc" && <small>No procedía</small>}{e.cls === "no" && i.justificacion && <small>“{i.justificacion}”</small>}{verifTarea(info[c.id], i)}</div></li>; })}
+                            {it.map((i, k) => { const e = EST[estDe(i)]; return <li key={k} className={e.cls}><span>{e.ico}</span><div>{i.tarea_texto}{horaTareaDe(i) && ` · hecha · ${horaTareaDe(i)}`}{i.origen_item_id ? <small>Venía a medias del turno anterior</small> : null}{e.cls === "medias" && <small>A medias · queda: “{i.justificacion}”</small>}{paqTarea(i)}{e.cls === "noproc" && <small>No procedía</small>}{e.cls === "no" && i.justificacion && <small>“{i.justificacion}”</small>}{verifTarea(info[c.id], i)}</div></li>; })}
                           </ul>
                         )}
                         {it.length > 0 && <p className="sub resumen-cierre">{hechas} hechas · {est.a_medias} a medias · {est.no_hecha} no hechas · {est.no_procedia} no procedía{ex.length ? ` · +${ex.length} extra` : ""}</p>}
@@ -243,6 +250,7 @@ function Cierres({ foco, quitarFoco }) {
                                   <span>{x.estado === "hecha" ? "✓" : x.estado === "pendiente" ? "…" : "✗"}</span>
                                   <div>
                                     {x.tarea_texto}{horaTareaDe(x) && ` · hecha · ${horaTareaDe(x)}`}
+                                    {paqTarea(x)}
                                     <small>Pasada a {nombreDe[x.apoyo_id] || "la persona de apoyo"} · {resultadoTraspaso(x)}</small>
                                     {x.estado === "no_hecha" && x.justificacion && <small>“{x.justificacion}”</small>}
                                     {(x.estado === "no_hecha" || x.estado === "sin_cerrar") && <small>{cuentaTxt(x, nombreDe)}</small>}
