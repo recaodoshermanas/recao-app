@@ -126,6 +126,15 @@ function cuentaEstados(items) {
 }
 const pctDe = (e) => (e.cuentan ? Math.round((e.hecha / e.cuentan) * 100) : null);
 
+// #225: resultado de la verificación del turno siguiente, tarea a tarea
+const VERIF_TAREA = { bien: "Verificación: bien", no_estaba: "Verificación: no estaba hecha", si_procedia: "Verificación: sí procedía" };
+function verifTarea(inf, i) {
+  const r = inf && inf.verif_tareas && inf.verif_tareas[String(i.id)];
+  if (r) return <small style={{ color: r === "bien" ? "var(--ok, #2D8B4E)" : "var(--bad, #C44D3F)", fontWeight: 600 }}>{VERIF_TAREA[r]}</small>;
+  if (inf && inf.verif === "verificado" && inf.verif_una_a_una === false && estDe(i) === "hecha") return <small>Verificado sin marcar tarea a tarea (antes del cambio)</small>;
+  return null;
+}
+
 const PERIODOS = [{ id: "7", label: "7 días" }, { id: "30", label: "30 días" }, { id: "90", label: "90 días" }];
 
 function Cierres({ foco, quitarFoco }) {
@@ -139,7 +148,7 @@ function Cierres({ foco, quitarFoco }) {
   const [bocadillo, setBocadillo] = useState(null);
   const cargar = useCallback(async () => {
     setFilas(null);
-    const q = "select=*,items:cierre_items(tarea_texto,hecha,justificacion,estado,origen_item_id),extras:cierre_tareas_extra(texto),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,a_medias,justificacion,cerrado_en,valoracion,cuenta_a),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
+    const q = "select=*,items:cierre_items(id,tarea_texto,hecha,justificacion,estado,origen_item_id),extras:cierre_tareas_extra(texto),traspasos:cierre_traspasos(id,tarea_texto,apoyo_id,estado,a_medias,justificacion,cerrado_en,valoracion,cuenta_a),caja:cierres_caja(caja1_efectivo,caja1_tarjeta,caja2_efectivo,caja2_tarjeta,tickets:facturas_proveedores(proveedor,importe,caja))&order=fecha.desc,completado_en.desc"
       + (foco ? `&id=eq.${foco.cierre_id}` : (uid ? `&usuario_id=eq.${uid}` : "") + `&fecha=gte.${masDias(hoy, -(Number(dias) - 1))}`);
     try {
       const r = await sb.select("cierres_turno", q); setFilas(r); if (foco && r[0]) setAbierto(r[0].id);
@@ -217,7 +226,7 @@ function Cierres({ foco, quitarFoco }) {
                         )}
                         {it.length > 0 && (
                           <ul className="checklist ver">
-                            {it.map((i, k) => { const e = EST[estDe(i)]; return <li key={k} className={e.cls}><span>{e.ico}</span><div>{i.tarea_texto}{i.origen_item_id ? <small>Venía a medias del turno anterior</small> : null}{e.cls === "medias" && <small>A medias · queda: “{i.justificacion}”</small>}{e.cls === "noproc" && <small>No procedía</small>}{e.cls === "no" && i.justificacion && <small>“{i.justificacion}”</small>}</div></li>; })}
+                            {it.map((i, k) => { const e = EST[estDe(i)]; return <li key={k} className={e.cls}><span>{e.ico}</span><div>{i.tarea_texto}{i.origen_item_id ? <small>Venía a medias del turno anterior</small> : null}{e.cls === "medias" && <small>A medias · queda: “{i.justificacion}”</small>}{e.cls === "noproc" && <small>No procedía</small>}{e.cls === "no" && i.justificacion && <small>“{i.justificacion}”</small>}{verifTarea(info[c.id], i)}</div></li>; })}
                           </ul>
                         )}
                         {it.length > 0 && <p className="sub resumen-cierre">{hechas} hechas · {est.a_medias} a medias · {est.no_hecha} no hechas · {est.no_procedia} no procedía{ex.length ? ` · +${ex.length} extra` : ""}</p>}

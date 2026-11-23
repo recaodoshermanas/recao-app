@@ -30,6 +30,7 @@ export function RevisarTurnoView({ user }) {
   const [reportadas, setReportadas] = useState([]);
   const [info, setInfo] = useState({});
   const [marcadas, setMarcadas] = useState({});
+  const [bien, setBien] = useState({}); // #225: tareas marcadas «Bien» una a una
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
@@ -47,13 +48,14 @@ export function RevisarTurnoView({ user }) {
       setNoProcede(r.no_procede || []);
       setReportadas(r.reportadas || []);
       setInfo({ motivo: r.motivo, ventana: r.ventana || {}, prueba: !!r.prueba });
-      setMarcadas({});
+      setMarcadas({}); setBien({});
     } catch (e) { /* noop */ }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const toggle = (id) => setMarcadas(m => { const c = { ...m }; if (c[id]) delete c[id]; else c[id] = { comentario: "", fotos: [] }; return c; });
+  const toggle = (id) => { setBien(b => { const c = { ...b }; delete c[id]; return c; }); setMarcadas(m => { const c = { ...m }; if (c[id]) delete c[id]; else c[id] = { comentario: "", fotos: [] }; return c; }); };
+  const marcarBien = (id, v) => { setMarcadas(m => { const c = { ...m }; delete c[id]; return c; }); setBien(b => { const c = { ...b }; if (v) c[id] = true; else delete c[id]; return c; }); };
   const setCom = (id, v) => setMarcadas(m => ({ ...m, [id]: { ...m[id], comentario: v } }));
   const onFoto = async (id, e) => {
     const files = Array.from(e.target.files || []);
@@ -65,7 +67,9 @@ export function RevisarTurnoView({ user }) {
   const quitarFoto = (id, i) => setMarcadas(m => ({ ...m, [id]: { ...m[id], fotos: (m[id].fotos || []).filter((_, j) => j !== i) } }));
 
   const nMarcadas = Object.keys(marcadas).length;
+  const faltan = completadas.filter(it => !bien[it.id] && !marcadas[it.id]).length; // #225
   const pedirEnviar = () => {
+    if (faltan > 0) { flash(`Te ${faltan === 1 ? "queda 1 tarea" : `quedan ${faltan} tareas`} por marcar`); return; }
     if (Object.values(marcadas).some(v => !v.fotos || v.fotos.length === 0)) { flash("Cada tarea marcada como no conforme necesita al menos una foto"); return; }
     setConfirmar(true);
   };
@@ -73,7 +77,7 @@ export function RevisarTurnoView({ user }) {
     setBusy(true);
     try {
       const noconformes = Object.entries(marcadas).map(([id, v]) => ({ cierre_item_id: Number(id), comentario: (v.comentario || "").trim() || null, fotos: v.fotos }));
-      await sb.fn("incidencias", { action: "verificar", cierre_id: cierre.id, noconformes });
+      await sb.fn("incidencias", { action: "verificar", cierre_id: cierre.id, noconformes, bien: completadas.filter(it => bien[it.id]).map(it => it.id) });
       setConfirmar(false);
       flash("Verificación enviada. Dirección lo revisará.");
       await load();
@@ -149,15 +153,23 @@ export function RevisarTurnoView({ user }) {
               {info.prueba && <div style={{ fontFamily: F, fontSize: 13, color: "#B23A2C", background: "#FBEAE7", borderRadius: 12, padding: "10px 12px", marginBottom: 12, lineHeight: 1.4 }}>Cuenta Prueba: puedes ver la pantalla, pero no enviar la verificación de un cierre real.</div>}
               {info.ventana?.vencida ? <div style={{ fontFamily: F, fontSize: 13, color: "#B23A2C", background: "#FBEAE7", borderRadius: 12, padding: "10px 12px", marginBottom: 12, lineHeight: 1.4 }}>La ventana para verificar este turno terminó a las {info.ventana.hasta}. Ya no se puede verificar.</div>
                 : info.ventana?.vigente && info.ventana?.hasta ? <div style={{ fontFamily: F, fontSize: 13, color: C.char, background: "#FFF6DB", borderRadius: 12, padding: "10px 12px", marginBottom: 12, lineHeight: 1.4 }}>Tienes hasta las <b>{info.ventana.hasta}</b> para verificar el turno anterior.</div> : null}
-              <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 14, lineHeight: 1.4 }}>Estas tareas se marcaron como <b>hechas</b>. Si alguna no estaba hecha de verdad, márcala como no conforme y adjunta una o varias fotos. Cuando termines, envía la verificación.</div>
+              <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut, marginBottom: 14, lineHeight: 1.4 }}>Estas tareas se marcaron como <b>hechas</b>. Revísalas y marca <b>cada una</b>: «Bien» si está hecha, o «No estaba hecha» con una o varias fotos. Cuando las tengas todas marcadas, envía la verificación.</div>
               {completadas.length === 0 ? <div style={{ fontFamily: F, fontSize: 13, color: C.mut, textAlign: "center", padding: 16 }}>El turno anterior no marcó ninguna tarea como hecha.</div>
                 : completadas.map(it => {
-                  const mk = marcadas[it.id];
+                  const mk = marcadas[it.id]; const ok = !!bien[it.id];
                   return (
-                    <div key={it.id} style={{ background: "#fff", border: `1.5px solid ${mk ? C.red : C.brdL}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
+                    <div key={it.id} style={{ background: "#fff", border: `1.5px solid ${mk ? C.red : ok ? "#BFE6CC" : C.brdL}`, borderRadius: 14, padding: 14, marginBottom: 10 }}>
                       <div style={{ fontFamily: F, fontSize: 14, color: C.char, lineHeight: 1.35 }}>{it.texto}</div>
-                      {!mk ? (
-                        <button onClick={() => toggle(it.id)} style={{ marginTop: 10, background: "#FBEDE9", color: C.red, border: "none", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>No estaba hecha</button>
+                      {ok ? (
+                        <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 12 }}>
+                          <span style={{ background: C.grn, color: "#fff", borderRadius: 10, padding: "8px 14px", fontFamily: F, fontSize: 13, fontWeight: 700 }}>Bien ✓</span>
+                          <button onClick={() => marcarBien(it.id, false)} style={{ background: "none", border: "none", color: C.mut, fontFamily: F, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>Quitar marca</button>
+                        </div>
+                      ) : !mk ? (
+                        <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                          <button onClick={() => marcarBien(it.id, true)} style={{ flex: 1, background: "#E7F3EC", color: "#1E7A46", border: "none", borderRadius: 10, padding: "9px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Bien</button>
+                          <button onClick={() => toggle(it.id)} style={{ flex: 1, background: "#FBEDE9", color: C.red, border: "none", borderRadius: 10, padding: "9px 14px", fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>No estaba hecha</button>
+                        </div>
                       ) : (
                         <div style={{ marginTop: 12 }}>
                           {thumbs(mk, it.id)}
@@ -197,8 +209,8 @@ export function RevisarTurnoView({ user }) {
 
               {seccionNoCompletadas}
 
-              <button onClick={pedirEnviar} disabled={completadas.length + noProcede.length === 0 || info.prueba || info.ventana?.vencida} style={{ width: "100%", boxSizing: "border-box", marginTop: 18, background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: "pointer", opacity: (completadas.length + noProcede.length === 0 || info.prueba || info.ventana?.vencida) ? 0.5 : 1 }}>
-                {nMarcadas > 0 ? `Enviar verificación · ${nMarcadas} no conforme${nMarcadas > 1 ? "s" : ""}` : "Enviar verificación · todo conforme"}
+              <button onClick={pedirEnviar} disabled={completadas.length + noProcede.length === 0 || faltan > 0 || info.prueba || info.ventana?.vencida} style={{ width: "100%", boxSizing: "border-box", marginTop: 18, background: C.char, color: C.gold, border: "none", borderRadius: 13, padding: 15, fontFamily: SF, fontSize: 16, cursor: faltan > 0 ? "default" : "pointer", opacity: (completadas.length + noProcede.length === 0 || faltan > 0 || info.prueba || info.ventana?.vencida) ? 0.5 : 1 }}>
+                {faltan > 0 ? `Te ${faltan === 1 ? "queda 1 tarea" : `quedan ${faltan} tareas`} por marcar` : nMarcadas > 0 ? `Enviar verificación · ${nMarcadas} no conforme${nMarcadas > 1 ? "s" : ""}` : "Enviar verificación · todo bien"}
               </button>
             </div>
           )}
