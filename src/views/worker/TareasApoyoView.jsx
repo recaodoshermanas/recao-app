@@ -82,7 +82,9 @@ export function TareasApoyoView({ onTerminar }) {
                 const st = estado[t.id] || {}; const done = st.estado === "hecha", no = st.estado === "no", medias = st.estado === "medias";
                 return (
                   <div key={t.id} style={{ background: "#fff", border: `1.5px solid ${no ? C.red : medias ? "#C27C0E" : done ? "#BFE6CC" : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
-                    <div style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500, marginBottom: 10 }}>{t.texto}</div>
+                    <div style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500, marginBottom: 10 }}>{t.texto}
+                      {(t.detalle || []).length > 0 && <div style={{ marginTop: 4, fontWeight: 400 }}>{t.detalle.map((x, i) => <div key={i} style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.45 }}>{x}</div>)}</div>}{/* #221 */}
+                    </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={() => setEst(t.id, "hecha")} style={segBtn(done, "hecha")}>Hecha</button>
                       <button onClick={() => setEst(t.id, "medias")} style={segBtn(medias, "medias")}>A medias</button>

@@ -36,6 +36,7 @@ export function CerrarTurnoView({ user }) {
   const [modo, setModo] = useState("ver");
   const [sugerido, setSugerido] = useState(null);
   const [tareas, setTareas] = useState([]);
+  const [detalles, setDetalles] = useState({}); // #221: líneas informativas por tarea (familias a reponer)
   const [estado, setEstado] = useState({});
   const [yaCerrado, setYaCerrado] = useState(null);
   const [cajaCerrada, setCajaCerrada] = useState(null);
@@ -99,6 +100,7 @@ export function CerrarTurnoView({ user }) {
       setApoyoDisp(null);
       sb.rpc("cierre_apoyos_disponibles", { p_turno: tn }).then((d) => { if (d && d.fecha === ff && (d.apoyos || []).length) setApoyoDisp(d); }).catch(() => {});
       const all = await sb.select("cierre_tareas", `select=id,orden,texto,dia_semana,hora,grupo&turno=eq.${tn}&activa=eq.true&order=orden.asc`);
+      sb.select("cierre_tareas_detalle", "select=tarea_id,lineas").then(d => { const m = {}; (d || []).forEach(x => { m[x.tarea_id] = x.lineas || []; }); setDetalles(m); }).catch(() => setDetalles({})); // #221
       // #201: lo que el turno anterior dejó «A medias» (no en un turno reabierto: ese día ya pasó)
       let medias = [];
       const reab = (ctx?.reabiertos || []).some(rb => rb.fecha === ff && rb.turno === tn);
@@ -192,11 +194,17 @@ export function CerrarTurnoView({ user }) {
       La dejó a medias {t.origen.de || "el turno anterior"} ({t.origen.turno} del {fechaCortaX(t.origen.fecha)}). Queda: <b>{t.origen.queda}</b>
     </div>
   );
+  // #221: solo informativo (en gris, una por línea); no se marca
+  const detalleDe = (t) => {
+    const l = detalles[t.origen ? t.origen.tarea_id : t.id] || [];
+    return l.length ? <div style={{ marginTop: 4, fontWeight: 400 }}>{l.map((x, i) => <div key={i} style={{ fontFamily: F, fontSize: 12.5, color: C.mut, lineHeight: 1.45 }}>{x}</div>)}</div> : null;
+  };
   const filaVer = (t) => (
     <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: `1px solid ${t.origen ? AMBAR : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
       <span style={{ width: 20, height: 20, borderRadius: "999px", border: `2px solid ${t.origen ? AMBAR : C.brd}`, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}</span>
+        {detalleDe(t)}
         {vieneDe(t)}
       </div>
     </div>
@@ -214,7 +222,7 @@ export function CerrarTurnoView({ user }) {
     const puedePasar = pasable(t);
     return (
       <div key={t.id} style={{ background: "#fff", border: `1.5px solid ${no ? C.red : done ? "#BFE6CC" : alApoyo ? C.blu : medias ? AMBAR : noproc ? C.mutL : t.origen ? AMBAR : C.brdL}`, borderRadius: 13, padding: "13px 14px", marginBottom: 9 }}>
-        <div style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500, marginBottom: 10 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}{vieneDe(t)}</div>
+        <div style={{ fontFamily: F, fontSize: 14, color: C.char, fontWeight: 500, marginBottom: 10 }}>{t.texto}{t.hora ? <span style={{ color: C.mut, fontSize: 12 }}> · {t.hora}</span> : null}{detalleDe(t)}{vieneDe(t)}</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={() => setEst(t.id, "hecha")} style={segBtn(done, "hecha")}>Hecha</button>
           {puedePasar
