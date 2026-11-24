@@ -35,6 +35,7 @@ const DESTINO = {
   // Formación en vídeo (#79): la eventual abre el vídeo; dirección, la persona en Personas → Equipo → Formación
   formacion_nueva: "formacion", formacion_recordatorio: "formacion", formacion_21d: "formacion_admin",
   candidata_respuesta: "candidatos", // #212: respuesta de una candidata al WhatsApp → su ficha en Selección
+  acogida_creada: "candidatos", acogida_repaso: "candidatos", // #230: la ficha de la acogida en Selección → Acogida (panel)
   tec_te_toca: "solicitudes_tec", tec_estado: "solicitudes_tec", tec_comentario: "solicitudes_tec", tec_nueva: "solicitudes_tec",
 };
 
@@ -113,7 +114,7 @@ export function NotificacionesBell({ user }) {
     const ref = destino === "solicitudes_tec" ? (/^#(\d+)/.exec(n.titulo || "") || [])[1]
       : destino === "tareas_extra" ? "tareas-extra" + ((/"(.+)"/.exec(n.cuerpo || "") || [])[1] ? ":" + encodeURIComponent(/"(.+)"/.exec(n.cuerpo)[1]) : "")
       : destino === "formacion" ? n.ref || undefined
-      : destino === "candidatos" ? n.ref || undefined // #212
+      : destino === "candidatos" ? (String(n.tipo).startsWith("acogida") ? (n.ref ? "acogida:" + n.ref : "acogida") : n.ref || undefined) // #212 · #230: acogida → Selección → Acogida
       : destino === "horario" ? n.ref || undefined // #198: día del turno
       : destino === "formacion_admin" ? (n.ref ? "formacion:" + n.ref : "formacion")
       : undefined;

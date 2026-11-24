@@ -7,7 +7,7 @@ import { Tesoreria } from "./finanzas/Tesoreria.jsx"; // #89: sustituye a Tesore
 import { HistoriaDinero } from "./finanzas/HistoriaDinero.jsx"; // #153
 import { AjustesView } from "../../src/views/owner/AjustesView.jsx";
 import { AnalyticaView } from "../../src/views/owner/AnalyticaView.jsx";
-import { CVCandidatosView } from "../../src/views/owner/CVCandidatosView.jsx";
+import { Seleccion } from "./personas/Acogida.jsx"; // #230: Candidatas · Ranking · Acogida
 import { WorkerView } from "../../src/views/WorkerView.jsx";
 import { PaqueteTrimestre } from "./finanzas/PaqueteTrimestre.jsx";
 
@@ -28,7 +28,7 @@ export function Legado({ area, sub, datos, user, mesFoco, onEditMonth, extra }) 
   const v = `${area}/${sub}`;
   let vista = null;
   switch (v) {
-    case "personas/seleccion": vista = <CVCandidatosView currentUser={user} abrirId={extra} />; break;
+    case "personas/seleccion": vista = <Seleccion user={user} extra={extra} />; break;
     case "finanzas/tesoreria": vista = <Tesoreria />; break;
     case "finanzas/historia": vista = <HistoriaDinero />; break;
     case "finanzas/cierre": vista = <DatosMesView facturas={facturas} monthlyData={monthlyData} config={config} onReload={reload} initialMonth={mesFoco} />; break;

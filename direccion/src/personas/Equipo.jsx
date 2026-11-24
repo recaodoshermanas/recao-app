@@ -410,8 +410,9 @@ function Accesos({ persona, esYo, busy, onGuardar }) {
   );
 }
 
-function NuevaCuenta({ onClose, onCreada }) {
-  const [f, setF] = useState({ nombre: "", email: "", password: "", tel: "", tipo: "principal", acceso: false, app: true, dir: "no", areas: [] });
+// #230: también se abre desde Selección → Ranking («Contratar y empezar acogida») con los datos de la candidata
+export function NuevaCuenta({ onClose, onCreada, inicial, titulo }) {
+  const [f, setF] = useState({ nombre: "", email: "", password: "", tel: "", tipo: "principal", acceso: false, app: true, dir: "no", areas: [], ...(inicial || {}) });
   const [busy, setBusy] = useState(false);
   const ev = f.tipo === "eventual";
   const sinPuesto = f.tipo === "oficina";
@@ -434,12 +435,12 @@ function NuevaCuenta({ onClose, onCreada }) {
           acceso_app: sinPuesto ? false : f.app, email: f.email.trim().toLowerCase(), nombre: f.nombre.trim(), password: f.password, telefono: telN,
         });
       if (r && r.ok === false) throw new Error(r.error);
-      avisar(ev && !f.acceso ? "Persona creada sin acceso a la app" : "Cuenta creada"); await onCreada();
+      avisar(ev && !f.acceso ? "Persona creada sin acceso a la app" : "Cuenta creada"); await onCreada(r);
     } catch (e) { avisar(e.message || "No se ha podido crear", "mal"); }
     setBusy(false);
   };
   return (
-    <Panel titulo="Nueva cuenta" sub="Elige su puesto en la tienda y a qué entra: la app, el panel de dirección o los dos." onClose={onClose}
+    <Panel titulo={titulo || "Nueva cuenta"} sub="Elige su puesto en la tienda y a qué entra: la app, el panel de dirección o los dos." onClose={onClose}
       pie={<>{motivo && <span className="sub" style={{ marginRight: 12 }}>{motivo}</span>}<button className="btn-p" disabled={!ok || busy} onClick={crear}>{busy ? "Creando…" : "Crear"}</button></>}>
       {f.dir !== "todas" ? (
         <div className="campo">Puesto en la tienda

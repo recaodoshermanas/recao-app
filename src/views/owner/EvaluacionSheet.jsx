@@ -135,7 +135,7 @@ const box = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 1
 const secTit = { fontFamily: SF, fontSize: 17, color: C.char, margin: "18px 2px 10px" };
 const ta = { width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.brd}`, borderRadius: 10, padding: "9px 11px", fontFamily: F, fontSize: 13.5, color: C.char, outline: "none", resize: "vertical" };
 
-export function EvaluacionSheet({ candidato, evaluacion, currentUser, onClose, onSaved }) {
+export function EvaluacionSheet({ candidato, evaluacion, currentUser, onClose, onSaved, onContratar }) {
   const ev0 = evaluacion || {};
   const anterior = esPlantillaAnterior(evaluacion);
   const [puesto, setPuesto] = useState(ev0.puesto || null);
@@ -201,6 +201,8 @@ export function EvaluacionSheet({ candidato, evaluacion, currentUser, onClose, o
             </div>
             <button onClick={onClose} style={{ background: "none", border: "none", fontFamily: F, fontSize: 22, color: C.mut, cursor: "pointer", lineHeight: 1, padding: 2 }}>×</button>
           </div>
+          {/* #230: solo en el panel, desde Ranking */}
+          {onContratar && <button onClick={onContratar} style={{ width: "100%", marginTop: 12, background: "#1E7A46", color: "#fff", border: "none", borderRadius: 11, padding: "11px 12px", fontFamily: F, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Contratar y empezar acogida</button>}
           {/* Puesto */}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             {PUESTOS.map((p) => { const on = puesto === p.id; return (

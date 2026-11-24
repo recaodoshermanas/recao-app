@@ -108,6 +108,7 @@ function useDatos() {
     poner("novedades", sb.select("novedades", "select=id&activa=eq.true"));
     poner("docs", sb.select("documentos_personal", "select=usuario_id,tipo,periodo,visto_en,recibido_en,requiere&anulado_en=is.null&limit=2000"));
     poner("nomPartes", sb.select("nominas_partes", `select=usuario_id,mes,estado,publicada_en&mes=eq.${mesAnt0}`));
+    poner("acogidas", sb.rpc("acogidas_panel", {})); // #230
     poner("candidatos", sb.select("candidatos", "select=id,nombre,estado,creado_en&order=creado_en.desc&limit=300"));
     return () => { vivo = false; };
   }, []);
@@ -228,6 +229,9 @@ export function PersonasResumen() {
   if (!E("vacSol") && !E("cambios")) franja.push({ k: "rev", c: vacSol + camb ? "ama" : "ok", n: vacSol + camb, t: "Vacaciones y cambios por revisar", d: vacSol + camb ? `${pl(vacSol, "vacación", "vacaciones")} · ${pl(camb, "cambio", "cambios")}` : "Al día", ruta: "personas/solicitudes" });
   if (!E("fichPanel")) franja.push({ k: "fich", c: incs.length ? "ama" : "ok", n: incs.length, t: "Fichajes con incidencia", d: incs.length ? pl(solFich.length, "corrección pendiente", "correcciones pendientes") : "Al día", ruta: "personas/fichajes" });
   if (!E("docs") && !E("nomPartes") && !E("usuarios")) franja.push({ k: "nom", c: nomFalta ? "ama" : "ok", n: nomFalta, t: `Nóminas de ${nomMes(mesNomina)} sin publicar`, d: nomFalta ? `${nomPub.size} de ${esperadas} publicadas` : "Todas publicadas", ruta: nomFalta ? "personas/documentos/pendientes:nominas" : "personas/documentos" });
+  // #230: acogidas en curso sin terminar (como los avisos de cobertura)
+  const acog = ((V("acogidas") || {}).acogidas || []).filter((a) => a.estado === "en_curso" || a.estado === "borrador");
+  if (!E("acogidas") && acog.length) franja.push({ k: "acogida", c: "ama", n: acog.length, t: acog.length === 1 ? "Acogida en curso" : "Acogidas en curso", d: acog.map((a) => `${(a.nombre || "").split(" ")[0]}${a.fecha_entrada ? " · " + diaCorto(a.fecha_entrada) : ""}`).join(", "), ruta: acog.length === 1 ? `personas/seleccion/acogida:${acog[0].id}` : "personas/seleccion/acogida" });
   const hayUrgente = franja.some((f) => f.c !== "ok");
   const cargandoFranja = ["sinCerrar", "horarios", "bolsa", "vacSol", "fichPanel", "docs"].some(L);
 

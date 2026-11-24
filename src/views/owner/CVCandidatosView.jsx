@@ -89,7 +89,8 @@ function CvArchivo({ c }) {
   );
 }
 
-export function CVCandidatosView({ currentUser, abrirId }) {
+// #230: pestanaExtra = { id, label, n, abrir, el } (Acogida, solo en el panel) · onContratar(c) = botón en la ficha de Ranking
+export function CVCandidatosView({ currentUser, abrirId, pestanaExtra, onContratar }) {
   const [rows, setRows] = useState([]);
   const [evals, setEvals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -146,6 +147,8 @@ export function CVCandidatosView({ currentUser, abrirId }) {
     const c = rows.find((x) => String(x.id) === String(abrirId));
     if (c) { setPantalla("candidatas"); setTab(c.estado); abrir(c); loadWa(); }
   }, [abrirId, rows]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { if (pestanaExtra?.abrir) setPantalla(pestanaExtra.id); }, [pestanaExtra?.abrir]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const evalsById = useMemo(() => { const m = {}; evals.forEach(e => { m[e.candidato_id] = e; }); return m; }, [evals]);
 
@@ -209,12 +212,12 @@ export function CVCandidatosView({ currentUser, abrirId }) {
 
       {/* Toggle Candidatas / Ranking */}
       <div style={{ display: "flex", gap: 3, background: "#EFE9DD", borderRadius: 11, padding: 3, marginBottom: 12 }}>
-        {[["candidatas", "Candidatas"], ["ranking", "Ranking"]].map(([k, l]) => (
-          <button key={k} onClick={() => setPantalla(k)} style={{ flex: 1, padding: "9px 8px", borderRadius: 8, border: "none", background: pantalla === k ? "#fff" : "transparent", color: pantalla === k ? C.char : C.mut, fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: pantalla === k ? SHADOW.card : "none" }}>{l}</button>
+        {[["candidatas", "Candidatas"], ["ranking", "Ranking"], ...(pestanaExtra ? [[pestanaExtra.id, pestanaExtra.label, pestanaExtra.n]] : [])].map(([k, l, n]) => (
+          <button key={k} onClick={() => setPantalla(k)} style={{ flex: 1, padding: "9px 8px", borderRadius: 8, border: "none", background: pantalla === k ? "#fff" : "transparent", color: pantalla === k ? C.char : C.mut, fontFamily: F, fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: pantalla === k ? SHADOW.card : "none" }}>{l}{n ? <span style={{ marginLeft: 6, fontSize: 11, background: "#B23A2C", color: "#fff", borderRadius: 999, padding: "1px 6px" }}>{n}</span> : null}</button>
         ))}
       </div>
 
-      {pantalla === "ranking" ? (
+      {pestanaExtra && pantalla === pestanaExtra.id ? pestanaExtra.el : pantalla === "ranking" ? (
         <RankingView candidatos={rows} evaluaciones={evals} onOpen={abrirEval} />
       ) : (
       <>
@@ -414,6 +417,7 @@ export function CVCandidatosView({ currentUser, abrirId }) {
           currentUser={currentUser}
           onClose={() => setEvaluando(null)}
           onSaved={loadEvals}
+          onContratar={onContratar && pantalla === "ranking" ? () => { const c = evaluando; setEvaluando(null); onContratar(c); } : undefined}
         />
       )}
     </div>
