@@ -894,6 +894,15 @@ function Revisar({ datos, onHecho, onVolver, onAnadirHoja }) {
   const [detalleAbierto, setDetalleAbierto] = useState(!(prov && prov.revision === false) || manual);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(datos.aviso || "");
+  // #229: otra recepción del mismo proveedor con el mismo importe y fecha (±2 días): puede ser el mismo pedido subido dos veces
+  const [parecidas, setParecidas] = useState([]);
+  const [unificando, setUnificando] = useState(false);
+  useEffect(() => {
+    if (rec.estado !== "por_revisar") return;
+    let vivo = true;
+    sb.rpc("recepcion_parecidas", { p_id: rec.id }).then((r) => { if (vivo && Array.isArray(r)) setParecidas(r); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [rec.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // factura y forma de pago (#24, #26)
   const conFactura = hoyMadrid() >= FACTURAS_DESDE;
   const [facImporte, setFacImporte] = useState(rec.total != null ? dinero(rec.total) : "");
@@ -980,7 +989,20 @@ function Revisar({ datos, onHecho, onVolver, onAnadirHoja }) {
     setLineas((ls) => [...ls, { id: null, k: `x${Date.now()}${ls.length}`, via: rec.via, descripcion: p.nombre, producto: p, product_id: p.id, tipo: "venta", emparejado: "ok", anadida: true, q: "1", coste_ref: p.coste != null ? Math.round(p.coste * 100) / 100 : null, ...(expo != null ? { expositor_de: expo } : {}) }]);
     setPanel(null);
   };
+  const unificar = async (p) => {
+    setUnificando(true); setMsg("");
+    try {
+      const r = await sb.rpc("recepcion_unificar", { p_id: rec.id, p_con: p.id });
+      if (r?.confirmada) { window.alert(r.aviso || "Hecho: era el mismo pedido. No se ha sumado nada."); onVolver(true); return; }
+      const n = r?.doc_numero;
+      if (n && !r.doc_numero_generado) setNumFac((x) => (!x.trim() || x.trim() === autoCod ? n : x));
+      setParecidas((ps) => ps.filter((x) => x.id !== p.id));
+      setMsg(r.aviso || "Hecho: he quitado la otra copia.");
+    } catch (e) { setMsg((e.message || "No se ha podido unificar").replace(/^RPC \S+: \d+ /, "").replace(/^.*"message":"([^"]+)".*$/, "$1")); }
+    setUnificando(false);
+  };
   const confirmar = async () => {
+    if (parecidas.length) { setMsg("Antes de confirmar, contesta arriba si es el mismo pedido que la otra recepción."); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     if (pendientes) { setMsg(`Falta decir qué producto es: ${listaPend.map((l) => l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     if (listaAviso.length) { setMsg(`Falta contestar si son correctas las unidades de: ${listaAviso.map((l) => l.producto?.nombre || l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     const conDecimales = lineas.filter(decimalSinPeso);
@@ -1072,7 +1094,21 @@ function Revisar({ datos, onHecho, onVolver, onAnadirHoja }) {
         <div style={{ fontFamily: F, fontSize: 12, color: C.mut }}>{[tipoDoc(rec.doc_tipo), rec.doc_numero ? `${rec.doc_numero}${rec.doc_numero_generado ? " (código interno)" : ""}` : null, (rec.doc_tipo || rec.doc_numero || rec.doc_fecha) ? fechaDoc(rec.doc_fecha) : null, rec.total != null ? eur(rec.total) : null].filter(Boolean).join(" · ") || (manual ? "Sin factura: apunta lo que ha llegado" : "")}</div>
       </div>
       {rec.prueba && <div style={{ fontFamily: F, fontSize: 12.5, background: "#EAF0F8", color: "#2F5C8F", borderRadius: 12, padding: "8px 12px" }}>Modo prueba hasta el inventario: se guarda todo, pero el stock de la caja aún no cambia. Los productos nuevos sí se dan de alta en la caja.</div>}
-      <Aviso msg={msg} tipo={msg && /ya estaba|^He visto/.test(msg) && !/No he podido leer/.test(msg) ? "bien" : "mal"} />
+      <Aviso msg={msg} tipo={msg && /ya estaba|^He visto|^Hecho:/.test(msg) && !/No he podido leer/.test(msg) ? "bien" : "mal"} />
+      {parecidas.map((p) => (
+        <div key={p.id} style={{ ...card, border: "2px solid #C77D1E", background: "#FFF6E8" }}>
+          <div style={{ fontFamily: F, fontSize: 15, fontWeight: 700, color: C.char }}>⚠️ Esto parece el mismo pedido que otro</div>
+          <div style={{ fontFamily: F, fontSize: 13.5, color: C.char }}>
+            {`${rec.proveedor} · ${eur(p.total)} · ${fechaDoc(p.dia)}${p.doc_numero ? ` · nº ${p.doc_numero}${p.doc_numero_generado ? " (código interno)" : ""}` : ""}`}
+            {["confirmada", "con_diferencias"].includes(p.estado) ? " · ya está recepcionado" : " · está en la lista sin confirmar"}{p.via === "email" ? " (llegó por correo)" : ""}.
+          </div>
+          <div style={{ fontFamily: F, fontSize: 12.5, color: C.mut }}>Mismo proveedor, mismo importe y casi la misma fecha. Si es el mismo papel (o la factura del mismo albarán), no lo confirmes otra vez: se sumaría el stock dos veces y saldrían dos facturas.</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" disabled={unificando} onClick={() => unificar(p)} style={{ ...btnPeq, background: C.char, color: "#fff", border: "none", flex: 1 }}>{unificando ? "Un momento…" : "Sí, es el mismo: dejar uno"}</button>
+            <button type="button" disabled={unificando} onClick={() => { setParecidas((ps) => ps.filter((x) => x.id !== p.id)); setMsg(""); }} style={{ ...btnPeq, flex: 1 }}>No, es otro pedido</button>
+          </div>
+        </div>
+      ))}
       {onAnadirHoja && rec.via === "foto" && !abono && (
         <button type="button" onClick={() => onAnadirHoja(lineas)} style={{ ...btnPeq, width: "100%" }}>+ Añadir hoja (falta una hoja de este documento)</button>
       )}
