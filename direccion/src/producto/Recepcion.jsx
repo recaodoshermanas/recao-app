@@ -1,5 +1,5 @@
 // Producto · Recepción de pedidos (dirección)
-// Lo que dejan las recepciones de las trabajadoras: precios por aprobar, etiquetas por cambiar,
+// Lo que dejan las recepciones de las trabajadoras: etiquetas por cambiar (los precios se deciden en Productos a revisar → Precio, #204), altas por aprobar,
 // diferencias para reclamar, avisos, y la ficha de cada proveedor. Nada cambia en Epos sin aprobación.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sb } from "../../../src/lib/supabase.js";
@@ -28,14 +28,15 @@ function useGenerados(clave) {
 }
 export function Recepcion() {
   const [d, setD] = useState(null);
-  const [tab, setTab] = useState("precios");
+  const [tab, setTab] = useState("etiquetas");
   const [fallo, setFallo] = useState(false);
   const cargar = useCallback(async () => { try { setD(await fn("panel")); setFallo(false); } catch (e) { setFallo(true); avisar(e.message || "No se ha podido cargar", "mal"); } }, []);
   useEffect(() => { cargar(); }, [cargar]);
   if (!d) return <Cargando texto={fallo ? "No se ha podido cargar la recepción. Recarga en un momento." : "Cargando…"} />;
 
   const opciones = [
-    { id: "precios", label: "Precios por aprobar", n: d.precios.length },
+    // #204: los precios se deciden en Productos a revisar → Precio; aquí solo quedan altas de productos nuevos sin crear en Epos
+    ...(d.precios.length ? [{ id: "precios", label: "Altas por aprobar", n: d.precios.length }] : []),
     { id: "etiquetas", label: "Etiquetas por cambiar", n: d.etiquetas.length },
     { id: "diferencias", label: "Diferencias", n: d.diferencias.length },
     { id: "avisos", label: "Avisos", n: d.avisos.length },
@@ -48,7 +49,7 @@ export function Recepcion() {
       {d.config.prueba && <p className="b-nota" style={{ marginTop: 0 }}>Modo prueba hasta el {fechaCorta(d.config.real_desde)}: las trabajadoras ya pueden recepcionar, pero el stock de Epos no cambia hasta el inventario.</p>}
       <Pestanas valor={tab} opciones={opciones} onChange={setTab} etiqueta="Secciones de recepción" />
       <div className="card mt">
-        {tab === "precios" && <Precios lista={d.precios} onCambio={cargar} />}
+        {tab === "precios" && d.precios.length > 0 && <Precios lista={d.precios} onCambio={cargar} />}
         {tab === "etiquetas" && <Etiquetas lista={d.etiquetas} onCambio={cargar} />}
         {tab === "diferencias" && <Diferencias lista={d.diferencias} onCambio={cargar} />}
         {tab === "avisos" && <ListaAvisos lista={d.avisos} onCambio={cargar} />}
@@ -111,7 +112,7 @@ function Etiquetas({ lista, onCambio }) {
   return (
     <>
       <div className="head">
-        <div><h2>Etiquetas por cambiar</h2><p className="sub">Precios ya aprobados en Epos. Cambia la etiqueta en la tienda y márcala.</p></div>
+        <div><h2>Etiquetas por cambiar</h2><p className="sub">Precios nuevos ya guardados en Epos (los decididos en Productos a revisar → Precio). Cambia la etiqueta en la tienda y márcala.</p></div>
         {sel.length > 0 && <button className="btn-p" onClick={() => hecho(sel)}>Marcar {sel.length} como cambiadas</button>}
       </div>
       <div className="tabla-scroll">

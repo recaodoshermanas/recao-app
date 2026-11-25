@@ -116,13 +116,13 @@ function SecPrecio({ lista, otras, onListo }) {
     try {
       if (pvp != null && Math.abs(pvp - Number(a.pvp_actual)) > 0.004) await guardarCambios([{ id: a.product_id, campos: { pvp } }], `Precio de «${a.nombre}» a ${eur(pvp, 2)}`);
       onListo(await sb.rpc("revisar_decidir", { p: { tipo: "precio", id: a.id, decision, pvp } }));
-      avisar(decision === "mantenido" ? "Se mantiene el precio" : `Precio ${eur(pvp, 2)} guardado en Epos`);
+      avisar(decision === "mantenido" ? "Se mantiene el precio" : `Precio ${eur(pvp, 2)} guardado en Epos. Queda en «Etiquetas por cambiar»`);
     } catch (e) { avisar(msg(e), "mal"); }
     setBusy(null);
   };
   return (
     <div className="card mt">
-      <div className="head"><div><h2>Precio</h2><p className="sub">Productos cuyo margen, con el coste de su última factura, queda por debajo del margen objetivo de su proveedor (35 % por defecto). «Aceptar» pone el precio de la regla (coste completo ÷ (1 − margen objetivo), redondeado arriba a 0,10 €). «Mantener» no cambia nada y no vuelve a avisar hasta que cambie el coste. Si hay subida de coste pendiente, resuélvela antes. «Enviar a tienda» (solo en proveedores que pueden traer precio marcado) pide a las trabajadoras que miren el envase: si trae precio marcado se pone ese precio en caja; si no, vuelve aquí con la nota.</p></div></div>
+      <div className="head"><div><h2>Precio</h2><p className="sub">Productos cuyo margen, con el coste de su última factura, queda por debajo del margen objetivo de su proveedor (35 % por defecto). «Aceptar» pone el precio de la regla (coste completo ÷ (1 − margen objetivo), redondeado arriba a 0,10 €). «Mantener» no cambia nada y no vuelve a avisar hasta que cambie el coste. Todo precio nuevo que se guarde aquí entra en Recepción → «Etiquetas por cambiar». Aquí llega todo: recepciones, cambios de coste aplicados y altas. Cada producto sale una sola vez, con el coste más reciente y de dónde viene. Si el precio o el coste cambian por otro camino (Catálogo, ficha, tienda o directamente en Epos) y ya llega al margen objetivo, el aviso se cierra solo y queda en «Cerrados solos». Si hay subida de coste pendiente, resuélvela antes. «Enviar a tienda» (solo en proveedores que pueden traer precio marcado) pide a las trabajadoras que miren el envase: si trae precio marcado se pone ese precio en caja; si no, vuelve aquí con la nota.</p></div></div>
       {!lista.length ? <p className="empty">Nada pendiente de precio.</p> : (
         <div className="tabla-scroll">
           <table className="ranking">
@@ -155,6 +155,43 @@ function SecPrecio({ lista, otras, onListo }) {
           </table>
         </div>
       )}
+      <Cerrados onListo={onListo} />
+    </div>
+  );
+}
+
+// #204: avisos de precio que se cerraron solos porque el precio o el coste cambiaron por otro camino y ya llega al margen objetivo
+function Cerrados({ onListo }) {
+  const [lista, setLista] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const ver = async () => { try { setLista(await sb.rpc("revisar_precio_historico", { p_dias: 60 })); } catch (e) { avisar(msg(e), "mal"); } };
+  const reabrir = async (h) => {
+    setBusy(h.id);
+    try { onListo(await sb.rpc("precio_aviso_reabrir", { p_id: h.id })); setLista((l) => l.filter((x) => x.id !== h.id)); avisar("Vuelve a estar en «Precio»"); } catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  if (!lista) return <p style={{ marginTop: 12 }}><button className="btn-txt" onClick={ver}>Ver los cerrados solos (últimos 60 días)</button></p>;
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div className="head"><div><h2>Cerrados solos</h2><p className="sub">Avisos que se cerraron porque el precio o el coste cambiaron por otro camino y ya llega al margen objetivo de su proveedor. Si alguno no debía cerrarse, «Reabrir» lo devuelve a la lista.</p></div><button className="btn-txt" onClick={() => setLista(null)}>Ocultar</button></div>
+      {!lista.length ? <p className="empty">Ninguno en los últimos 60 días.</p> : (
+        <div className="tabla-scroll">
+          <table className="ranking">
+            <thead><tr><th>Producto</th><th className="r">Coste completo</th><th className="r">Precio</th><th>Quién o qué</th><th></th></tr></thead>
+            <tbody>
+              {lista.map((h) => (
+                <tr key={h.id}>
+                  <td><span className="pn">{h.nombre}</span><span className="pf">{[h.proveedor, h.origen].filter(Boolean).join(" · ")} · {hace(h.decidido_en)}</span>{h.nota && <span className="pf">{h.nota}</span>}</td>
+                  <td className="r">{eur(h.coste_completo, 3)}</td>
+                  <td className="r">{eur(h.pvp_final, 2)}{Math.abs(Number(h.pvp_ahora) - Number(h.pvp_final)) > 0.004 && <span className="pf">hoy {eur(h.pvp_ahora, 2)}</span>}</td>
+                  <td>{h.resuelto_por || "—"}</td>
+                  <td className="r"><button className="btn-l" disabled={busy === h.id} onClick={() => reabrir(h)}>Reabrir</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -168,7 +205,7 @@ function SecCoste({ lista, otras, onListo }) {
       if (decision === "aplicado") await guardarCambios([{ id: c.product_id, campos: { coste: Number(c.coste_completo_nuevo), coste_imp_inc: true } }], `Coste de «${c.nombre}» actualizado`);
       const r = await sb.rpc("revisar_decidir", { p: { tipo: "coste", id: c.id, decision } });
       onListo(r);
-      avisar(decision === "error" ? "Marcado como error: no se aplica" : r.nuevo_aviso_precio ? "Coste guardado en Epos. El margen baja del 35 %: tienes el precio en «Precio»" : "Coste guardado en Epos");
+      avisar(decision === "error" ? "Marcado como error: no se aplica" : r.nuevo_aviso_precio ? "Coste guardado en Epos. El margen no llega al objetivo: tienes el precio en «Precio»" : "Coste guardado en Epos");
     } catch (e) { avisar(msg(e), "mal"); }
     setBusy(null);
   };
@@ -328,7 +365,7 @@ function Nuevos({ d, P, U, cargar, otras }) {
   return (
     <div className="card mt">
       <div className="head">
-        <div><h2>Productos dados de alta desde la recepción</h2><p className="sub">Ya están en Epos y se pueden vender. El precio de venta se cambia aquí mismo (se guarda en Epos al momento y queda en el historial); nombre, categoría e IVA, en el Catálogo. Luego márcalos como revisados. Los precios corregidos por coste aparecen en Recepción → Precios por aprobar.</p></div>
+        <div><h2>Productos dados de alta desde la recepción</h2><p className="sub">Ya están en Epos y se pueden vender. El precio de venta se cambia aquí mismo (se guarda en Epos al momento y queda en el historial); nombre, categoría e IVA, en el Catálogo. Luego márcalos como revisados. Los precios corregidos por coste aparecen en la pestaña «Precio».</p></div>
         {sel.length > 0 && <button className="btn-p" onClick={() => hacer("lote", "alta_revisada", { ids: sel }, `${sel.length} marcados como revisados`)}>Marcar {sel.length} como revisados</button>}
       </div>
       <div className="filtros-t">
@@ -375,7 +412,7 @@ function Nuevos({ d, P, U, cargar, otras }) {
                         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
                           <label style={{ position: "absolute", left: -9999 }} htmlFor={`co-${a.id}`}>Coste correcto sin IVA de {a.nombre}</label>
                           <input id={`co-${a.id}`} className="mini-input" inputMode="decimal" placeholder="Coste sin IVA" value={costes[a.id] ?? ""} onChange={(e) => setCostes({ ...costes, [a.id]: e.target.value })} style={{ width: 110 }} />
-                          <button className="btn-l" disabled={busy === a.id || !(numero(costes[a.id]) >= 0) || costes[a.id] == null || costes[a.id] === ""} onClick={() => hacer(a.id, "alta_coste", { id: a.id, coste: numero(costes[a.id]) }, (r) => (r.propuesta ? `Coste guardado. Precio propuesto ${eur(r.propuesta, 2)} en Precios por aprobar` : "Coste guardado en Epos"))}>Guardar</button>
+                          <button className="btn-l" disabled={busy === a.id || !(numero(costes[a.id]) >= 0) || costes[a.id] == null || costes[a.id] === ""} onClick={() => hacer(a.id, "alta_coste", { id: a.id, coste: numero(costes[a.id]) }, (r) => (r.propuesta ? `Coste guardado. Si el margen no llega, lo tienes en «Precio»` : "Coste guardado en Epos"))}>Guardar</button>
                         </div>
                       )}
                       {sinProv && (
@@ -542,7 +579,7 @@ function SecMarcados() {
   const nAct = lista.filter((m) => m.activo).length;
   return (
     <div className="card mt">
-      <div className="head"><div><h2>Precio marcado</h2><p className="sub">Productos que traen el precio puesto en el envase. Al recibirlos se actualiza el coste, pero no salen en «Precio» ni en «Precios por aprobar» ni se mandan a tienda a comprobar. Si alguno deja de venir marcado, quítalo de la lista y volverá a avisar cuando el margen baje del objetivo. El precio de venta no se toca desde aquí.</p></div></div>
+      <div className="head"><div><h2>Precio marcado</h2><p className="sub">Productos que traen el precio puesto en el envase. Al recibirlos se actualiza el coste, pero no salen en «Precio» ni se mandan a tienda a comprobar. Si alguno deja de venir marcado, quítalo de la lista y volverá a avisar cuando el margen baje del objetivo. El precio de venta no se toca desde aquí.</p></div></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
         <label style={{ position: "absolute", left: -9999 }} htmlFor="pm-filtro">Buscar en la lista</label>
         <input id="pm-filtro" className="mini-input" placeholder="Buscar en la lista…" value={filtro} onChange={(e) => setFiltro(e.target.value)} style={{ width: 200 }} />
