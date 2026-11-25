@@ -53,6 +53,46 @@ function avisoCoste(l, costes) {
   if (Math.abs(u - 1) < 1e-9 && numero(l.cant_doc) === 1 && q === 1 && PARECE_BULTO.test(l.descripcion || "")) return { tipo: "bulto", nuevo, clave };
   return null;
 }
+// #233: la línea trae precio marcado o gramaje distinto del producto asociado (p. ej. «LAY CAM 050 - 1E» asociada a un producto de 0,50 €)
+// Precio marcado en el texto: «- 1E», «0,50E», «1.50E», «1€» (no «3x1€», que es una oferta)
+const precioEnTexto = (t) => { const m = /(?:^|[\s\-(.])(\d{1,2}(?:[.,]\d{1,2})?)\s*(?:E|€|EUR)(?=$|[^A-Za-z0-9])/i.exec(t || ""); return m ? Number(m[1].replace(",", ".")) : null; };
+// Gramaje: «25G», «150 gr», «220 gramos» o el formato de Matutano «LAY CAM 050 - 1E» (3 cifras antes del precio)
+const gramosEnTexto = (t) => {
+  const s = t || "";
+  const g = /(?:^|[^\d+.,])(\d+(?:[.,]\d+)?)\s*(?:G|GR|GRS|GRAMOS)(?=$|[^A-Za-z])/i.exec(s);
+  if (g) return Number(g[1].replace(",", "."));
+  const m = /(?:^|\s)(\d{3})\s*-\s*\d/.exec(s);
+  return m ? Number(m[1]) : null;
+};
+function avisoAsociacion(l, fichas) {
+  if (l.tipo !== "venta" || l.product_id == null || alPeso(l) || regaloDe(l) != null) return null;
+  if (Math.abs(Number(l.unidades_por || 1) - 1) > 1e-9) return null; // cajas y packs: el precio del papel no es el de la unidad
+  if (l.asoc_ok === String(l.product_id)) return null;
+  const f = fichas[l.product_id];
+  if (!f) return null;
+  const txt = l.descripcion || "";
+  if (f.ok?.has(claveProv(txt))) return null; // ya se dijo «es el mismo» con este texto de factura
+  // solo el precio escrito en el texto de la línea: el «precio marcado» leído de algunas facturas (Ayala) es el PVP recomendado
+  const marcado = precioEnTexto(txt);
+  const pvp = f.pvp != null ? Number(f.pvp) : null;
+  const motivos = [];
+  if (marcado > 0 && pvp > 0 && Math.abs(marcado - pvp) > 0.005) motivos.push(`La factura dice ${eur(marcado)} y «${f.nombre}» se vende a ${eur(pvp)}`);
+  const gL = gramosEnTexto(txt), gP = gramosEnTexto(f.nombre);
+  if (gL > 0 && gP > 0 && Math.abs(gL - gP) > 0.5) motivos.push(`La factura dice ${fmt(gL)} g y «${f.nombre}» es de ${fmt(gP)} g`);
+  return motivos.length ? { motivos, nombre: f.nombre } : null;
+}
+function AvisoAsociacion({ l, aviso, marcar, onCambio, onAsociar }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "#FBEAE7", border: marcar ? `2px solid ${C.red}` : "1.5px solid #E7B8B1", borderRadius: 12, padding: "10px 12px", fontFamily: F, fontSize: 12.5, color: "#7A2A20" }}>
+      {aviso.motivos.map((m) => <div key={m} style={{ fontWeight: 700 }}>{m}. ¿Es el mismo producto?</div>)}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => { onCambio({ asoc_ok: String(l.product_id) }); if (l.descripcion) sb.rpc("recepcion_asoc_confirmar", { p_product_id: l.product_id, p_descripcion: l.descripcion }).catch(() => {}); }} style={{ ...btnPeq, height: 40, padding: "0 12px" }}>Sí, es el mismo</button>
+        <button type="button" onClick={() => onAsociar("buscar")} style={{ ...btnPeq, height: 40, padding: "0 12px" }}>No, elegir otro</button>
+      </div>
+      <div style={{ color: C.mut }}>Si se asocia mal, el coste cambia en un producto y el stock va a otro. Si dices que es el mismo, no se vuelve a preguntar.</div>
+    </div>
+  );
+}
 const card = { background: "#fff", border: `1px solid ${C.brdL}`, borderRadius: 18, padding: 16, boxShadow: SHADOW.card, display: "flex", flexDirection: "column", gap: 10 };
 const chip = (bg, fg) => ({ fontFamily: F, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: bg, color: fg });
 const CHIPS = { email: ["#EAF0F8", "#2F5C8F", "EMAIL"], foto: ["#FBF0DA", "#7A5410", "FOTO"], manual: ["#F0ECE2", "#5E5444", "MANUAL"] };
@@ -790,7 +830,7 @@ function NoEsProducto({ l, onCambio, onAnadirExpo, hijos, onQuitar }) {
   );
 }
 
-function Linea({ l, abono, manual, aviso, onCambio, onAsociar, marcar, normal, hijos = [], onAnadirExpo, onQuitar }) {
+function Linea({ l, abono, manual, aviso, avisoAsoc, onCambio, onAsociar, marcar, normal, hijos = [], onAnadirExpo, onQuitar }) {
   const dif = l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-3;
   const titulo = l.nuevo?.nombre || l.producto?.nombre || l.descripcion;
   // #164: una línea en negativo es una devolución: resta stock y siempre va a un producto que ya existe (nunca se da de alta)
@@ -846,6 +886,7 @@ function Linea({ l, abono, manual, aviso, onCambio, onAsociar, marcar, normal, h
           {l.coste_txt != null && l.base_unit != null && Math.abs(numero(l.coste_txt) - Number(l.base_unit)) > 0.0005 && <div style={{ gridColumn: "1 / -1", fontFamily: F, fontSize: 12, color: "#1E6B3C" }}>Corregido (se había leído {dineroSube(l.base_unit)} €/kg). Al confirmar, este es el coste que va a la caja.</div>}
         </div>
       )}
+      {avisoAsoc && <AvisoAsociacion l={l} aviso={avisoAsoc} marcar={marcar} onCambio={onCambio} onAsociar={onAsociar} />}
       {aviso && <AvisoCoste l={l} aviso={aviso} marcar={marcar} onCambio={onCambio} />}
       {pregunta && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: "#FBF0DA", borderRadius: 12, padding: "8px 10px", fontFamily: F, fontSize: 12.5, color: "#6B4A0C" }}>
@@ -975,8 +1016,24 @@ function Revisar({ datos, onHecho, onVolver, onAnadirHoja }) {
     }).catch(() => {});
     return () => { vivo = false; };
   }, [idsClave]);
+  // #233: nombre y precio de venta de los productos asociados, para avisar si no encajan con la línea
+  const [fichas, setFichas] = useState({});
+  useEffect(() => {
+    if (!idsClave) return;
+    let vivo = true;
+    const ids = idsClave.split(",").map(Number);
+    Promise.all([sb.rpc("recepcion_productos_ficha", { p_ids: ids }), sb.rpc("recepcion_asoc_confirmadas", { p_ids: ids }).catch(() => [])]).then(([r, oks]) => {
+      if (!vivo || !Array.isArray(r)) return;
+      const ok = new Map();
+      for (const x of Array.isArray(oks) ? oks : []) { if (!ok.has(x.product_id)) ok.set(x.product_id, new Set()); ok.get(x.product_id).add(claveProv(x.descripcion)); }
+      setFichas((c) => { const m = { ...c }; for (const x of r) m[x.product_id] = { nombre: x.nombre, pvp: x.pvp, ok: ok.get(x.product_id) || new Set() }; return m; });
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, [idsClave]);
   const avisos = lineas.map((l) => avisoCoste(l, costes));
   const listaAviso = lineas.filter((l, i) => avisos[i]);
+  const avisosAsoc = lineas.map((l) => avisoAsociacion(l, fichas));
+  const listaAsoc = lineas.filter((l, i) => avisosAsoc[i]);
   const listaPend = lineas.filter((l) => l.tipo === "venta" && !l.producto && (abono || numero(l.q) < 0 ? numero(l.q) !== 0 && !l.product_id : l.emparejado !== "nuevo" && numero(l.q) > 0));
   const pendientes = listaPend.length;
   const difs = lineas.filter((l) => l.uds_doc != null && Math.abs(numero(l.q) - Number(l.uds_doc)) > 1e-3).length;
@@ -1004,6 +1061,7 @@ function Revisar({ datos, onHecho, onVolver, onAnadirHoja }) {
   const confirmar = async () => {
     if (parecidas.length) { setMsg("Antes de confirmar, contesta arriba si es el mismo pedido que la otra recepción."); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     if (pendientes) { setMsg(`Falta decir qué producto es: ${listaPend.map((l) => l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
+    if (listaAsoc.length) { setMsg(`Falta contestar si es el mismo producto: ${listaAsoc.map((l) => l.descripcion || l.producto?.nombre || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     if (listaAviso.length) { setMsg(`Falta contestar si son correctas las unidades de: ${listaAviso.map((l) => l.producto?.nombre || l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     const conDecimales = lineas.filter(decimalSinPeso);
     if (conDecimales.length) { setMsg(`Van por unidades en la caja y no admiten decimales: ${conDecimales.map((l) => `${l.nuevo?.nombre || l.producto?.nombre || l.descripcion} (${l.q})`).join(", ")}. Pon unidades enteras o avisa a dirección para que lo pase a «al peso»`); setMarcar(true); setDetalleAbierto(true); return; }
@@ -1124,7 +1182,7 @@ function Revisar({ datos, onHecho, onVolver, onAnadirHoja }) {
           {!manual && <p style={{ margin: 0, fontFamily: F, fontSize: 13, color: C.mut }}>Salen las unidades del documento. Cuenta lo que ha llegado y cambia lo que no coincida.</p>}
           {manual && <p style={{ margin: 0, fontFamily: F, fontSize: 13, color: C.mut }}>Pon solo lo que ha llegado. El coste sale de la última compra (sin IVA): cámbialo si es otro.</p>}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {lineas.map((l, i) => <Linea key={l.id ?? l.k ?? `n${i}`} l={l} abono={abono} aviso={avisos[i]} manual={manual} marcar={marcar} normal={regaloDe(l) != null ? lineas.find((x) => x !== l && Number(x.orden) === regaloDe(l)) : null} onCambio={(c) => cambiar(i, c)} onAsociar={(modo) => setPanel({ modo, idx: i })}
+            {lineas.map((l, i) => <Linea key={l.id ?? l.k ?? `n${i}`} l={l} abono={abono} aviso={avisos[i]} avisoAsoc={avisosAsoc[i]} manual={manual} marcar={marcar} normal={regaloDe(l) != null ? lineas.find((x) => x !== l && Number(x.orden) === regaloDe(l)) : null} onCambio={(c) => cambiar(i, c)} onAsociar={(modo) => setPanel({ modo, idx: i })}
               hijos={l.orden != null ? lineas.filter((x) => x.expositor_de != null && Number(x.expositor_de) === Number(l.orden)).map((x) => ({ k: x.id ?? x.k, nombre: x.nuevo?.nombre || x.producto?.nombre || x.descripcion, q: numero(x.q) })) : []}
               onAnadirExpo={() => setPanel({ modo: "anadir", expo: Number(l.orden) })} onQuitar={(k) => setLineas((ls) => ls.filter((x) => (x.id ?? x.k) !== k))} />)}
           </div>
@@ -1212,7 +1270,7 @@ function Hecho({ r, onFin }) {
 const MAX_HOJAS = 8;
 // Al añadir una hoja se vuelve a leer todo: se conserva lo corregido a mano en las líneas que siguen igual
 const claveLinea = (l) => (l.ref ? "r:" + l.ref : "d:" + claveProv(l.descripcion));
-const CAMPOS_MANO = ["producto", "product_id", "emparejado", "tipo", "unidades_por", "uds_doc", "base_unit", "coste_txt", "coste_ok", "no_producto_motivo", "no_producto_texto", "preg_no"];
+const CAMPOS_MANO = ["producto", "product_id", "emparejado", "tipo", "unidades_por", "uds_doc", "base_unit", "coste_txt", "coste_ok", "asoc_ok", "no_producto_motivo", "no_producto_texto", "preg_no"];
 function conservarCorregido(nuevas, viejas) {
   if (!viejas?.length) return nuevas;
   const usadas = new Set();

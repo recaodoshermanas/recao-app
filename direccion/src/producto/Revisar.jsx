@@ -15,11 +15,12 @@ const msg = (e) => { const t = String(e?.message || e || ""); const m = /"messag
 const ORIGEN = { auto: "Alta automática (factura)", pedido: "Añadido en un pedido", fuera_pedido: "Añadido fuera de pedido" };
 const PVP_ORIGEN = { marcado: "marcado", parecidos: "igual que parecidos", regla: "regla de la tienda", trabajadora: "puesto en tienda" };
 const SECCIONES = [
-  { id: "precio", label: "Precio" }, { id: "coste", label: "Subidas de coste" }, { id: "iva", label: "IVA" },
+  { id: "precio", label: "Precio" }, { id: "coste", label: "Cambios de coste" }, { id: "iva", label: "IVA" },
   { id: "codigo", label: "Código de barras" }, { id: "nuevos", label: "Productos nuevos" }, { id: "incidencias", label: "Incidencias" },
   { id: "tienda", label: "Precios cambiados en tienda" }, // #35
   { id: "lentos", label: "Seguir comprando o no" }, // #144
   { id: "marcados", label: "Precio marcado" }, // #203
+  { id: "sin_asociar", label: "Líneas sin asociar" }, // #233
 ];
 const NOMBRE_SEC = Object.fromEntries(SECCIONES.map((s) => [s.id, s.label]));
 const margen = (coste, pvp) => (pvp > 0 ? Math.round((1 - coste / pvp) * 1000) / 10 : null);
@@ -79,11 +80,11 @@ export function ProductosRevisar({ extra }) {
     precio: new Set(s.precio.map((x) => Number(x.product_id))), coste: new Set(s.coste.map((x) => Number(x.product_id))), iva: new Set(s.iva.map((x) => Number(x.product_id))),
     codigo: new Set(codigo.flatMap((i) => [Number(i.product_id_existente), Number(i.product_id_nuevo)]).filter(Boolean)),
     nuevos: new Set(altas.map((a) => Number(a.product_id)).filter(Boolean)), incidencias: new Set(incid.flatMap((i) => [Number(i.product_id_existente), Number(i.product_id_nuevo)]).filter(Boolean)),
-    lentos: new Set(), marcados: new Set(),
+    lentos: new Set(), marcados: new Set(), sin_asociar: new Set(),
     tienda: new Set(tienda.lista.map((x) => Number(x.product_id))),
   };
   const otras = (pid, actual) => SECCIONES.map((x) => x.id).filter((k) => k !== actual && ids[k].has(Number(pid)));
-  const n = { precio: s.precio.length, coste: s.coste.length, iva: s.iva.length, codigo: codigo.length, nuevos: altas.length, incidencias: incid.length, tienda: tienda.lista.length };
+  const n = { precio: s.precio.length, coste: s.coste.length, iva: s.iva.length, codigo: codigo.length, nuevos: altas.length, incidencias: incid.length, tienda: tienda.lista.length, sin_asociar: (s.sin_asociar || []).length };
   const conS = (r) => { setS(r); };
 
   return (
@@ -96,6 +97,7 @@ export function ProductosRevisar({ extra }) {
       {tab === "nuevos" && <Nuevos d={d} P={P} U={U} cargar={cargar} otras={otras} />}
       {tab === "lentos" && <SecLentos />}
       {tab === "marcados" && <SecMarcados />}
+      {tab === "sin_asociar" && <SecSinAsociar lista={s.sin_asociar || []} onListo={conS} />}
       {tab === "tienda" && <SecTienda lista={tienda.lista} nombres={tienda.nombres} otras={otras} onHecho={cargar} />}
       {tab === "incidencias" && <Incidencias lista={incid} P={P} U={U} onHecho={cargar} otras={otras} sec="incidencias" vacio="No hay incidencias. Aparecen cuando una trabajadora dice que un código lleva al producto equivocado." titulo="«No es este producto»" />}
     </>
@@ -157,7 +159,7 @@ function SecPrecio({ lista, otras, onListo }) {
   );
 }
 
-// ---------- Subidas de coste: la factura trae un coste más de un 20 % por encima del de Epos (no aplicado) ----------
+// ---------- Cambios de coste: la factura trae un coste más de un 20 % por encima (o, desde #233, por debajo) del de Epos (no aplicado) ----------
 function SecCoste({ lista, otras, onListo }) {
   const [busy, setBusy] = useState(null);
   const decidir = async (c, decision) => {
@@ -172,18 +174,18 @@ function SecCoste({ lista, otras, onListo }) {
   };
   return (
     <div className="card mt">
-      <div className="head"><div><h2>Subidas de coste</h2><p className="sub">La factura trae un coste más de un 20 % por encima del de Epos y no se ha aplicado. «Es real» guarda en Epos el coste completo (con IVA y recargo, impuestos incluidos) y, si el margen baja del 35 %, crea el aviso en «Precio». Conviene resolver esto antes que el precio. «Enviar a tienda»: si el envase trae precio marcado, se aplican el coste nuevo y ese precio; si no, vuelve aquí sin aplicar nada.</p></div></div>
-      {!lista.length ? <p className="empty">No hay subidas de coste pendientes.</p> : (
+      <div className="head"><div><h2>Cambios de coste</h2><p className="sub">La factura trae un coste más de un 20 % por encima o por debajo del de Epos y no se ha aplicado. Una bajada grande suele ser una línea asociada al producto equivocado o un error de unidades: compruébalo antes de aplicarla. «Es real» guarda en Epos el coste completo (con IVA y recargo, impuestos incluidos) y, si el margen baja del 35 %, crea el aviso en «Precio». Conviene resolver esto antes que el precio. «Enviar a tienda»: si el envase trae precio marcado, se aplican el coste nuevo y ese precio; si no, vuelve aquí sin aplicar nada.</p></div></div>
+      {!lista.length ? <p className="empty">No hay cambios de coste pendientes.</p> : (
         <div className="tabla-scroll">
           <table className="ranking">
-            <thead><tr><th>Producto</th><th className="r">Coste en Epos</th><th className="r">Coste factura</th><th className="r">Subida</th><th className="r">Precio</th><th>Qué hacer</th></tr></thead>
+            <thead><tr><th>Producto</th><th className="r">Coste en Epos</th><th className="r">Coste factura</th><th className="r">Cambio</th><th className="r">Precio</th><th>Qué hacer</th></tr></thead>
             <tbody>
               {lista.map((c) => (
                 <tr key={c.id}>
                   <td><span className="pn">{c.nombre}</span><span className="pf">{[c.categoria, c.proveedor, c.origen].filter(Boolean).join(" · ")} · {hace(c.creado_en)}</span><NotaTienda a={c} /><Otras lista={otras(c.product_id, "coste")} /></td>
                   <td className="r">{eur(c.coste_ex_actual, 3)}<span className="pf">sin IVA</span></td>
                   <td className="r">{eur(c.coste_ex_nuevo, 3)}<span className="pf">sin IVA · completo {eur(c.coste_completo_nuevo, 3)}</span></td>
-                  <td className="r b" style={{ color: "#A3362B" }}>+{pct(c.subida_pct)}</td>
+                  <td className="r b" style={{ color: Number(c.subida_pct) < 0 ? "#2F5C8F" : "#A3362B" }}>{Number(c.subida_pct) < 0 ? "" : "+"}{pct(c.subida_pct)}</td>
                   <td className="r">{eur(c.pvp, 2)}<span className="pf">margen nuevo {pct(margen(c.coste_completo_nuevo, c.pvp))} · {objetivo(c)}</span></td>
                   <td style={{ minWidth: 230 }}>
                     {c.en_tienda ? <EnTienda a={c} tipo="coste" onListo={onListo} busy={busy} setBusy={setBusy} /> : <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -192,6 +194,39 @@ function SecCoste({ lista, otras, onListo }) {
                       <EnTienda a={c} tipo="coste" onListo={onListo} busy={busy} setBusy={setBusy} />
                     </div>}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- #233 · Líneas de recepciones confirmadas que se quedaron sin producto (también devoluciones) ----------
+function SecSinAsociar({ lista, onListo }) {
+  const [busy, setBusy] = useState(null);
+  const hecho = async (x) => {
+    setBusy(x.id);
+    try { onListo(await sb.rpc("revisar_sin_asociar_hecho", { p_linea: x.id })); avisar("Marcada como revisada"); } catch (e) { avisar(msg(e), "mal"); }
+    setBusy(null);
+  };
+  const fecha = (t) => (t ? new Date(t).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Madrid" }) : "");
+  return (
+    <div className="card mt">
+      <div className="head"><div><h2>Líneas sin asociar</h2><p className="sub">Líneas de pedidos ya recepcionados que se quedaron sin producto: no han sumado (ni restado, si es devolución) stock y no han cambiado ningún coste. Corrige en Epos lo que haga falta (stock o coste) y márcala como revisada. Si no era un producto (palés, film, portes…), márcala igual.</p></div></div>
+      {!lista.length ? <p className="empty">No hay líneas sin asociar.</p> : (
+        <div className="tabla-scroll">
+          <table className="ranking">
+            <thead><tr><th>Línea de la factura</th><th className="r">Unidades</th><th className="r">Coste</th><th>Qué hacer</th></tr></thead>
+            <tbody>
+              {lista.map((x) => (
+                <tr key={x.id}>
+                  <td><span className="pn">{x.descripcion || "Línea sin nombre"}</span><span className="pf">{[x.proveedor, `recepción ${x.recepcion_id}`, fecha(x.fecha)].filter(Boolean).join(" · ")}</span>{x.devolucion && chip("alta", "Devolución")}</td>
+                  <td className="r">{String(x.uds ?? "—").replace(".", ",")}</td>
+                  <td className="r">{x.base_unit != null ? eur(x.base_unit, 3) : "—"}<span className="pf">sin IVA</span></td>
+                  <td><button className="btn-l" disabled={busy === x.id} onClick={() => hecho(x)}>Revisada</button></td>
                 </tr>
               ))}
             </tbody>
