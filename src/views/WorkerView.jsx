@@ -16,6 +16,8 @@ const etiquetaPago = (t) => (t === "tarjeta" ? "Banco" : t === "efectivo" ? "Efe
 const claveProv = (t) => String(t ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 // «108,29», «1.108,29» y «108.29» valen lo mismo; acepta negativos (abonos)
 const importeNum = (v) => { let t = String(v ?? "").trim().replace(/\s/g, "").replace(/[−–]/g, "-"); if (t.includes(",")) t = t.replace(/\./g, "").replace(",", "."); const n = Number(t); return t !== "" && Number.isFinite(n) ? n : NaN; };
+// #235: «Nº 0045-38» = «4538»: solo letras y números, sin ceros delante
+const claveNum = (t) => String(t ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^0+/, "");
 const sumaImportes = (fs) => fs.reduce((s, f) => s + (Number(f.importe) || 0), 0);
 
 export function WorkerView({ facturas, proveedores, onReload, user, panel = false }) {
@@ -92,9 +94,22 @@ export function WorkerView({ facturas, proveedores, onReload, user, panel = fals
     const amt = Math.round(importeNum(importe) * 100) / 100;
     if (!proveedor.trim() || !Number.isFinite(amt) || amt === 0) return;
     if (numeroObligatorio && !numero.trim()) { alert("Pon el número de factura: dirección lo necesita para la transferencia."); return; }
-    // #24: aviso si ya entró por la recepción de pedidos (mismo proveedor, día e importe)
-    const dup = !editId && facturas.find(f => f.recepcion_id && claveProv(f.proveedor) === claveProv(proveedor) && f.fecha === fecha && f.importe != null && Math.abs(Number(f.importe) - amt) < 0.005);
-    if (dup) { ask("Esta factura ya se registró en la recepción de pedidos. ¿Quieres apuntarla otra vez?", () => guardar(amt)); return; }
+    // #24 / #235: aviso si puede estar repetida: mismo proveedor y mismo número de factura,
+    // o mismo proveedor, mismo importe (±0,05 €) y fecha a 7 días o menos. Solo avisa, no bloquea.
+    const kp = claveProv(proveedor); const kn = claveNum(numero);
+    const dias = (a, b) => Math.abs((new Date(a + "T12:00:00") - new Date(b + "T12:00:00")) / 864e5);
+    const dups = facturas.filter(f => f.id !== editId && claveProv(f.proveedor) === kp && (
+      (kn && claveNum(f.doc_numero) === kn) ||
+      (f.importe != null && Math.abs(Number(f.importe) - amt) <= 0.05 && f.fecha && dias(f.fecha, fecha) <= 7)));
+    if (dups.length) {
+      const mismoNum = kn && dups.some(f => claveNum(f.doc_numero) === kn);
+      ask(<span style={{ display: "block", textAlign: "left" }}>
+        <b>{mismoNum ? "Esta factura ya está apuntada (mismo número)." : "Puede que esta factura ya esté apuntada."}</b><br />
+        {dups.slice(0, 3).map(f => <span key={f.id} style={{ display: "block", marginTop: 6, fontSize: 14 }}>· {f.proveedor} · {f.importe == null ? "sin importe" : fmt2(Number(f.importe))} · {f.fecha.split("-").reverse().join("/")}{f.doc_numero ? ` · nº ${f.doc_numero}` : ""}{f.recepcion_id ? " · de la recepción de pedidos" : ""}</span>)}
+        <span style={{ display: "block", marginTop: 10 }}>Si es la misma, pulsa «Cancelar». ¿La apunto otra vez?</span>
+      </span>, () => guardar(amt));
+      return;
+    }
     guardar(amt);
   };
 
