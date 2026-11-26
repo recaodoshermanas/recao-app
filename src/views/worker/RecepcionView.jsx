@@ -35,6 +35,8 @@ function cambioUds(l, u) {
   if (l.base_unit != null) c.base_unit = Math.round(Number(l.base_unit) * ant / u * 10000) / 10000;
   return c;
 }
+// #237: caja leída en la descripción («10UD», «E-150P»): hay que decir si se venden sueltas o el paquete entero es 1
+const cajaPorContestar = (l) => l.tipo === "venta" && l.uds_de_descripcion != null && !l.caja_ok && l.cant_doc != null && !alPeso(l) && Math.abs(Number(l.unidades_por || 1) - Number(l.uds_de_descripcion)) < 1e-9;
 // #139: aviso de coste que cambia mucho (o bulto que parece venir como 1 unidad) antes de confirmar
 const UMBRAL_COSTE = 2;
 const PARECE_BULTO = /\b(EXP|EXPOSITOR|CAJA|PACK|BOLSA)\b|\d+\s*(UD|UDS|UNID)\b/i;
@@ -890,6 +892,13 @@ function Linea({ l, abono, manual, aviso, avisoAsoc, onCambio, onAsociar, marcar
       )}
       {avisoAsoc && <AvisoAsociacion l={l} aviso={avisoAsoc} marcar={marcar} onCambio={onCambio} onAsociar={onAsociar} />}
       {aviso && <AvisoCoste l={l} aviso={aviso} marcar={marcar} onCambio={onCambio} />}
+      {cajaPorContestar(l) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: "#FBF0DA", borderRadius: 12, padding: "8px 10px", fontFamily: F, fontSize: 12.5, color: "#6B4A0C", border: marcar ? `2px solid ${C.red}` : "none" }}>
+          <span style={{ flex: "1 1 200px", fontWeight: 600 }}>La factura pone «{l.descripcion}»: lo he contado como {fmt(l.cant_doc)} {Number(l.cant_doc) === 1 ? "caja" : "cajas"} de {fmt(l.uds_de_descripcion)} = {fmt(udsDoc(l.cant_doc, l.uds_de_descripcion))} unidades sueltas{l.base_unit != null ? ` a ${eur(l.base_unit)}/ud sin IVA` : ""}. ¿Se venden sueltas?</span>
+          <button type="button" onClick={() => onCambio({ caja_ok: "sueltas" })} style={{ ...btnPeq, height: 36, padding: "0 12px" }}>Sí, sueltas</button>
+          <button type="button" onClick={() => onCambio({ ...cambioUds(l, 1), caja_ok: "pack" })} style={{ ...btnPeq, height: 36, padding: "0 12px" }}>No, el paquete es 1</button>
+        </div>
+      )}
       {pregunta && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: "#FBF0DA", borderRadius: 12, padding: "8px 10px", fontFamily: F, fontSize: 12.5, color: "#6B4A0C" }}>
           <span style={{ flex: "1 1 180px", fontWeight: 600 }}>{pregunta.txt}</span>
@@ -1064,6 +1073,8 @@ function Revisar({ datos, onHecho, onVolver, onAnadirHoja }) {
     if (parecidas.length) { setMsg("Antes de confirmar, contesta arriba si es el mismo pedido que la otra recepción."); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     if (pendientes) { setMsg(`Falta decir qué producto es: ${listaPend.map((l) => l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     if (listaAsoc.length) { setMsg(`Falta contestar si es el mismo producto: ${listaAsoc.map((l) => l.descripcion || l.producto?.nombre || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
+    const listaCaja = lineas.filter(cajaPorContestar);
+    if (listaCaja.length) { setMsg(`Falta contestar si se venden sueltas: ${listaCaja.map((l) => l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     if (listaAviso.length) { setMsg(`Falta contestar si son correctas las unidades de: ${listaAviso.map((l) => l.producto?.nombre || l.descripcion || "línea sin nombre").join(", ")}`); setMarcar(true); setDetalleAbierto(true); return; }
     const conDecimales = lineas.filter(decimalSinPeso);
     if (conDecimales.length) { setMsg(`Van por unidades en la caja y no admiten decimales: ${conDecimales.map((l) => `${l.nuevo?.nombre || l.producto?.nombre || l.descripcion} (${l.q})`).join(", ")}. Pon unidades enteras o avisa a dirección para que lo pase a «al peso»`); setMarcar(true); setDetalleAbierto(true); return; }
@@ -1272,7 +1283,7 @@ function Hecho({ r, onFin }) {
 const MAX_HOJAS = 8;
 // Al añadir una hoja se vuelve a leer todo: se conserva lo corregido a mano en las líneas que siguen igual
 const claveLinea = (l) => (l.ref ? "r:" + l.ref : "d:" + claveProv(l.descripcion));
-const CAMPOS_MANO = ["producto", "product_id", "emparejado", "tipo", "unidades_por", "uds_doc", "base_unit", "coste_txt", "coste_ok", "asoc_ok", "no_producto_motivo", "no_producto_texto", "preg_no"];
+const CAMPOS_MANO = ["producto", "product_id", "emparejado", "tipo", "unidades_por", "uds_doc", "base_unit", "coste_txt", "coste_ok", "asoc_ok", "no_producto_motivo", "no_producto_texto", "preg_no", "caja_ok"];
 function conservarCorregido(nuevas, viejas) {
   if (!viejas?.length) return nuevas;
   const usadas = new Set();
