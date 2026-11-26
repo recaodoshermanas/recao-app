@@ -18,6 +18,8 @@ const fmt = (x) => (x == null ? "" : Number.isInteger(Number(x)) ? String(Number
 const alPeso = (l) => !!l.producto?.al_peso && l.emparejado !== "nuevo";
 // #188: Epos no acepta decimales en el stock de un producto por unidades (solo los «al peso», que van en gramos)
 const decimalSinPeso = (l) => { const n = numero(l.q); return l.tipo === "venta" && Number.isFinite(n) && Math.abs(n - Math.round(n)) > 1e-9 && (l.emparejado === "nuevo" ? !l.product_id : l.producto?.al_peso === false); };
+// #236: si las unidades con decimales están a un pelo de un número entero (6,66 docenas × 12 = 79,92), se propone ese número
+const redondeoCerca = (l) => { const n = numero(l.q), r = Math.round(n); return r > 0 && Math.abs(n - r) <= 0.1 ? r : null; };
 const precioKg = (l) => (l.coste_txt != null && l.coste_txt !== "" ? numero(l.coste_txt) : l.base_unit != null ? Number(l.base_unit) : null);
 const kgFactura = (l) => (l.cant_doc != null ? Number(l.cant_doc) : numero(l.q));
 const importeLinea = (l) => { const p = precioKg(l); return p == null ? null : Math.round(kgFactura(l) * p * 100) / 100; };
@@ -860,7 +862,7 @@ function Linea({ l, abono, manual, aviso, avisoAsoc, onCambio, onAsociar, marcar
           {l.cant_doc != null && !alPeso(l) && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Factura: {fmt(l.cant_doc)}{u > 1 ? ` × ${fmt(u)} uds` : ""}{pack ? ` piezas = ${fmt(udsDoc(l.cant_doc, u))} packs de ${packDe(u)}` : ""}{l.base_unit != null ? ` · ${eur(l.base_unit)}/${pack ? "pack" : "ud"} sin IVA` : ""}</div>}
           {l.expositor_de != null && <div style={{ fontFamily: F, fontSize: 11.5, color: C.mut }}>Viene dentro de un expositor</div>}
           {devol && !abono && <div style={{ fontFamily: F, fontSize: 11.5, color: "#2F5C8F", fontWeight: 600 }}>Devolución dentro de esta factura: al confirmar se resta del stock</div>}
-          {decimalSinPeso(l) && <div style={{ fontFamily: F, fontSize: 11.5, color: "#A3362B", fontWeight: 600 }}>Este producto va por unidades en la caja: no admite decimales. Pon unidades enteras o avisa a dirección para que lo pase a «al peso».</div>}
+          {decimalSinPeso(l) && <div style={{ fontFamily: F, fontSize: 11.5, color: "#A3362B", fontWeight: 600 }}>Este producto va por unidades en la caja: no admite decimales. Pon unidades enteras o avisa a dirección para que lo pase a «al peso».{redondeoCerca(l) != null && <> <button type="button" onClick={() => onCambio({ q: String(redondeoCerca(l)) })} style={{ ...btnPeq, height: 34, padding: "0 10px", marginTop: 6, borderColor: "#A3362B", color: "#A3362B" }}>¿Son {redondeoCerca(l)}? Poner {redondeoCerca(l)}</button></>}</div>}
           {dif && <div style={{ fontFamily: F, fontSize: 11.5, color: "#A3362B", fontWeight: 600 }}>El documento dice {fmt(l.uds_doc)}{alPeso(l) ? " kg" : ""}</div>}
         </div>
         {l.tipo === "venta" && (alPeso(l) ? (
