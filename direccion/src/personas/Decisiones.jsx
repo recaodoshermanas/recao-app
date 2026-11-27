@@ -23,14 +23,27 @@ const diaHora = (ts) => new Date(ts).toLocaleString("es-ES", { weekday: "short",
 const diaNum = (f) => { const p = String(f).slice(0, 10).split("-"); return `${p[2]}/${p[1]}`; };
 const camaras = (pr, fecha) => (pr && pr.horario ? `de ${pr.horario.replace("–", " a ")} del ${diaNum(fecha)}` : `turno del ${diaNum(fecha)}`);
 
-// Ordena y parte la bandeja: «Corre prisa» = prescribe en 7 días o menos (y aún no ha prescrito)
-export function partir(items, hoy) {
+// #238: tres columnas por tipo. Las alegaciones van a la columna de su origen; lo que no es de ninguno de los
+// tres tipos (turnos sin cerrar, sin verificar, alegaciones de esos avisos o manuales) va debajo, en «Otros avisos».
+export const COLUMNAS = [
+  { id: "verif", label: "Verificaciones" },
+  { id: "causa", label: "Tareas no hechas" },
+  { id: "apoyo", label: "Pasadas al apoyo" },
+];
+const ORIGEN_COL = { verificacion: "verif", causa: "causa", traspaso: "apoyo" };
+export const columnaDe = (x) => (x.tipo === "alegado" ? ORIGEN_COL[x.origen] || "otros" : COLUMNAS.some((c) => c.id === x.tipo) ? x.tipo : "otros");
+
+// Ordena por lo que se pasa antes: arriba lo que aún no ha prescrito, por días que le quedan;
+// debajo lo que no tiene plazo o ya ha prescrito, lo más antiguo primero.
+// «Corre prisa» = prescribe en 7 días o menos (y aún no ha prescrito).
+export function ordenar(items, hoy) {
   const conDias = items.map((x) => ({ ...x, dias: x.vence ? diasHasta(x.vence, hoy) : null }));
-  const prisa = conDias.filter((x) => x.dias != null && x.dias >= 0 && x.dias <= PRISA_DIAS).sort((a, b) => a.dias - b.dias || String(a.desde).localeCompare(String(b.desde)));
-  // el resto: lo más antiguo arriba (lo que no prescribe, por fecha)
-  const resto = conDias.filter((x) => !(x.dias != null && x.dias >= 0 && x.dias <= PRISA_DIAS))
-    .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.desde).localeCompare(String(b.desde)));
-  return { prisa, resto };
+  const vivo = (x) => x.dias != null && x.dias >= 0;
+  return conDias.sort((a, b) => {
+    if (vivo(a) !== vivo(b)) return vivo(a) ? -1 : 1;
+    if (vivo(a)) return a.dias - b.dias || String(a.desde).localeCompare(String(b.desde));
+    return String(a.fecha).localeCompare(String(b.fecha)) || String(a.desde).localeCompare(String(b.desde));
+  }).map((x) => ({ ...x, prisa: vivo(x) && x.dias <= PRISA_DIAS }));
 }
 
 export async function cargarDecisiones() {
@@ -38,7 +51,7 @@ export async function cargarDecisiones() {
   return (r && r.items) || [];
 }
 
-export function Decisiones({ filtro, setFiltro, onCuenta }) {
+export function Decisiones({ onCuenta }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -80,22 +93,28 @@ export function Decisiones({ filtro, setFiltro, onCuenta }) {
 
   if (!items) return <Cargando />;
   const hoy = hoyMadrid();
-  const n = (t) => items.filter((x) => x.tipo === t).length;
-  const vis = filtro ? items.filter((x) => x.tipo === filtro) : items;
-  const { prisa, resto } = partir(vis, hoy);
+  const orden = ordenar(items, hoy);
+  const de = (c) => orden.filter((x) => columnaDe(x) === c);
+  const otros = de("otros");
   const props = { hoy, busy, acciones, verFotos };
   return (
     <>
-      <div className="dec-chips" role="group" aria-label="Filtrar por tipo">
-        <button className={!filtro ? "on" : ""} onClick={() => setFiltro("")}>Todo · {items.length}</button>
-        {TIPOS.filter((t) => n(t.id) > 0 || filtro === t.id).map((t) => <button key={t.id} className={filtro === t.id ? "on" : ""} onClick={() => setFiltro(filtro === t.id ? "" : t.id)}>{t.label} · {n(t.id)}</button>)}
-      </div>
       {error && <p className="empty">{error}</p>}
-      {error ? null : vis.length === 0 ? <div className="card"><p className="dec-vacio">Nada que decidir ✓</p></div> : (
+      {!error && (
         <>
-          {prisa.length > 0 && <><h3 className="dec-tit">Corre prisa · prescribe esta semana</h3><div className="dec-lista">{prisa.map((x) => <Tarjeta key={x.key} x={x} {...props} />)}</div></>}
-          {resto.length > 0 && <><h3 className="dec-tit">El resto</h3><div className="dec-lista">{resto.map((x) => <Tarjeta key={x.key} x={x} {...props} />)}</div></>}
-          <p className="sub dec-pie">Al decir «sí cuenta», le llega el aviso escrito con sus 48 horas para alegar. Si no alega, el fallo se anota solo y no vuelve a aparecer aquí; si alega, vuelve como «Ha alegado». Las amonestaciones no están en este trámite: se ponen desde «Expedientes».</p>
+          <div className="dec-cols">
+            {COLUMNAS.map((c) => {
+              const l = de(c.id);
+              return (
+                <section key={c.id} className={`dec-col c-${c.id}`} aria-label={`${c.label}: ${l.length}`}>
+                  <h3 className="dec-col-cab"><span>{c.label}</span><span className="dec-col-n">{l.length}</span></h3>
+                  {l.length === 0 ? <p className="dec-vacio">Nada que decidir ✓</p> : l.map((x) => <Tarjeta key={x.key} x={x} {...props} />)}
+                </section>
+              );
+            })}
+          </div>
+          {otros.length > 0 && <><h3 className="dec-tit">Otros avisos · {otros.length}</h3><div className="dec-lista dec-otros">{otros.map((x) => <Tarjeta key={x.key} x={x} {...props} />)}</div></>}
+          <p className="sub dec-pie">Al decir «sí cuenta», le llega el aviso escrito con sus 48 horas para alegar. Si no alega, el fallo se anota solo y no vuelve a aparecer aquí; si alega, vuelve a su columna con la marca «Ha alegado». Las amonestaciones no están en este trámite: se ponen desde «Expedientes».</p>
         </>
       )}
       {fotos && (
@@ -133,7 +152,7 @@ function Pruebas({ x, conFotos, verFotos }) {
 function Tarjeta({ x, busy, acciones, verFotos }) {
   const ocupado = busy === x.key;
   const cab = (titulo) => (
-    <div className="dec-cab"><span className={`dec-tipo t-${x.tipo}`}>{ETIQ[x.tipo]}</span><b className="dec-titulo">{titulo}</b><Plazo x={x} /></div>
+    <div className="dec-cab">{x.prisa && <span className="dec-prisa">Corre prisa</span>}{(x.tipo === "alegado" || columnaDe(x) === "otros") && <span className={`dec-tipo t-${x.tipo}`}>{ETIQ[x.tipo]}</span>}<b className="dec-titulo">{titulo}</b><Plazo x={x} /></div>
   );
   const turnoTxt = `Turno de ${x.turno} · ${fechaCorta(x.fecha)}`;
   if (x.tipo === "verif") return (
