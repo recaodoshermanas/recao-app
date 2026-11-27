@@ -159,7 +159,7 @@ export function SalariosMes({ mes, guardado, onCambio, onModo }) {
               <input inputMode="decimal" value={nominas[f.t.usuario_id] ?? ""} onChange={(e) => setNominas({ ...nominas, [f.t.usuario_id]: e.target.value })} placeholder="0,00" aria-label={`Nómina de ${f.t.nombre}`} style={{ ...inp, width: 110, padding: "6px 8px", fontSize: 13, marginBottom: 0, textAlign: "right" }} />
             </div>
           ) : f.t.por_horas ? null : fila("Nómina (líquido)", fmt2(f.nom))}
-          {!hayPlus && Number(f.t.plus) > 0 && fila(<span>Plus del mes previsto <span style={{ fontSize: 11.5 }}>(entra en los sobres el día 1, cuando acaba el mes)</span></span>, fmt2(f.t.plus), { color: C.mut })}
+          {!hayPlus && Number(f.t.plus) > 0 && fila(<span>Plus del mes previsto <span style={{ fontSize: 11.5 }}>(entra en los sobres el día 3 del mes siguiente)</span></span>, fmt2(f.t.plus), { color: C.mut })}
           {f.ex.map((e, i) => (
             <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0" }}>
               <input value={e.concepto} onChange={(ev) => setEx(f.t.usuario_id, f.ex.map((x, j) => (j === i ? { ...x, concepto: ev.target.value } : x)))} placeholder="Concepto del extra" style={{ ...inp, flex: 1, padding: "6px 8px", fontSize: 13, marginBottom: 0 }} />

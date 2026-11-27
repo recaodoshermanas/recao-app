@@ -2,7 +2,7 @@
 // lo que espera sus 48 horas y las dos acciones aparte: fallo manual y amonestar (con la prescripción comprobada).
 import { useEffect, useState, useCallback } from "react";
 import { sb } from "../../../src/lib/supabase.js";
-import { Cargando, Panel, avisar, useEquipo, hoyStr } from "../ui.jsx";
+import { Cargando, Panel, Pestanas, avisar, useEquipo, hoyStr } from "../ui.jsx";
 
 const SUPTXT = { 1: "Tarea marcada hecha, desmentida", 2: "Registro no veraz", 3: "Tarea no hecha, motivo no aceptado", 4: "No cerró el turno", 5: "No verificó el turno anterior" };
 const NIVEL_L = { leve: "Leve", grave: "Grave", muy_grave: "Muy grave" };
@@ -11,6 +11,77 @@ const diaHora = (ts) => new Date(ts).toLocaleString("es-ES", { day: "numeric", m
 const textoFallo = (f) => f.origen === "manual" ? "Fallo manual" : f.origen === "reaperturas" ? "3 turnos reabiertos en 30 días" : f.origen === "traspaso" ? "Tarea pasada al apoyo sin hacer" : (SUPTXT[f.supuesto] || "Fallo");
 
 export function Expedientes() {
+  const [vista, setVista] = useState("persona");
+  return (
+    <>
+      <Pestanas valor={vista} onChange={setVista} etiqueta="Expedientes" opciones={[{ id: "persona", label: "Por persona" }, { id: "historial", label: "Historial de decisiones" }]} />
+      {vista === "persona" ? <PorPersona /> : <Historial />}
+    </>
+  );
+}
+
+// #239: control histórico de todo lo que pasa por «Decisiones» (verificaciones, tareas no hechas y pasadas al apoyo):
+// «Sí, cuenta», «No cuenta» y «No decidida · plazo vencido» (lo que llegó al último día del mes del turno sin decidir). Nada se borra.
+const RES = { si: "Sí, cuenta", no: "No cuenta", vencida: "No decidida · plazo vencido" };
+const TIPO_H = { verif: "Verificación", causa: "Tarea no hecha", apoyo: "Pasada al apoyo" };
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const mesTxt = (m) => `${MESES[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+const mesMas = (m, n) => { const d = new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)) - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+const avisoTxt = (x) => {
+  if (x.resultado !== "si") return "";
+  if (x.tipo === "apoyo" && !x.aviso_estado) return "sin aviso (eventual)";
+  if (!x.aviso_estado) return "";
+  if (x.aviso_estado === "emitido") return x.alego ? "ha alegado: pendiente de resolver" : "en sus 48 horas para alegar";
+  return x.aviso_resultado === "confirmado" ? "fallo anotado" : x.aviso_resultado === "sin_fallo" ? (x.alego ? "alegó y se quitó el fallo" : "fallo quitado") : x.aviso_resultado === "descartado" ? "aviso descartado" : "resuelto";
+};
+
+function Historial() {
+  const [mes, setMes] = useState(hoyStr().slice(0, 7));
+  const [filtro, setFiltro] = useState("todas");
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    let vivo = true; setD(null);
+    sb.rpc("seg_historial_decisiones", { p_mes: mes }).then((r) => vivo && setD({ items: (r && r.items) || [] })).catch(() => vivo && setD({ error: true }));
+    return () => { vivo = false; };
+  }, [mes]);
+  const items = d && d.items ? d.items : [];
+  const n = (k) => items.filter((x) => x.resultado === k).length;
+  const lista = filtro === "todas" ? items : items.filter((x) => x.resultado === filtro);
+  const actual = hoyStr().slice(0, 7);
+  return (
+    <div className="card">
+      <div className="filtros-linea">
+        <button className="btn-l" onClick={() => setMes(mesMas(mes, -1))} aria-label="Mes anterior">‹</button>
+        <b className="hist-mes">{mesTxt(mes)}</b>
+        <button className="btn-l" disabled={mes >= actual} onClick={() => setMes(mesMas(mes, 1))} aria-label="Mes siguiente">›</button>
+      </div>
+      {!d ? <Cargando /> : d.error ? <p className="empty">No se ha podido cargar el historial.</p> : (
+        <>
+          <Pestanas valor={filtro} onChange={setFiltro} etiqueta="Resultado" opciones={[{ id: "todas", label: `Todas · ${items.length}` }, { id: "si", label: `Sí, cuenta · ${n("si")}` }, { id: "no", label: `No cuenta · ${n("no")}` }, { id: "vencida", label: `No decididas · ${n("vencida")}` }]} />
+          {lista.length === 0 ? <p className="sub">Nada en {mesTxt(mes)}{filtro !== "todas" ? " con ese resultado" : ""}.</p> : (
+            <ul className="exp-lista">{lista.map((x) => {
+              const av = avisoTxt(x);
+              return (
+                <li key={x.key}>
+                  <b><span className={`hist-res r-${x.resultado}`}>{RES[x.resultado] || x.resultado}</span> {TIPO_H[x.tipo]} · turno de {x.turno} · {fmtF(x.fecha)}</b>
+                  <span>{x.tarea || "—"}</span>
+                  <small>
+                    {x.tipo === "apoyo" ? <>{x.quien || "La principal"} se las pasó a {x.apoyo || "la persona de apoyo"}{x.resultado === "si" && x.cuenta_a ? ` · cuenta ${x.cuenta_a === "principal" ? "a la principal" : "al apoyo"}` : ""}</> : <>{x.tipo === "verif" ? "Lo dejó sin hacer" : "Turno de"} {x.quien || "—"}{x.reporta ? ` · lo reportó ${x.reporta}` : ""}</>}
+                    {av ? ` · ${av}` : ""}
+                    {x.resultado === "vencida" ? ` · el plazo del plus terminó el ${fmtF(x.plus_hasta)}` : x.decidido_en ? ` · decidido el ${diaHora(x.decidido_en)}${x.decidido_por ? ` por ${x.decidido_por}` : ""}` : ""}
+                  </small>
+                </li>
+              );
+            })}</ul>
+          )}
+          <p className="sub">Aquí queda todo lo que ha pasado por «Decisiones», por el mes del turno. Lo que no se decide hasta el último día de ese mes sale de la bandeja y queda como «No decidida · plazo vencido», sin fallo. Nada se borra.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PorPersona() {
   const { equipo } = useEquipo();
   const trab = (equipo || []).filter((u) => u.rol === "trabajadora" && u.activo !== false && !u.eventual).sort((a, b) => a.nombre.localeCompare(b.nombre));
   const [uid, setUid] = useState("");

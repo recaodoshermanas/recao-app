@@ -460,6 +460,13 @@ button.enlace { border: 0; background: none; cursor: pointer; padding: 0; font: 
 .dec-plazo { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; }
 .dec-plazo.prisa { color: var(--down); }
 .dec-plazo.pasado { color: var(--muted); font-style: italic; }
+.dec-plazo .prisa { color: var(--down); }
+.dec-solo-plus { display: inline-block; margin-right: 4px; padding: 1px 7px; border-radius: 999px; background: rgba(178,65,42,.12); color: var(--down); font-size: 11px; }
+.hist-mes { min-width: 130px; text-align: center; text-transform: capitalize; }
+.hist-res { display: inline-block; margin-right: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+.hist-res.r-si { background: rgba(178,65,42,.12); color: var(--down); }
+.hist-res.r-no { background: var(--line); color: var(--text-2); }
+.hist-res.r-vencida { background: rgba(190,140,40,.16); color: var(--text-2); font-style: italic; }
 .dec-linea { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
 .dec-linea b { color: var(--tinta); }
 .dec-cita { margin: 0; font-size: 13.5px; background: rgba(0,0,0,.035); border-radius: 10px; padding: 9px 12px; font-style: italic; }

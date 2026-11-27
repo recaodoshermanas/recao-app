@@ -20,7 +20,7 @@ const APARTADOS = [
   ["eventuales", "Eventuales", "Turnos ya terminados de las eventuales: horas reales × precio."],
   ["horas_extras", "Horas extras", "Horas extras apuntadas, cuando termina el turno de ese día."],
   ["festivos", "Plus de festivos", "37,50 € por un turno de 8 h; si es más corto, la parte proporcional redondeada al euro."],
-  ["plus", "Plus del mes", "Sale el día 1 del mes siguiente, con lo que calcula Equipo → Plus del mes."],
+  ["plus", "Plus del mes", "Sale el día 3 del mes siguiente (cuando han terminado las 48 horas de alegación del mes), con lo que calcula Equipo → Plus del mes."],
   ["formacion", "Formación", "Sesiones de formación ya pasadas: horas × 6 € (6 h por defecto; con hora de inicio y fin, que se ponen en Horarios). No cuentan como día trabajado."],
   ["otros", "Otros extras", "Lista fija (como Pedidos) y extras puntuales."],
 ];

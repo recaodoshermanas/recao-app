@@ -33,11 +33,17 @@ export const COLUMNAS = [
 const ORIGEN_COL = { verificacion: "verif", causa: "causa", traspaso: "apoyo" };
 export const columnaDe = (x) => (x.tipo === "alegado" ? ORIGEN_COL[x.origen] || "otros" : COLUMNAS.some((c) => c.id === x.tipo) ? x.tipo : "otros");
 
-// Ordena por lo que se pasa antes: arriba lo que aún no ha prescrito, por días que le quedan;
+// Ordena por lo que se pasa antes: arriba lo que aún está en plazo, por días que le quedan;
 // debajo lo que no tiene plazo o ya ha prescrito, lo más antiguo primero.
-// «Corre prisa» = prescribe en 7 días o menos (y aún no ha prescrito).
+// #239: el plazo que cuenta es el de la falta mientras no ha prescrito y, después, el del plus (último día del mes del turno).
+// «Corre prisa» = ese plazo se pasa en 7 días o menos.
 export function ordenar(items, hoy) {
-  const conDias = items.map((x) => ({ ...x, dias: x.vence ? diasHasta(x.vence, hoy) : null }));
+  const conDias = items.map((x) => {
+    const diasFalta = x.vence ? diasHasta(x.vence, hoy) : null;
+    const diasPlus = x.plus_hasta ? diasHasta(x.plus_hasta, hoy) : null;
+    const vivos = [diasFalta, diasPlus].filter((d) => d != null && d >= 0);
+    return { ...x, diasFalta, diasPlus, dias: vivos.length ? Math.min(...vivos) : diasFalta };
+  });
   const vivo = (x) => x.dias != null && x.dias >= 0;
   return conDias.sort((a, b) => {
     if (vivo(a) !== vivo(b)) return vivo(a) ? -1 : 1;
@@ -114,7 +120,7 @@ export function Decisiones({ onCuenta }) {
             })}
           </div>
           {otros.length > 0 && <><h3 className="dec-tit">Otros avisos · {otros.length}</h3><div className="dec-lista dec-otros">{otros.map((x) => <Tarjeta key={x.key} x={x} {...props} />)}</div></>}
-          <p className="sub dec-pie">Al decir «sí cuenta», le llega el aviso escrito con sus 48 horas para alegar. Si no alega, el fallo se anota solo y no vuelve a aparecer aquí; si alega, vuelve a su columna con la marca «Ha alegado». Las amonestaciones no están en este trámite: se ponen desde «Expedientes».</p>
+          <p className="sub dec-pie">Al decir «sí cuenta», le llega el aviso escrito con sus 48 horas para alegar. Si no alega, el fallo se anota solo y no vuelve a aparecer aquí; si alega, vuelve a su columna con la marca «Ha alegado». Las amonestaciones no están en este trámite: se ponen desde «Expedientes». El fallo del plus se puede decidir hasta el último día del mes del turno; lo que no se decida sale de aquí y queda en «Expedientes → Historial de decisiones» como no decidido.</p>
         </>
       )}
       {fotos && (
@@ -128,6 +134,13 @@ export function Decisiones({ onCuenta }) {
 
 function Plazo({ x }) {
   if (x.tipo === "sin_cerrar") return <span className="dec-plazo prisa">{x.puede_reabrir ? `reabrir hasta ${diaHora(x.reabrir_hasta)}` : "ya no se puede reabrir"}</span>;
+  // #239: verificaciones, tareas no hechas y pasadas al apoyo llevan dos plazos: el de la falta y el del plus.
+  if (x.plus_hasta) {
+    const plus = <span className={x.diasPlus != null && x.diasPlus <= 3 ? "prisa" : ""}>Plus: hasta el {diaNum(x.plus_hasta)}</span>;
+    if (x.diasFalta == null) return <span className="dec-plazo">{plus}</span>;
+    if (x.diasFalta < 0) return <span className="dec-plazo"><span className="dec-solo-plus" title="Pasado el plazo de la falta solo se puede decidir el fallo del plus">Solo plus</span> Ya no se puede amonestar · {plus}</span>;
+    return <span className="dec-plazo"><span className={x.diasFalta <= 3 ? "prisa" : ""}>Falta: hasta el {diaNum(x.vence)}</span> · {plus}</span>;
+  }
   if (x.dias == null) return <span className="dec-plazo">sin plazo</span>;
   if (x.dias < 0) return <span className="dec-plazo pasado" title="Pasado el plazo se puede confirmar el fallo del plus, pero no poner la falta">prescrita · solo plus</span>;
   return <span className={`dec-plazo ${x.dias <= 3 ? "prisa" : ""}`}>{x.dias === 0 ? "prescribe hoy" : x.dias === 1 ? "prescribe mañana" : `prescribe en ${x.dias} días`}</span>;
