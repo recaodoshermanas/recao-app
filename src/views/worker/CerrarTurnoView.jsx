@@ -4,6 +4,7 @@ import { IcoCheck } from "../../lib/icons.jsx";
 import { fmt2, pn } from "../../lib/utils.js";
 import { sb } from "../../lib/supabase.js";
 import { ymd } from "../../lib/turnos.js";
+import { AcogidaParte, guardarPartes, faltaParte } from "../../components/AcogidaHoy.jsx"; // #242
 
 function isoDow(d) { const g = d.getDay(); return g === 0 ? 7 : g; }
 const SUG = { "Mañana": "mañana", "Apoyo 1": "mañana", "Tarde": "tarde", "Apoyo 2": "tarde" };
@@ -59,6 +60,15 @@ export function CerrarTurnoView({ user }) {
   const [caja, setCaja] = useState({ c1e: "", c1t: "", c2e: "", c2t: "" });
   const [provList, setProvList] = useState([]);
   const [selProv, setSelProv] = useState({});
+  // #242: si hoy lleva a una trabajadora nueva en formación, el parte va dentro de este cierre
+  const [acoCierre, setAcoCierre] = useState([]);
+  const [partes, setPartes] = useState({});
+  const [faltaAco, setFaltaAco] = useState(false);
+  useEffect(() => {
+    setFaltaAco(false);
+    if (!turno) { setAcoCierre([]); return; }
+    sb.rpc("acogida_mi_dia", { p_fecha: fecha }).then((r) => setAcoCierre((Array.isArray(r) ? r : []).filter((x) => x.turno === turno && x.fecha === fecha))).catch(() => setAcoCierre([]));
+  }, [turno, fecha]);
 
   useEffect(() => {
     (async () => {
@@ -190,6 +200,8 @@ export function CerrarTurnoView({ user }) {
     const conHora = tareas.filter(t => estado[t.id].estado === "hecha" && pideHoraDe(t));
     if (conHora.some(t => !(estado[t.id].hora || "").trim())) { setMsg("Pon la hora a la que se limpió"); return; }
     if (conHora.some(t => estado[t.id].hora < "07:00" || estado[t.id].hora > "23:00")) { setMsg("La hora tiene que estar entre las 7:00 y las 23:00"); return; }
+    const sinParte = faltaParte(acoCierre, partes); // #242
+    if (sinParte) { setFaltaAco(true); setMsg(`Apunta qué NO ha entendido hoy ${String(sinParte.nombre || "").split(" ")[0]}`); return; }
     setMsg("");
     if (sinCaja) { setConfirmando(true); return; }
     await cargarProv(turno);
@@ -208,6 +220,7 @@ export function CerrarTurnoView({ user }) {
       // #222: cerrar_turno_v2 comprueba y guarda la hora; por dentro cierra igual que antes (con o sin apoyo)
       // #224: cerrar_turno_v3 guarda además las observaciones de cada tarea (por dentro llama a cerrar_turno_v2)
       const p_obs_extras = extras.map(x => ({ texto: x, observacion: (obsExtra[claveExtra(x)] || "").replace(/\s+/g, " ").trim() })).filter(x => x.observacion);
+      if (acoCierre.length) await guardarPartes(acoCierre, partes); // #242: el parte de la acogida, antes de cerrar
       const r = await sb.rpc("cerrar_turno_v3", { p_fecha: fecha, p_turno: turno, p_items: items, p_notas: null, p_caja, p_facturas, p_extras: extras, p_traspasos, p_obs_extras });
       const fReal = (r && r.fecha) || fecha;
       if (fReal !== fecha) setFechaSel(fReal);
@@ -506,6 +519,8 @@ export function CerrarTurnoView({ user }) {
               )).flatMap((el, i) => [el, <div key={`o${i}`} style={{ margin: "-2px 0 10px" }}><input value={obsExtra[claveExtra(extras[i])] || ""} onChange={e => { const v = e.target.value.slice(0, 200), k = claveExtra(extras[i]); setObsExtra(o => ({ ...o, [k]: v })); }} maxLength={200} placeholder="Observaciones (opcional)" style={{ width: "100%", boxSizing: "border-box", padding: "8px 12px", background: "#FAF8F4", border: `1px solid ${C.brdL}`, borderRadius: 10, fontFamily: F, fontSize: 12.5, color: C.char, outline: "none" }} /></div>])}{/* #224 */}
               <button onClick={abrirHojaExtra} style={{ width: "100%", padding: "10px", borderRadius: 10, cursor: "pointer", fontFamily: F, fontSize: 13.5, fontWeight: 700, border: `1.5px solid ${C.brd}`, background: "#fff", color: C.char }}>+ Añadir tarea hecha</button>
             </div>
+            {acoCierre.map((x) => <AcogidaParte key={x.acogida_id} item={x} falta={faltaAco} valor={partes[x.acogida_id]} onChange={(v) => setPartes((p) => ({ ...p, [x.acogida_id]: v }))} />)}{/* #242 */}
+            {faltaAco && msg && <div style={{ fontFamily: F, fontSize: 13, color: C.red, margin: "4px 0 0", textAlign: "center" }}>{msg}</div>}
             <button onClick={irACaja} disabled={!completo} style={{ ...btnDark, fontSize: 17, padding: 16, marginTop: 10, opacity: !completo ? 0.5 : 1 }}>{completo ? (sinCaja ? "Cerrar turno" : "Continuar al cierre de caja") : `Revisa todas (faltan ${tareas.length - revisadas})`}</button>
           </div>
         ) : (

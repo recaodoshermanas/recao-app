@@ -26,6 +26,7 @@ import { IR_CORREO } from "../../lib/enlaceAviso.js";
 import { NovedadesEquipo } from "../../components/Novedades.jsx"; // NOVEDADES
 import { TarjetaFormacion, FormacionView } from "../eventual/Formacion.jsx"; // #101 formación en vídeo
 import { resumenFormacion } from "../../lib/formacion.js"; // #101
+import { AcogidaHoy } from "../../components/AcogidaHoy.jsx"; // #242
 
 // Inicio de la plantilla (solicitud #10): «Mi turno», «Pendiente», novedades, «En la tienda» (diario) y «Lo tuyo» (de vez en cuando).
 // Iconos en un solo tono tostado; el rojo solo para los números de «Pendiente» y la etiqueta «Nuevo».
@@ -157,6 +158,8 @@ export function WorkerApp({ user, facturas, proveedores, onReload }) {
           </span>
           <IcoRight size={20} color={C.goldSub} sw={2.4} />
         </button>
+
+        <AcogidaHoy />{/* #242: solo si hoy lleva a una trabajadora nueva en formación */}
 
         {pendiente.length > 0 && (
           <div style={{ ...caja, marginTop: 12 }}>
